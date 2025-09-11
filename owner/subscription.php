@@ -12,61 +12,133 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
-// Handle subscription actions
+// Handle plan selection and subscription creation with payment
 if ($_POST) {
-    if (isset($_POST['subscribe_to_plan'])) {
+    if (isset($_POST['select_plan'])) {
         $plan_id = $_POST['plan_id'];
         
         try {
             // Check if user already has an active subscription
-            $query = "SELECT * FROM subscriptions WHERE UserID = ? AND Sub_Status = 'Active'";
+            $query = "SELECT * FROM user_subscriptions WHERE UserID = ? AND Sub_Status = 'Active'";
             $stmt = $conn->prepare($query);
             $stmt->bindParam(1, $user_id);
             $stmt->execute();
             $existing = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($existing) {
-                $message = "You already have an active subscription!";
+                $message = "You already have an active subscription! Cancel your current subscription first.";
                 $message_type = "warning";
             } else {
                 // Get plan details
-                $query = "SELECT * FROM subscription_plans WHERE PlanID = ?";
+                $query = "SELECT * FROM subscription_plans WHERE PlanID = ? AND Plan_IsActive = 1";
                 $stmt = $conn->prepare($query);
                 $stmt->bindParam(1, $plan_id);
                 $stmt->execute();
                 $plan = $stmt->fetch(PDO::FETCH_ASSOC);
                 
                 if ($plan) {
+                    // Create the subscription with Pending status
                     $start_date = date('Y-m-d');
                     $end_date = date('Y-m-d', strtotime('+' . $plan['Plan_Duration'] . ' days'));
+                    $sub_status = 'Pending';
+                    $sub_autorenew = 0;
+                    $sub_payment_method = 'Pending';
                     
-                    $query = "INSERT INTO subscriptions (UserID, PlanID, Sub_StartDate, Sub_EndDate, Sub_Status, Sub_CreatedAt) VALUES (?, ?, ?, ?, 'Active', NOW())";
+                    $query = "INSERT INTO user_subscriptions (UserID, PlanID, Sub_StartDate, Sub_EndDate, Sub_Status, Sub_AutoRenew, Sub_PaymentMethod, Sub_CreatedAt, Sub_UpdatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
                     $stmt = $conn->prepare($query);
                     $stmt->bindParam(1, $user_id);
                     $stmt->bindParam(2, $plan_id);
                     $stmt->bindParam(3, $start_date);
                     $stmt->bindParam(4, $end_date);
+                    $stmt->bindParam(5, $sub_status);
+                    $stmt->bindParam(6, $sub_autorenew);
+                    $stmt->bindParam(7, $sub_payment_method);
                     
                     if ($stmt->execute()) {
-                        $message = "Successfully subscribed to " . $plan['Plan_Name'] . "!";
-                        $message_type = "success";
+                        $subscription_id = $conn->lastInsertId();
+                        
+                        // Create payment record in subscription_payments
+                        $payment_amount = $plan['Plan_Price'];
+                        $payment_method = 'Credit Card';
+                        $payment_status = 'Pending';
+                        $transaction_id = 'TXN' . time() . rand(1000, 9999);
+                        $due_date = date('Y-m-d', strtotime('+7 days'));
+                        $payment_type = 'Subscription';
+                        
+                        $query = "INSERT INTO subscription_payments (SubscriptionID, SubPay_Amount, SubPay_PaymentMethod, SubPay_Status, SubPay_TransactionID, SubPay_ProcessedAt, SubPay_CreatedAt, SubPay_DueDate, SubPay_Type) VALUES (?, ?, ?, ?, ?, NULL, NOW(), ?, ?)";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(1, $subscription_id);
+                        $stmt->bindParam(2, $payment_amount);
+                        $stmt->bindParam(3, $payment_method);
+                        $stmt->bindParam(4, $payment_status);
+                        $stmt->bindParam(5, $transaction_id);
+                        $stmt->bindParam(6, $due_date);
+                        $stmt->bindParam(7, $payment_type);
+                        
+                        if ($stmt->execute()) {
+                            $message = "Subscription created! Please complete your payment of ₱" . number_format($payment_amount, 0) . " to activate your " . htmlspecialchars($plan['Plan_Name']) . " plan.";
+                            $message_type = "info";
+                        } else {
+                            $message = "Subscription created but payment setup failed. Please contact support.";
+                            $message_type = "warning";
+                        }
                     } else {
-                        $message = "Failed to subscribe. Please try again.";
+                        $message = "Failed to create subscription. Please try again.";
                         $message_type = "danger";
                     }
+                } else {
+                    $message = "Selected plan is not available.";
+                    $message_type = "danger";
                 }
             }
         } catch (PDOException $e) {
-            $message = "Subscription successful! (Database setup pending)";
-            $message_type = "success";
+            $message = "Error processing subscription: " . $e->getMessage();
+            $message_type = "danger";
         }
     }
-    
+
+    if (isset($_POST['complete_payment'])) {
+        $payment_id = $_POST['payment_id'];
+        $payment_method = $_POST['payment_method'];
+        
+        try {
+            // Update payment status
+            $query = "UPDATE subscription_payments SET SubPay_Status = 'Completed', SubPay_PaymentMethod = ?, SubPay_ProcessedAt = NOW() WHERE SubPaymentID = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bindParam(1, $payment_method);
+            $stmt->bindParam(2, $payment_id);
+            
+            if ($stmt->execute()) {
+                // Get subscription ID from payment
+                $query = "SELECT SubscriptionID FROM subscription_payments WHERE SubPaymentID = ?";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $payment_id);
+                $stmt->execute();
+                $payment = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($payment) {
+                    // Activate the subscription
+                    $query = "UPDATE user_subscriptions SET Sub_Status = 'Active', Sub_PaymentMethod = ?, Sub_UpdatedAt = NOW() WHERE SubscriptionID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindParam(1, $payment_method);
+                    $stmt->bindParam(2, $payment['SubscriptionID']);
+                    $stmt->execute();
+                    
+                    $message = "Payment completed successfully! Your subscription is now active.";
+                    $message_type = "success";
+                }
+            }
+        } catch (PDOException $e) {
+            $message = "Error processing payment: " . $e->getMessage();
+            $message_type = "danger";
+        }
+    }
+
     if (isset($_POST['cancel_subscription'])) {
         $subscription_id = $_POST['subscription_id'];
         
         try {
-            $query = "UPDATE subscriptions SET Sub_Status = 'Cancelled', Sub_UpdatedAt = NOW() WHERE SubscriptionID = ? AND UserID = ?";
+            $query = "UPDATE user_subscriptions SET Sub_Status = 'Cancelled', Sub_UpdatedAt = NOW() WHERE SubscriptionID = ? AND UserID = ?";
             $stmt = $conn->prepare($query);
             $stmt->bindParam(1, $subscription_id);
             $stmt->bindParam(2, $user_id);
@@ -79,35 +151,70 @@ if ($_POST) {
                 $message_type = "danger";
             }
         } catch (PDOException $e) {
-            $message = "Subscription cancellation feature coming soon!";
-            $message_type = "info";
+            $message = "Error cancelling subscription: " . $e->getMessage();
+            $message_type = "danger";
         }
     }
 }
 
-// Check if subscriptions table exists
-$subscriptions_table_exists = false;
+// Check if tables exist
+$subscription_plans_table_exists = false;
+$user_subscriptions_table_exists = false;
+$subscription_payments_table_exists = false;
+
 try {
-    $query = "SELECT 1 FROM subscriptions LIMIT 1";
+    $query = "SELECT 1 FROM subscription_plans LIMIT 1";
     $stmt = $conn->prepare($query);
     $stmt->execute();
-    $subscriptions_table_exists = true;
+    $subscription_plans_table_exists = true;
 } catch (PDOException $e) {
-    $subscriptions_table_exists = false;
+    $subscription_plans_table_exists = false;
 }
 
+try {
+    $query = "SELECT 1 FROM user_subscriptions LIMIT 1";
+    $stmt = $conn->prepare($query);
+    $stmt->execute();
+    $user_subscriptions_table_exists = true;
+} catch (PDOException $e) {
+    $user_subscriptions_table_exists = false;
+}
+
+try {
+    $query = "SELECT 1 FROM subscription_payments LIMIT 1";
+    $stmt = $conn->prepare($query);
+    $stmt->execute();
+    $subscription_payments_table_exists = true;
+} catch (PDOException $e) {
+    $subscription_payments_table_exists = false;
+}
+
+$available_plans = [];
 $current_subscription = null;
 $subscription_history = [];
-$available_plans = [];
+$pending_payments = [];
+$payment_history = [];
 
-if ($subscriptions_table_exists) {
+if ($subscription_plans_table_exists) {
+    // Get available plans from subscription_plans table
+    try {
+        $query = "SELECT * FROM subscription_plans WHERE Plan_IsActive = 1 ORDER BY Plan_Price ASC";
+        $stmt = $conn->prepare($query);
+        $stmt->execute();
+        $available_plans = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        $available_plans = [];
+    }
+}
+
+if ($user_subscriptions_table_exists && $subscription_plans_table_exists) {
     // Get current active subscription
     try {
-        $query = "SELECT s.*, sp.Plan_Name, sp.Plan_Price, sp.Plan_Duration, sp.Plan_Features
-                  FROM subscriptions s
-                  JOIN subscription_plans sp ON s.PlanID = sp.PlanID
-                  WHERE s.UserID = ? AND s.Sub_Status = 'Active'
-                  ORDER BY s.Sub_CreatedAt DESC LIMIT 1";
+        $query = "SELECT us.*, sp.Plan_Name, sp.Plan_Description, sp.Plan_Price, sp.Plan_Duration, sp.Plan_MaxListings, sp.Plan_FeaturedListings, sp.Plan_CommissionRate
+                  FROM user_subscriptions us
+                  JOIN subscription_plans sp ON us.PlanID = sp.PlanID
+                  WHERE us.UserID = ? AND us.Sub_Status = 'Active'
+                  ORDER BY us.Sub_CreatedAt DESC LIMIT 1";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $user_id);
         $stmt->execute();
@@ -118,11 +225,11 @@ if ($subscriptions_table_exists) {
     
     // Get subscription history
     try {
-        $query = "SELECT s.*, sp.Plan_Name, sp.Plan_Price, sp.Plan_Duration
-                  FROM subscriptions s
-                  JOIN subscription_plans sp ON s.PlanID = sp.PlanID
-                  WHERE s.UserID = ?
-                  ORDER BY s.Sub_CreatedAt DESC";
+        $query = "SELECT us.*, sp.Plan_Name, sp.Plan_Price, sp.Plan_Duration
+                  FROM user_subscriptions us
+                  JOIN subscription_plans sp ON us.PlanID = sp.PlanID
+                  WHERE us.UserID = ?
+                  ORDER BY us.Sub_CreatedAt DESC";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $user_id);
         $stmt->execute();
@@ -130,52 +237,70 @@ if ($subscriptions_table_exists) {
     } catch (PDOException $e) {
         $subscription_history = [];
     }
-    
-    // Get available plans
+}
+
+if ($subscription_payments_table_exists && $user_subscriptions_table_exists) {
+    // Get pending payments
     try {
-        $query = "SELECT * FROM subscription_plans WHERE Plan_Status = 'Active' ORDER BY Plan_Price ASC";
+        $query = "SELECT spt.*, us.*, sp.Plan_Name 
+                  FROM subscription_payments spt
+                  JOIN user_subscriptions us ON spt.SubscriptionID = us.SubscriptionID
+                  JOIN subscription_plans sp ON us.PlanID = sp.PlanID
+                  WHERE us.UserID = ? AND spt.SubPay_Status = 'Pending'
+                  ORDER BY spt.SubPay_CreatedAt DESC";
         $stmt = $conn->prepare($query);
+        $stmt->bindParam(1, $user_id);
         $stmt->execute();
-        $available_plans = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $pending_payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
-        $available_plans = [];
+        $pending_payments = [];
     }
-} else {
-    // Sample data for demo
-    $current_subscription = [
-        'SubscriptionID' => 1,
-        'Plan_Name' => 'Premium Owner',
-        'Plan_Price' => 999.00,
-        'Plan_Duration' => 30,
-        'Plan_Features' => 'Unlimited product listings, Priority support, Advanced analytics, Featured listings',
-        'Sub_Status' => 'Active',
-        'Sub_StartDate' => date('Y-m-d', strtotime('-10 days')),
-        'Sub_EndDate' => date('Y-m-d', strtotime('+20 days')),
-        'Sub_CreatedAt' => date('Y-m-d H:i:s', strtotime('-10 days'))
-    ];
-    
-    $available_plans = [
-        ['PlanID' => 1, 'Plan_Name' => 'Basic Owner', 'Plan_Price' => 499.00, 'Plan_Duration' => 30, 'Plan_Features' => 'Up to 10 products, Basic support, Standard listings'],
-        ['PlanID' => 2, 'Plan_Name' => 'Premium Owner', 'Plan_Price' => 999.00, 'Plan_Duration' => 30, 'Plan_Features' => 'Unlimited products, Priority support, Featured listings'],
-        ['PlanID' => 3, 'Plan_Name' => 'Enterprise Owner', 'Plan_Price' => 1999.00, 'Plan_Duration' => 30, 'Plan_Features' => 'Everything + Custom branding, Dedicated support, API access']
-    ];
-    
-    $subscription_history = [$current_subscription];
+
+    // Get payment history
+    try {
+        $query = "SELECT spt.*, us.*, sp.Plan_Name 
+                  FROM subscription_payments spt
+                  JOIN user_subscriptions us ON spt.SubscriptionID = us.SubscriptionID
+                  JOIN subscription_plans sp ON us.PlanID = sp.PlanID
+                  WHERE us.UserID = ?
+                  ORDER BY spt.SubPay_CreatedAt DESC";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(1, $user_id);
+        $stmt->execute();
+        $payment_history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        $payment_history = [];
+    }
 }
 
 // Calculate stats
 $stats = [
+    'available_plans' => count($available_plans),
     'days_remaining' => 0,
     'total_spent' => 0,
     'active_products' => 0,
-    'subscription_count' => count($subscription_history)
+    'subscription_count' => count($subscription_history),
+    'pending_payments' => count($pending_payments),
+    'total_paid' => 0
 ];
+
+if (!empty($available_plans)) {
+    $prices = array_column($available_plans, 'Plan_Price');
+    $stats['lowest_price'] = min($prices);
+    $stats['highest_price'] = max($prices);
+}
 
 if ($current_subscription) {
     $stats['days_remaining'] = max(0, ceil((strtotime($current_subscription['Sub_EndDate']) - time()) / 86400));
 }
 
-$stats['total_spent'] = array_sum(array_column($subscription_history, 'Plan_Price'));
+foreach($payment_history as $payment) {
+    if ($payment['SubPay_Status'] == 'Completed') {
+        $stats['total_paid'] += $payment['SubPay_Amount'];
+    }
+}
+
+$stats['total_spent'] = $stats['total_paid'];
 
 // Get active products count
 try {
@@ -183,9 +308,60 @@ try {
     $stmt = $conn->prepare($query);
     $stmt->bindParam(1, $user_id);
     $stmt->execute();
-    $stats['active_products'] = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stats['active_products'] = $result ? $result['count'] : 0;
 } catch (PDOException $e) {
-    $stats['active_products'] = 5; // Sample data
+    $stats['active_products'] = 0;
+}
+
+// Helper function to format plan features
+function formatPlanFeatures($plan) {
+    $features = [];
+    
+    if ($plan['Plan_MaxListings'] == -1) {
+        $features[] = 'Unlimited product listings';
+    } else {
+        $features[] = 'Up to ' . number_format($plan['Plan_MaxListings']) . ' product listings';
+    }
+    
+    if ($plan['Plan_FeaturedListings'] == -1) {
+        $features[] = 'Unlimited featured listings';
+    } elseif ($plan['Plan_FeaturedListings'] > 0) {
+        $features[] = number_format($plan['Plan_FeaturedListings']) . ' featured listings included';
+    } else {
+        $features[] = 'No featured listings';
+    }
+    
+    if ($plan['Plan_CommissionRate'] == 0) {
+        $features[] = 'No commission fees (0%)';
+    } else {
+        $features[] = number_format($plan['Plan_CommissionRate'], 1) . '% commission rate';
+    }
+    
+    // Add premium benefits for high-value plans
+    if ($plan['Plan_Price'] >= 1500) {
+        $features[] = 'Priority customer support';
+        $features[] = 'Advanced analytics dashboard';
+        $features[] = 'Premium listing badge';
+    }
+    
+    if (!empty($plan['Plan_Description'])) {
+        $features[] = $plan['Plan_Description'];
+    }
+    
+    return $features;
+}
+
+// Helper function to get plan type for styling
+function getPlanType($plan_name) {
+    $name_lower = strtolower($plan_name);
+    if (strpos($name_lower, 'premium') !== false || strpos($name_lower, 'birthday') !== false) {
+        return 'premium';
+    } elseif (strpos($name_lower, 'enterprise') !== false || strpos($name_lower, 'pro') !== false) {
+        return 'enterprise';
+    } else {
+        return 'basic';
+    }
 }
 ?>
 
@@ -309,6 +485,16 @@ try {
         .plan-card.basic { border-left-color: #4facfe; }
         .plan-card.enterprise { border-left-color: #11998e; }
         
+        .payment-card {
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid #f6d365;
+            background: white;
+        }
+        
         .status-badge {
             position: absolute;
             top: 15px;
@@ -321,6 +507,7 @@ try {
         }
         
         .status-badge.active { background: #28a745; }
+        .status-badge.pending { background: #ffc107; color: #000; }
         .status-badge.expired { background: #dc3545; }
         .status-badge.cancelled { background: #6c757d; }
         
@@ -336,19 +523,7 @@ try {
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
         
-        .form-control, .form-select {
-            border-radius: 15px;
-            border: 2px solid #e9ecef;
-            padding: 0.75rem 1rem;
-            transition: all 0.3s ease;
-        }
-        
-        .form-control:focus, .form-select:focus {
-            border-color: #11998e;
-            box-shadow: 0 0 0 0.2rem rgba(17, 153, 142, 0.25);
-        }
-        
-        .btn-subscribe {
+        .btn-select-plan {
             background: var(--primary-gradient);
             border: none;
             border-radius: 25px;
@@ -358,12 +533,12 @@ try {
             transition: all 0.3s ease;
         }
         
-        .btn-subscribe:hover {
+        .btn-select-plan:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 25px rgba(17, 153, 142, 0.4);
             color: white;
         }
-        
+
         .btn-cancel {
             background: var(--accent-gradient);
             border: none;
@@ -377,6 +552,22 @@ try {
         .btn-cancel:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 25px rgba(240, 147, 251, 0.4);
+            color: white;
+        }
+
+        .btn-pay-now {
+            background: var(--warning-gradient);
+            border: none;
+            border-radius: 25px;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-pay-now:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(246, 211, 101, 0.4);
             color: white;
         }
         
@@ -416,15 +607,43 @@ try {
             border-left: 4px solid #f093fb;
         }
         
-        .demo-notice {
-            background: var(--warning-gradient);
-            color: white;
-            border-radius: 20px;
-            padding: 2rem;
-            text-align: center;
-            margin-bottom: 2rem;
+        .plan-highlight {
+            position: relative;
+            overflow: hidden;
         }
         
+        .plan-highlight::before {
+            content: 'POPULAR';
+            position: absolute;
+            top: 20px;
+            right: -30px;
+            background: var(--accent-gradient);
+            color: white;
+            padding: 0.5rem 2rem;
+            transform: rotate(45deg);
+            font-size: 0.75rem;
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            color: #dee2e6;
+            margin-bottom: 1rem;
+        }
+
+        .plan-benefits {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+
         .subscription-timeline {
             position: relative;
             padding-left: 2rem;
@@ -461,6 +680,15 @@ try {
             background: #11998e;
             border: 3px solid white;
             box-shadow: 0 0 0 2px #11998e;
+        }
+
+        .payment-alert {
+            background: var(--warning-gradient);
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            text-align: center;
         }
         
         /* Mobile Responsiveness */
@@ -529,6 +757,11 @@ try {
                 <li class="nav-item">
                     <a class="nav-link active" href="subscription.php">
                         <i class="fas fa-crown me-2"></i> My Subscription
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="payments.php">
+                        <i class="fas fa-credit-card me-2"></i> Payment History
                     </a>
                 </li>
                 <li class="nav-item">
@@ -601,13 +834,16 @@ try {
             </div>
             <?php endif; ?>
 
-            <?php if(!$subscriptions_table_exists): ?>
-            <!-- Demo Notice -->
-            <div class="demo-notice">
+            <!-- Pending Payments Alert -->
+            <?php if(!empty($pending_payments)): ?>
+            <div class="payment-alert">
                 <h5 class="mb-3">
-                    <i class="fas fa-database me-2"></i>Subscription System Preview
+                    <i class="fas fa-exclamation-triangle me-2"></i>Payment Required
                 </h5>
-                <p class="mb-0">The subscription system is being set up. Below is a preview of how your subscription management will work once the database is configured!</p>
+                <p class="mb-3">You have pending payments that need to be completed to activate your subscription.</p>
+                <button class="btn btn-light" onclick="scrollToPendingPayments()">
+                    <i class="fas fa-credit-card me-2"></i>Complete Payment Now
+                </button>
             </div>
             <?php endif; ?>
 
@@ -637,7 +873,7 @@ try {
                         <?php endif; ?>
                     </div>
                     <div class="col-md-4 text-end" style="position: relative; z-index: 2;">
-                        <?php if(!$current_subscription): ?>
+                        <?php if(!$current_subscription && !empty($available_plans)): ?>
                             <button class="btn btn-light btn-lg" onclick="scrollToPlans()">
                                 <i class="fas fa-crown me-2"></i>Choose Plan
                             </button>
@@ -672,9 +908,9 @@ try {
                             <div class="row align-items-center">
                                 <div class="col">
                                     <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
-                                        Total Spent
+                                        Total Paid
                                     </div>
-                                    <div class="h4 mb-0 font-weight-bold">₱<?php echo number_format($stats['total_spent'], 0); ?></div>
+                                    <div class="h4 mb-0 font-weight-bold">₱<?php echo number_format($stats['total_paid'], 0); ?></div>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-peso-sign fa-2x opacity-75"></i>
@@ -708,18 +944,69 @@ try {
                             <div class="row align-items-center">
                                 <div class="col">
                                     <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
-                                        Subscriptions
+                                        Pending Payments
                                     </div>
-                                    <div class="h4 mb-0 font-weight-bold"><?php echo $stats['subscription_count']; ?></div>
+                                    <div class="h4 mb-0 font-weight-bold"><?php echo $stats['pending_payments']; ?></div>
                                 </div>
                                 <div class="col-auto">
-                                    <i class="fas fa-crown fa-2x opacity-75"></i>
+                                    <i class="fas fa-credit-card fa-2x opacity-75"></i>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Pending Payments Section -->
+            <?php if(!empty($pending_payments)): ?>
+            <div id="pending-payments" class="mb-5">
+                <h5 class="text-warning mb-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Pending Payments
+                </h5>
+                
+                <?php foreach($pending_payments as $payment): ?>
+                <div class="payment-card">
+                    <div class="card-body p-4">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h6 class="mb-2">
+                                    <i class="fas fa-crown text-warning me-2"></i>
+                                    <?php echo htmlspecialchars($payment['Plan_Name']); ?>
+                                </h6>
+                                <p class="text-muted mb-2">
+                                    Transaction ID: <?php echo htmlspecialchars($payment['SubPay_TransactionID']); ?>
+                                </p>
+                                <p class="text-muted mb-0">
+                                    Due Date: <?php echo date('M j, Y', strtotime($payment['SubPay_DueDate'])); ?>
+                                </p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h4 class="text-warning mb-1">₱<?php echo number_format($payment['SubPay_Amount'], 0); ?></h4>
+                                <small class="text-muted">Amount Due</small>
+                            </div>
+                            <div class="col-md-3">
+                                <form method="POST" class="d-grid">
+                                    <input type="hidden" name="payment_id" value="<?php echo $payment['SubPaymentID']; ?>">
+                                    <div class="mb-2">
+                                        <select name="payment_method" class="form-select form-select-sm" required>
+                                            <option value="">Select Payment Method</option>
+                                            <option value="Credit Card">Credit Card</option>
+                                            <option value="GCash">GCash</option>
+                                            <option value="PayMaya">PayMaya</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" name="complete_payment" class="btn btn-pay-now">
+                                        <i class="fas fa-credit-card me-2"></i>Pay Now
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
 
             <!-- Current Subscription -->
             <?php if($current_subscription): ?>
@@ -752,12 +1039,21 @@ try {
                             <h6 class="mb-3">Plan Features:</h6>
                             <ul class="feature-list">
                                 <?php 
-                                $features = explode(',', $current_subscription['Plan_Features']);
+                                $features = formatPlanFeatures($current_subscription);
                                 foreach($features as $feature): 
                                 ?>
-                                <li><?php echo trim(htmlspecialchars($feature)); ?></li>
+                                <li><?php echo htmlspecialchars($feature); ?></li>
                                 <?php endforeach; ?>
                             </ul>
+
+                            <?php if(!empty($current_subscription['Plan_Description'])): ?>
+                            <div class="plan-benefits">
+                                <h6 class="text-primary mb-2">
+                                    <i class="fas fa-gift me-2"></i>Plan Description
+                                </h6>
+                                <p class="mb-0"><?php echo htmlspecialchars($current_subscription['Plan_Description']); ?></p>
+                            </div>
+                            <?php endif; ?>
                         </div>
                         
                         <div class="col-md-4">
@@ -768,11 +1064,10 @@ try {
                             </div>
                             
                             <div class="d-grid gap-2">
-                                <button class="btn btn-subscribe" onclick="renewSubscription()">
+                                <button class="btn btn-select-plan" onclick="renewSubscription()">
                                     <i class="fas fa-redo me-2"></i>Renew Subscription
                                 </button>
                                 
-                                <?php if($subscriptions_table_exists): ?>
                                 <form method="POST" style="display: inline;">
                                     <input type="hidden" name="subscription_id" value="<?php echo $current_subscription['SubscriptionID']; ?>">
                                     <button type="submit" name="cancel_subscription" class="btn btn-cancel w-100"
@@ -780,11 +1075,6 @@ try {
                                         <i class="fas fa-times me-2"></i>Cancel Subscription
                                     </button>
                                 </form>
-                                <?php else: ?>
-                                <button class="btn btn-cancel" disabled>
-                                    <i class="fas fa-database me-2"></i>Demo Mode
-                                </button>
-                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -799,10 +1089,11 @@ try {
                     <?php echo $current_subscription ? 'Upgrade Plans' : 'Choose Your Plan'; ?>
                 </h5>
                 
+                <?php if(!empty($available_plans)): ?>
                 <div class="row">
-                    <?php foreach($available_plans as $plan): ?>
+                    <?php foreach($available_plans as $index => $plan): ?>
                     <div class="col-lg-4 col-md-6 mb-4">
-                        <div class="plan-card <?php echo strpos(strtolower($plan['Plan_Name']), 'premium') !== false ? 'premium' : (strpos(strtolower($plan['Plan_Name']), 'enterprise') !== false ? 'enterprise' : 'basic'); ?>">
+                        <div class="plan-card <?php echo getPlanType($plan['Plan_Name']); ?> <?php echo $plan['Plan_Price'] >= 1500 ? 'plan-highlight' : ''; ?>">
                             <div class="card-body p-4 text-center">
                                 <h5 class="mb-3"><?php echo htmlspecialchars($plan['Plan_Name']); ?></h5>
                                 <div class="price-display mb-4">
@@ -810,41 +1101,113 @@ try {
                                     <small class="opacity-75"><?php echo $plan['Plan_Duration']; ?> days</small>
                                 </div>
                                 
+                                <?php if(!empty($plan['Plan_Description'])): ?>
+                                <div class="plan-benefits text-start mb-3">
+                                    <p class="text-muted small mb-0">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        <?php echo htmlspecialchars($plan['Plan_Description']); ?>
+                                    </p>
+                                </div>
+                                <?php endif; ?>
+                                
                                 <ul class="feature-list text-start mb-4">
                                     <?php 
-                                    $features = explode(',', $plan['Plan_Features']);
+                                    $features = formatPlanFeatures($plan);
                                     foreach($features as $feature): 
                                     ?>
-                                    <li><?php echo trim(htmlspecialchars($feature)); ?></li>
+                                    <li><?php echo htmlspecialchars($feature); ?></li>
                                     <?php endforeach; ?>
                                 </ul>
+
+                                <!-- Plan Details -->
+                                <div class="plan-benefits text-start mb-4">
+                                    <h6 class="text-primary mb-2">
+                                        <i class="fas fa-star me-1"></i>Plan Details
+                                    </h6>
+                                    <div class="row text-center">
+                                        <div class="col-4">
+                                            <div class="h6 text-primary mb-0"><?php echo $plan['Plan_MaxListings'] == -1 ? '∞' : $plan['Plan_MaxListings']; ?></div>
+                                            <small class="text-muted">Listings</small>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="h6 text-success mb-0"><?php echo $plan['Plan_FeaturedListings'] == -1 ? '∞' : $plan['Plan_FeaturedListings']; ?></div>
+                                            <small class="text-muted">Featured</small>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="h6 text-info mb-0"><?php echo number_format($plan['Plan_CommissionRate'], 1); ?>%</div>
+                                            <small class="text-muted">Commission</small>
+                                        </div>
+                                    </div>
+                                </div>
                                 
-                                <?php if($current_subscription && $current_subscription['Plan_Name'] == $plan['Plan_Name']): ?>
+                                <?php if($current_subscription && $current_subscription['PlanID'] == $plan['PlanID']): ?>
                                     <button class="btn btn-success w-100" disabled>
                                         <i class="fas fa-check me-2"></i>Current Plan
                                     </button>
                                 <?php else: ?>
-                                    <?php if($subscriptions_table_exists): ?>
                                     <form method="POST" style="display: inline;">
                                         <input type="hidden" name="plan_id" value="<?php echo $plan['PlanID']; ?>">
-                                        <button type="submit" name="subscribe_to_plan" class="btn btn-subscribe w-100"
-                                                onclick="return confirm('Subscribe to <?php echo htmlspecialchars($plan['Plan_Name']); ?> for ₱<?php echo number_format($plan['Plan_Price'], 0); ?>?')">
+                                        <button type="submit" name="select_plan" class="btn btn-select-plan w-100"
+                                                onclick="return confirm('Subscribe to <?php echo htmlspecialchars($plan['Plan_Name']); ?> for ₱<?php echo number_format($plan['Plan_Price'], 0); ?>? You will need to complete payment to activate.')">
                                             <i class="fas fa-crown me-2"></i>
-                                            <?php echo $current_subscription ? 'Upgrade' : 'Subscribe'; ?>
+                                            <?php echo $current_subscription ? 'Upgrade to This Plan' : 'Select This Plan'; ?>
                                         </button>
                                     </form>
-                                    <?php else: ?>
-                                    <button class="btn btn-subscribe w-100" disabled>
-                                        <i class="fas fa-database me-2"></i>Demo Mode
-                                    </button>
-                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         </div>
                     </div>
                     <?php endforeach; ?>
                 </div>
+                <?php else: ?>
+                <div class="empty-state">
+                    <i class="fas fa-layer-group"></i>
+                    <h5 class="text-muted">No Subscription Plans Available</h5>
+                    <p class="text-muted">No subscription plans are currently available. Please check back later or contact support.</p>
+                </div>
+                <?php endif; ?>
             </div>
+
+            <!-- Payment History -->
+            <?php if(!empty($payment_history)): ?>
+            <div class="mt-5">
+                <h5 class="text-primary mb-4">
+                    <i class="fas fa-credit-card me-2"></i>Payment History
+                </h5>
+                
+                <div class="row">
+                    <?php foreach(array_slice($payment_history, 0, 6) as $payment): ?>
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-0"><?php echo htmlspecialchars($payment['Plan_Name']); ?></h6>
+                                    <span class="badge bg-<?php echo $payment['SubPay_Status'] == 'Completed' ? 'success' : ($payment['SubPay_Status'] == 'Pending' ? 'warning' : 'danger'); ?>">
+                                        <?php echo $payment['SubPay_Status']; ?>
+                                    </span>
+                                </div>
+                                <p class="h5 text-primary mb-2">₱<?php echo number_format($payment['SubPay_Amount'], 0); ?></p>
+                                <p class="text-muted small mb-1">
+                                    Method: <?php echo htmlspecialchars($payment['SubPay_PaymentMethod']); ?>
+                                </p>
+                                <p class="text-muted small mb-0">
+                                    Date: <?php echo date('M j, Y', strtotime($payment['SubPay_CreatedAt'])); ?>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <?php if(count($payment_history) > 6): ?>
+                <div class="text-center mt-3">
+                    <a href="payments.php" class="btn btn-outline-primary">
+                        <i class="fas fa-history me-2"></i>View All Payment History
+                    </a>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
 
             <!-- Subscription History -->
             <?php if(!empty($subscription_history)): ?>
@@ -863,7 +1226,7 @@ try {
                                     <?php echo date('M j, Y', strtotime($sub['Sub_StartDate'])); ?> - 
                                     <?php echo date('M j, Y', strtotime($sub['Sub_EndDate'])); ?>
                                 </p>
-                                <span class="badge bg-<?php echo $sub['Sub_Status'] == 'Active' ? 'success' : ($sub['Sub_Status'] == 'Expired' ? 'danger' : 'secondary'); ?>">
+                                <span class="badge bg-<?php echo $sub['Sub_Status'] == 'Active' ? 'success' : ($sub['Sub_Status'] == 'Expired' ? 'danger' : ($sub['Sub_Status'] == 'Pending' ? 'warning' : 'secondary')); ?>">
                                     <?php echo $sub['Sub_Status']; ?>
                                 </span>
                             </div>
@@ -894,6 +1257,13 @@ try {
             });
         }
 
+        // Scroll to pending payments
+        function scrollToPendingPayments() {
+            document.getElementById('pending-payments').scrollIntoView({ 
+                behavior: 'smooth' 
+            });
+        }
+
         // Renew subscription
         function renewSubscription() {
             alert('Renew subscription functionality will be implemented with payment integration.');
@@ -913,7 +1283,7 @@ try {
 
         // Animate cards on load
         window.addEventListener('load', function() {
-            const cards = document.querySelectorAll('.plan-card, .current-plan-card');
+            const cards = document.querySelectorAll('.plan-card, .current-plan-card, .payment-card');
             cards.forEach((card, index) => {
                 card.style.opacity = '0';
                 card.style.transform = 'translateY(20px)';
