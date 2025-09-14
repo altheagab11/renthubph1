@@ -104,13 +104,17 @@ $sort_options = [
 
 $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'p.Prod_CreatedAt DESC';
 
-// Get products
+// Get products with better image handling
 $query = "SELECT p.*, c.Cat_Name, pi.PI_ImagePath,
           (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as booking_count,
-          (SELECT AVG(Rev_Rating) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as avg_rating
+          (SELECT AVG(Rev_Rating) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as avg_rating,
+          pl.PL_PickupAvailable, pl.PL_DeliveryAvailable, pl.PL_DeliveryRadius, pl.PL_DeliveryFee,
+          ua.UA_Street, ua.UA_Barangay, ua.UA_City, ua.UA_Province
           FROM products p
           LEFT JOIN categories c ON p.CategoryID = c.CategoryID
           LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
+          LEFT JOIN product_locations pl ON p.ProductID = pl.ProductID
+          LEFT JOIN user_addresses ua ON pl.AddressID = ua.AddressID
           WHERE " . implode(' AND ', $conditions) . "
           ORDER BY " . $order_by;
 
@@ -118,8 +122,19 @@ $stmt = $conn->prepare($query);
 $stmt->execute($params);
 $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get categories for filter - FIXED: Changed Cat_ParentID to ParentCategoryID
-$query = "SELECT * FROM categories WHERE ParentCategoryID IS NULL ORDER BY Cat_Name";
+// Get all images for each product
+foreach ($products as &$product) {
+    $image_query = "SELECT PI_ImagePath, PI_IsMain, PI_ImageOrder 
+                    FROM product_images 
+                    WHERE ProductID = ? 
+                    ORDER BY PI_IsMain DESC, PI_ImageOrder ASC";
+    $img_stmt = $conn->prepare($image_query);
+    $img_stmt->execute([$product['ProductID']]);
+    $product['all_images'] = $img_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get categories for filter - FIXED: Get all categories, not just parent categories
+$query = "SELECT * FROM categories ORDER BY Cat_Name";
 $stmt = $conn->prepare($query);
 $stmt->execute();
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -327,6 +342,100 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             font-size: 4rem;
             color: #dee2e6;
             margin-bottom: 1rem;
+        }
+        
+        .no-image-placeholder {
+            height: 200px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+            font-size: 3rem;
+        }
+        
+        /* Product Image Carousel */
+        .product-card .carousel {
+            border-radius: 20px 20px 0 0;
+            overflow: hidden;
+        }
+        
+        .product-card .carousel-item img {
+            height: 200px;
+            object-fit: cover;
+            width: 100%;
+        }
+        
+        .product-card .carousel-control-prev,
+        .product-card .carousel-control-next {
+            width: 40px;
+            height: 40px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .product-card:hover .carousel-control-prev,
+        .product-card:hover .carousel-control-next {
+            opacity: 1;
+        }
+        
+        .product-card .carousel-control-prev {
+            left: 10px;
+        }
+        
+        .product-card .carousel-control-next {
+            right: 10px;
+        }
+        
+        .product-card .carousel-control-prev-icon,
+        .product-card .carousel-control-next-icon {
+            width: 20px;
+            height: 20px;
+        }
+        
+        .product-card .carousel-indicators {
+            bottom: 10px;
+            margin-bottom: 0;
+        }
+        
+        .product-card .carousel-indicators button {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin: 0 3px;
+            background-color: rgba(255,255,255,0.5);
+            border: none;
+        }
+        
+        .product-card .carousel-indicators button.active {
+            background-color: rgba(255,255,255,0.9);
+        }
+        
+        /* Image Gallery Modal */
+        #imageGalleryModal .carousel-item img {
+            border-radius: 10px;
+        }
+        
+        #imageGalleryModal .carousel-control-prev,
+        #imageGalleryModal .carousel-control-next {
+            width: 50px;
+            height: 50px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        #imageGalleryModal .carousel-control-prev {
+            left: 20px;
+        }
+        
+        #imageGalleryModal .carousel-control-next {
+            right: 20px;
         }
         
         /* Mobile Responsiveness */
@@ -637,8 +746,59 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
                         <div class="card product-card h-100">
                             <div class="position-relative">
-                                <img src="<?php echo $product['PI_ImagePath'] ? htmlspecialchars($product['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                     class="card-img-top" alt="<?php echo htmlspecialchars($product['Prod_Name']); ?>">
+                                <?php if(!empty($product['all_images'])): ?>
+                                    <!-- Image Carousel -->
+                                    <div id="carousel<?php echo $product['ProductID']; ?>" class="carousel slide" data-bs-ride="false">
+                                        <div class="carousel-inner">
+                                            <?php foreach($product['all_images'] as $index => $image): ?>
+                                                <div class="carousel-item <?php echo $index === 0 ? 'active' : ''; ?>">
+                                                    <img src="../<?php echo htmlspecialchars($image['PI_ImagePath']); ?>" 
+                                                         class="card-img-top" alt="<?php echo htmlspecialchars($product['Prod_Name']); ?>"
+                                                         style="cursor: pointer;"
+                                                         onclick="openImageGallery(<?php echo $product['ProductID']; ?>, <?php echo $index; ?>)">
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        
+                                        <?php if(count($product['all_images']) > 1): ?>
+                                            <!-- Carousel Controls -->
+                                            <button class="carousel-control-prev" type="button" data-bs-target="#carousel<?php echo $product['ProductID']; ?>" data-bs-slide="prev">
+                                                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                                                <span class="visually-hidden">Previous</span>
+                                            </button>
+                                            <button class="carousel-control-next" type="button" data-bs-target="#carousel<?php echo $product['ProductID']; ?>" data-bs-slide="next">
+                                                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                                                <span class="visually-hidden">Next</span>
+                                            </button>
+                                            
+                                            <!-- Image Indicators -->
+                                            <div class="carousel-indicators">
+                                                <?php foreach($product['all_images'] as $index => $image): ?>
+                                                    <button type="button" data-bs-target="#carousel<?php echo $product['ProductID']; ?>" 
+                                                            data-bs-slide-to="<?php echo $index; ?>" 
+                                                            <?php echo $index === 0 ? 'class="active" aria-current="true"' : ''; ?>
+                                                            aria-label="Slide <?php echo $index + 1; ?>"></button>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            
+                                            <!-- Image Counter Badge -->
+                                            <div class="position-absolute top-0 start-0 m-2">
+                                                <span class="badge bg-dark bg-opacity-75" style="border-radius: 15px;">
+                                                    <i class="fas fa-images me-1"></i><?php echo count($product['all_images']); ?>
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    
+                                    <!-- Hidden data for JavaScript -->
+                                    <script type="application/json" id="product-images-<?php echo $product['ProductID']; ?>">
+                                        <?php echo json_encode($product['all_images']); ?>
+                                    </script>
+                                <?php else: ?>
+                                    <div class="no-image-placeholder">
+                                        <i class="fas fa-image"></i>
+                                    </div>
+                                <?php endif; ?>
                                 
                                 <div class="product-status">
                                     <?php if($product['Prod_Status'] == 'Inactive'): ?>
@@ -656,13 +816,45 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                             <div class="card-body">
                                 <h6 class="card-title mb-2"><?php echo htmlspecialchars($product['Prod_Name']); ?></h6>
                                 <p class="text-muted small mb-2">
-                                    <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($product['Cat_Name']); ?>
+                                    <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($product['Cat_Name'] ?? 'Uncategorized'); ?>
                                 </p>
+                                
+                                <!-- Address Information -->
+                                <?php if($product['UA_City'] || $product['UA_Province']): ?>
+                                <p class="text-muted small mb-2">
+                                    <i class="fas fa-map-marker-alt me-1 text-primary"></i>
+                                    <?php 
+                                    $address_parts = [];
+                                    if($product['UA_Street']) $address_parts[] = $product['UA_Street'];
+                                    if($product['UA_Barangay']) $address_parts[] = $product['UA_Barangay'];
+                                    if($product['UA_City']) $address_parts[] = $product['UA_City'];
+                                    if($product['UA_Province']) $address_parts[] = $product['UA_Province'];
+                                    echo htmlspecialchars(implode(', ', $address_parts));
+                                    ?>
+                                </p>
+                                <?php endif; ?>
+                                
+                                <!-- Delivery/Pickup Options -->
+                                <div class="mb-2">
+                                    <?php if($product['PL_PickupAvailable']): ?>
+                                        <span class="badge bg-success me-1" style="font-size: 0.7rem;">
+                                            <i class="fas fa-hand-paper me-1"></i>Pickup
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if($product['PL_DeliveryAvailable']): ?>
+                                        <span class="badge bg-info me-1" style="font-size: 0.7rem;">
+                                            <i class="fas fa-truck me-1"></i>Delivery
+                                            <?php if($product['PL_DeliveryRadius']): ?>
+                                                (<?php echo $product['PL_DeliveryRadius']; ?>km)
+                                            <?php endif; ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
                                 
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <div>
                                         <strong class="text-success">₱<?php echo number_format($product['Prod_RentalPrice'], 2); ?></strong>
-                                        <small class="text-muted">/<?php echo htmlspecialchars($product['Prod_PriceType']); ?></small>
+                                        <small class="text-muted">/<?php echo htmlspecialchars($product['Prod_PriceType'] ?? 'Day'); ?></small>
                                     </div>
                                     <div class="text-end">
                                         <?php if($product['avg_rating']): ?>
@@ -694,6 +886,42 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                                 <i class="fas fa-eye me-2"></i>View
                                             </a></li>
                                             <li><hr class="dropdown-divider"></li>
+                                            <!-- Address Details -->
+                                            <?php if($product['UA_Street'] || $product['UA_City']): ?>
+                                            <li><h6 class="dropdown-header">
+                                                <i class="fas fa-map-marker-alt me-1"></i>Address Details
+                                            </h6></li>
+                                            <li><span class="dropdown-item-text small">
+                                                <?php if($product['UA_Street']): ?>
+                                                    <strong>Street:</strong> <?php echo htmlspecialchars($product['UA_Street']); ?><br>
+                                                <?php endif; ?>
+                                                <?php if($product['UA_Barangay']): ?>
+                                                    <strong>Barangay:</strong> <?php echo htmlspecialchars($product['UA_Barangay']); ?><br>
+                                                <?php endif; ?>
+                                                <?php if($product['UA_City']): ?>
+                                                    <strong>City:</strong> <?php echo htmlspecialchars($product['UA_City']); ?><br>
+                                                <?php endif; ?>
+                                                <?php if($product['UA_Province']): ?>
+                                                    <strong>Province:</strong> <?php echo htmlspecialchars($product['UA_Province']); ?>
+                                                <?php endif; ?>
+                                            </span></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <!-- Delivery Info -->
+                                            <li><h6 class="dropdown-header">
+                                                <i class="fas fa-truck me-1"></i>Delivery Options
+                                            </h6></li>
+                                            <li><span class="dropdown-item-text small">
+                                                <strong>Pickup:</strong> <?php echo $product['PL_PickupAvailable'] ? 'Available' : 'Not Available'; ?><br>
+                                                <strong>Delivery:</strong> <?php echo $product['PL_DeliveryAvailable'] ? 'Available' : 'Not Available'; ?>
+                                                <?php if($product['PL_DeliveryAvailable'] && $product['PL_DeliveryRadius']): ?>
+                                                    (<?php echo $product['PL_DeliveryRadius']; ?>km radius)
+                                                <?php endif; ?>
+                                                <?php if($product['PL_DeliveryAvailable'] && $product['PL_DeliveryFee']): ?>
+                                                    <br><strong>Delivery Fee:</strong> ₱<?php echo number_format($product['PL_DeliveryFee'], 2); ?>
+                                                <?php endif; ?>
+                                            </span></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <?php endif; ?>
                                             <?php if($product['Prod_Status'] == 'Active'): ?>
                                                 <li>
                                                     <form method="POST" class="d-inline">
@@ -719,7 +947,9 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                                 <?php endif; ?>
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li>
-                                                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteModal" data-product-id="<?php echo $product['ProductID']; ?>" data-product-name="<?php echo htmlspecialchars($product['Prod_Name']); ?>">
+                                                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteModal" 
+                                                            data-product-id="<?php echo $product['ProductID']; ?>" 
+                                                            data-product-name="<?php echo htmlspecialchars($product['Prod_Name']); ?>">
                                                         <i class="fas fa-trash me-2"></i>Delete
                                                     </button>
                                                 </li>
@@ -774,6 +1004,38 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         </div>
     </div>
 
+    <!-- Image Gallery Modal -->
+    <div class="modal fade" id="imageGalleryModal" tabindex="-1" aria-labelledby="imageGalleryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 20px;">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="imageGalleryModalLabel">
+                        <i class="fas fa-images me-2"></i>Product Images
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="galleryCarousel" class="carousel slide" data-bs-ride="false">
+                        <div class="carousel-inner" id="galleryCarouselInner">
+                            <!-- Images will be loaded here dynamically -->
+                        </div>
+                        <button class="carousel-control-prev" type="button" data-bs-target="#galleryCarousel" data-bs-slide="prev">
+                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                        <button class="carousel-control-next" type="button" data-bs-target="#galleryCarousel" data-bs-slide="next">
+                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Sidebar toggle for mobile
@@ -788,6 +1050,38 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 document.getElementById('deleteProductName').textContent = this.dataset.productName;
             });
         });
+
+        // Image Gallery Modal Function
+        function openImageGallery(productId, startIndex = 0) {
+            const imagesData = document.getElementById(`product-images-${productId}`);
+            if (!imagesData) return;
+            
+            const images = JSON.parse(imagesData.textContent);
+            const carouselInner = document.getElementById('galleryCarouselInner');
+            
+            // Clear previous images
+            carouselInner.innerHTML = '';
+            
+            // Add images to modal carousel
+            images.forEach((image, index) => {
+                const carouselItem = document.createElement('div');
+                carouselItem.className = `carousel-item ${index === startIndex ? 'active' : ''}`;
+                carouselItem.innerHTML = `
+                    <img src="../${image.PI_ImagePath}" 
+                         class="d-block w-100" 
+                         alt="Product Image ${index + 1}"
+                         style="max-height: 500px; object-fit: contain;">
+                `;
+                carouselInner.appendChild(carouselItem);
+            });
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('imageGalleryModal'));
+            modal.show();
+        }
+
+        // Make openImageGallery available globally
+        window.openImageGallery = openImageGallery;
 
         // Auto-hide alerts
         setTimeout(() => {

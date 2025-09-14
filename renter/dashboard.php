@@ -130,7 +130,7 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="../browse.php">
+                    <a class="nav-link" href="browse.php">
                         <i class="fas fa-search"></i> Browse Items
                     </a>
                 </li>
