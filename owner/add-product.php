@@ -30,83 +30,126 @@ $stmt->bindParam(1, $user_id);
 $stmt->execute();
 $current_products = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Check if user can add more products - user needs active subscription AND must be within limits
-$can_add_product = $subscription && $current_products < $subscription['Plan_MaxListings'];
+// Check if user can add more products
+$can_add_product = !$subscription || $current_products < $subscription['Plan_MaxListings'];
 
 // Handle form submission
 if ($_POST && isset($_POST['submit_product'])) {
-    if (!$subscription) {
-        $message = "You need an active subscription to add products. Please choose a subscription plan first.";
-        $message_type = "warning";
-    } elseif (!$can_add_product) {
-        $message = "You have reached your subscription limit of " . $subscription['Plan_MaxListings'] . " products. Please upgrade your plan to add more products.";
+    if (!$can_add_product) {
+        $message = "You have reached your subscription limit. Please upgrade your plan to add more products.";
         $message_type = "warning";
     } else {
-        // Validate and process form data
-        $prod_name = trim($_POST['prod_name']);
-        $category_id = $_POST['category_id'];
-        $prod_description = trim($_POST['prod_description']);
-        $prod_brand = trim($_POST['prod_brand']);
-        $prod_model = trim($_POST['prod_model']);
-        $prod_condition = $_POST['prod_condition'];
-        $prod_rental_price = $_POST['prod_rental_price'];
-        $prod_price_type = $_POST['prod_price_type'];
-        $prod_security_deposit = $_POST['prod_security_deposit'];
-        $prod_min_duration = $_POST['prod_min_duration'];
-        $prod_max_duration = $_POST['prod_max_duration'];
-        $pickup_available = isset($_POST['pickup_available']) ? 1 : 0;
-        $delivery_available = isset($_POST['delivery_available']) ? 1 : 0;
-        $delivery_radius = $_POST['delivery_radius'] ?? 0;
-        $delivery_fee = $_POST['delivery_fee'] ?? 0;
-        
-        // Insert product
-        $query = "INSERT INTO products (OwnerID, CategoryID, Prod_Name, Prod_Description, Prod_Brand, Prod_Model, Prod_Condition, Prod_RentalPrice, Prod_PriceType, Prod_SecurityDeposit, Prod_MinRentalDuration, Prod_MaxRentalDuration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $user_id);
-        $stmt->bindParam(2, $category_id);
-        $stmt->bindParam(3, $prod_name);
-        $stmt->bindParam(4, $prod_description);
-        $stmt->bindParam(5, $prod_brand);
-        $stmt->bindParam(6, $prod_model);
-        $stmt->bindParam(7, $prod_condition);
-        $stmt->bindParam(8, $prod_rental_price);
-        $stmt->bindParam(9, $prod_price_type);
-        $stmt->bindParam(10, $prod_security_deposit);
-        $stmt->bindParam(11, $prod_min_duration);
-        $stmt->bindParam(12, $prod_max_duration);
-        
-        if ($stmt->execute()) {
-            $product_id = $conn->lastInsertId();
+        try {
+            // Start transaction
+            $conn->beginTransaction();
             
-            // Get user's default address for product location
-            $query = "SELECT AddressID FROM user_addresses WHERE UserID = ? AND UA_IsDefault = 1 LIMIT 1";
+            // Validate and process form data
+            $prod_name = trim($_POST['prod_name']);
+            $category_id = $_POST['category_id'];
+            $prod_description = trim($_POST['prod_description']);
+            $prod_brand = trim($_POST['prod_brand']) ?: null;
+            $prod_model = trim($_POST['prod_model']) ?: null;
+            $prod_condition = $_POST['prod_condition'];
+            $prod_rental_price = $_POST['prod_rental_price'];
+            $prod_price_type = $_POST['prod_price_type'];
+            $prod_security_deposit = $_POST['prod_security_deposit'] ?: 0;
+            $prod_min_duration = $_POST['prod_min_duration'] ?: 1;
+            $prod_max_duration = $_POST['prod_max_duration'] ?: 30;
+            $pickup_available = isset($_POST['pickup_available']) ? 1 : 0;
+            $delivery_available = isset($_POST['delivery_available']) ? 1 : 0;
+            $delivery_radius = $_POST['delivery_radius'] ?: 0;
+            $delivery_fee = $_POST['delivery_fee'] ?: 0;
+            
+            // Set default values matching your database schema
+            $prod_status = 'Active';
+            $prod_availability = 1;
+            $prod_is_featured = 0;
+            $current_timestamp = date('Y-m-d H:i:s');
+            
+            // Insert product - EXACT field names from your schema
+            $query = "INSERT INTO products (
+                OwnerID, CategoryID, Prod_Name, Prod_Description, Prod_Brand, Prod_Model, 
+                Prod_Condition, Prod_RentalPrice, Prod_PriceType, Prod_SecurityDeposit, 
+                Prod_MinRentalDuration, Prod_MaxRentalDuration, Prod_Availability, 
+                Prod_CreatedAt, Prod_UpdatedAt, Prod_Status, Prod_IsFeatured, Prod_FeaturedUntil
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)";
+            
             $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $user_id);
-            $stmt->execute();
-            $address = $stmt->fetch(PDO::FETCH_ASSOC);
+            $result = $stmt->execute([
+                $user_id,                // OwnerID
+                $category_id,            // CategoryID
+                $prod_name,              // Prod_Name
+                $prod_description,       // Prod_Description
+                $prod_brand,             // Prod_Brand
+                $prod_model,             // Prod_Model
+                $prod_condition,         // Prod_Condition
+                $prod_rental_price,      // Prod_RentalPrice
+                $prod_price_type,        // Prod_PriceType
+                $prod_security_deposit,  // Prod_SecurityDeposit
+                $prod_min_duration,      // Prod_MinRentalDuration
+                $prod_max_duration,      // Prod_MaxRentalDuration
+                $prod_availability,      // Prod_Availability
+                $current_timestamp,      // Prod_CreatedAt
+                $current_timestamp,      // Prod_UpdatedAt
+                $prod_status,            // Prod_Status
+                $prod_is_featured        // Prod_IsFeatured
+            ]);
             
-            if ($address) {
-                // Insert product location
-                $query = "INSERT INTO product_locations (ProductID, AddressID, PL_PickupAvailable, PL_DeliveryAvailable, PL_DeliveryRadius, PL_DeliveryFee) VALUES (?, ?, ?, ?, ?, ?)";
+            if ($result) {
+                $product_id = $conn->lastInsertId();
+                
+                // Get user's default address for product location
+                $query = "SELECT AddressID FROM user_addresses WHERE UserID = ? AND UA_IsDefault = 1 LIMIT 1";
                 $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $product_id);
-                $stmt->bindParam(2, $address['AddressID']);
-                $stmt->bindParam(3, $pickup_available);
-                $stmt->bindParam(4, $delivery_available);
-                $stmt->bindParam(5, $delivery_radius);
-                $stmt->bindParam(6, $delivery_fee);
-                $stmt->execute();
+                $stmt->execute([$user_id]);
+                $address = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($address) {
+                    // Insert product location
+                    $query = "INSERT INTO product_locations (
+                        ProductID, AddressID, PL_PickupAvailable, PL_DeliveryAvailable, 
+                        PL_DeliveryRadius, PL_DeliveryFee
+                    ) VALUES (?, ?, ?, ?, ?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->execute([
+                        $product_id,
+                        $address['AddressID'],
+                        $pickup_available,
+                        $delivery_available,
+                        $delivery_radius,
+                        $delivery_fee
+                    ]);
+                }
+                
+                // Insert initial availability record
+                $query = "INSERT INTO product_availability (
+                    ProductID, PA_DateFrom, PA_DateTo, PA_IsAvailable, PA_CreatedAt
+                ) VALUES (?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR), 1, NOW())";
+                $stmt = $conn->prepare($query);
+                $stmt->execute([$product_id]);
+                
+                // Commit all changes
+                $conn->commit();
+                
+                $message = "Product added successfully! Product ID: " . $product_id . ". You can now upload images and manage your listing.";
+                $message_type = "success";
+                
+                // Redirect to edit product page to add images
+                header("Location: edit-product.php?id=" . $product_id . "&new=1");
+                exit();
+            } else {
+                throw new Exception("Failed to insert product");
             }
-            
-            $message = "Product added successfully! You can now upload images and manage your listing.";
-            $message_type = "success";
-            
-            // Redirect to edit product page to add images
-            header("Location: edit-product.php?id=" . $product_id . "&new=1");
-            exit();
-        } else {
-            $message = "Failed to add product. Please try again.";
+        } catch (PDOException $e) {
+            $conn->rollback();
+            $message = "Database error: " . $e->getMessage();
             $message_type = "danger";
+            error_log("Product insert PDO error: " . $e->getMessage());
+        } catch (Exception $e) {
+            $conn->rollback();
+            $message = "Error: " . $e->getMessage();
+            $message_type = "danger";
+            error_log("Product insert error: " . $e->getMessage());
         }
     }
 }
@@ -227,22 +270,6 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             color: white;
         }
         
-        .btn-draft {
-            background: var(--secondary-gradient);
-            border: none;
-            border-radius: 25px;
-            padding: 0.75rem 2rem;
-            font-weight: 600;
-            color: white;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-draft:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
-            color: white;
-        }
-        
         .progress-indicator {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             border-radius: 15px;
@@ -321,28 +348,6 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .form-check-input:checked {
             background-color: #11998e;
             border-color: #11998e;
-        }
-        
-        /* Custom file upload styling */
-        .file-upload-zone {
-            border: 2px dashed #11998e;
-            border-radius: 15px;
-            padding: 2rem;
-            text-align: center;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .file-upload-zone:hover {
-            border-color: #0d6846;
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-        }
-        
-        .file-upload-zone i {
-            font-size: 3rem;
-            color: #11998e;
-            margin-bottom: 1rem;
         }
         
         /* Mobile Responsiveness */
@@ -855,19 +860,24 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             // Show loading state
             const submitBtn = this.querySelector('button[name="submit_product"]');
+            const originalText = submitBtn.innerHTML;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Adding Product...';
             submitBtn.disabled = true;
+            
+            // Re-enable button after 10 seconds in case of error
+            setTimeout(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }, 10000);
         });
 
-        // Auto-hide alerts
+        // Auto-hide success alerts
         setTimeout(() => {
-            const alerts = document.querySelectorAll('.alert');
+            const alerts = document.querySelectorAll('.alert-success');
             alerts.forEach(alert => {
-                if (alert.classList.contains('alert-success') || alert.classList.contains('alert-info')) {
-                    alert.style.transition = 'opacity 0.5s ease';
-                    alert.style.opacity = '0';
-                    setTimeout(() => alert.remove(), 500);
-                }
+                alert.style.transition = 'opacity 0.5s ease';
+                alert.style.opacity = '0';
+                setTimeout(() => alert.remove(), 500);
             });
         }, 5000);
 
@@ -875,7 +885,6 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
         const descriptionField = document.getElementById('prod_description');
         const maxLength = 1000;
         
-        // Create character counter
         const counter = document.createElement('div');
         counter.className = 'text-muted small mt-1';
         counter.innerHTML = `0/${maxLength} characters`;

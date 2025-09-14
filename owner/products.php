@@ -118,8 +118,8 @@ $stmt = $conn->prepare($query);
 $stmt->execute($params);
 $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get categories for filter
-$query = "SELECT * FROM categories WHERE Cat_ParentID IS NULL ORDER BY Cat_Name";
+// Get categories for filter - FIXED: Changed Cat_ParentID to ParentCategoryID
+$query = "SELECT * FROM categories WHERE ParentCategoryID IS NULL ORDER BY Cat_Name";
 $stmt = $conn->prepare($query);
 $stmt->execute();
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);

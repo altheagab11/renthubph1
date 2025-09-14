@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 10, 2025 at 12:14 PM
+-- Generation Time: Sep 12, 2025 at 03:08 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -70,8 +70,8 @@ CREATE TABLE `categories` (
   `CategoryID` int(11) NOT NULL,
   `Cat_Name` varchar(100) NOT NULL,
   `Cat_Description` text DEFAULT NULL,
-  `Cat_ParentID` int(11) DEFAULT NULL,
-  `Cat_CreatedAt` timestamp NOT NULL DEFAULT current_timestamp()
+  `Cat_CreatedAt` timestamp NOT NULL DEFAULT current_timestamp(),
+  `ParentCategoryID` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -189,6 +189,23 @@ CREATE TABLE `notifications` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `parent_categories`
+--
+
+CREATE TABLE `parent_categories` (
+  `ParentCategoryID` int(11) NOT NULL,
+  `Parent_Name` varchar(100) NOT NULL,
+  `Parent_Description` text DEFAULT NULL,
+  `Parent_Icon` varchar(50) DEFAULT 'fas fa-folder',
+  `Parent_Color` varchar(20) DEFAULT '#007bff',
+  `Parent_IsActive` tinyint(1) DEFAULT 1,
+  `Parent_CreatedAt` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Parent_UpdatedAt` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `payments`
 --
 
@@ -254,13 +271,6 @@ CREATE TABLE `products` (
   `Prod_IsFeatured` tinyint(1) DEFAULT 0,
   `Prod_FeaturedUntil` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `products`
---
-
-INSERT INTO `products` (`ProductID`, `OwnerID`, `CategoryID`, `Prod_Name`, `Prod_Description`, `Prod_Brand`, `Prod_Model`, `Prod_Condition`, `Prod_RentalPrice`, `Prod_PriceType`, `Prod_SecurityDeposit`, `Prod_MinRentalDuration`, `Prod_MaxRentalDuration`, `Prod_Availability`, `Prod_CreatedAt`, `Prod_UpdatedAt`, `Prod_Status`, `Prod_IsFeatured`, `Prod_FeaturedUntil`) VALUES
-(1, 1, NULL, 'HAHA', 'masaya', 'happy', 'sad', NULL, 0.00, NULL, NULL, NULL, NULL, 1, '2025-09-10 10:08:31', '2025-09-10 10:10:03', 'Active', 0, NULL);
 
 -- --------------------------------------------------------
 
@@ -390,16 +400,6 @@ CREATE TABLE `user_accounts` (
   `User_Bio` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `user_accounts`
---
-
-INSERT INTO `user_accounts` (`UserID`, `User_Name`, `User_Email`, `User_Password`, `User_Phone`, `User_Role`, `User_CreatedAt`, `User_UpdatedAt`, `User_Photo`, `User_IsVerified`, `User_Status`, `User_Birthdate`, `User_Gender`, `User_Bio`) VALUES
-(1, 'Althea Gabrielle Reyes', 'thea@gmail.com', '$2y$10$HAbGFnjkiQARuclTvwrBBuu0sA51WIp6mpB26/YMTutg78puYsQXi', '+639958167775', 4, '2025-09-10 07:53:05', '2025-09-10 10:05:41', NULL, 0, 'Active', NULL, NULL, NULL),
-(2, 'Sepp Bernard Consulta', 'sepp@gmail.com', '$2y$10$KsVX1pp/B9vgib/awc7xg.qLxeazlX0IFijbxNIB.dUmxLcc.yxDG', '+639123456789', 2, '2025-09-10 07:58:42', '2025-09-10 10:07:01', NULL, 0, 'Active', '2005-04-16', 'Male', 'ako ay pogi'),
-(4, 'ADMIN', 'admin@gmail.com', '$2y$10$meGN/bbrXt7p7LSdOdsT2uWX2xHSyp16Zc2rW5bK8TkQkDub5cvwq', '+639992223332', 1, '2025-09-10 09:00:23', '2025-09-10 09:01:39', NULL, 0, 'Active', NULL, NULL, NULL),
-(5, 'Louie Andrew Gutierrez', 'louie@gmail.com', '$2y$10$eM3mT9r0JU2VRvbT1oy.deNYo3E8mLVK0zT3C7.FN/uYjBwJYQ2ue', '+639992223332', 2, '2025-09-10 09:14:58', '2025-09-10 10:05:09', NULL, 0, 'Active', NULL, NULL, NULL);
-
 -- --------------------------------------------------------
 
 --
@@ -479,7 +479,7 @@ ALTER TABLE `booking_status_history`
 --
 ALTER TABLE `categories`
   ADD PRIMARY KEY (`CategoryID`),
-  ADD KEY `Cat_ParentID` (`Cat_ParentID`);
+  ADD KEY `ParentCategoryID` (`ParentCategoryID`);
 
 --
 -- Indexes for table `chats`
@@ -539,6 +539,12 @@ ALTER TABLE `messages`
 ALTER TABLE `notifications`
   ADD PRIMARY KEY (`NotificationID`),
   ADD KEY `UserID` (`UserID`);
+
+--
+-- Indexes for table `parent_categories`
+--
+ALTER TABLE `parent_categories`
+  ADD PRIMARY KEY (`ParentCategoryID`);
 
 --
 -- Indexes for table `payments`
@@ -708,6 +714,12 @@ ALTER TABLE `notifications`
   MODIFY `NotificationID` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `parent_categories`
+--
+ALTER TABLE `parent_categories`
+  MODIFY `ParentCategoryID` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `payments`
 --
 ALTER TABLE `payments`
@@ -765,13 +777,13 @@ ALTER TABLE `subscription_plans`
 -- AUTO_INCREMENT for table `user_accounts`
 --
 ALTER TABLE `user_accounts`
-  MODIFY `UserID` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `UserID` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `user_addresses`
 --
 ALTER TABLE `user_addresses`
-  MODIFY `AddressID` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `AddressID` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `user_favorites`
@@ -808,7 +820,7 @@ ALTER TABLE `booking_status_history`
 -- Constraints for table `categories`
 --
 ALTER TABLE `categories`
-  ADD CONSTRAINT `categories_ibfk_1` FOREIGN KEY (`Cat_ParentID`) REFERENCES `categories` (`CategoryID`);
+  ADD CONSTRAINT `categories_ibfk_1` FOREIGN KEY (`ParentCategoryID`) REFERENCES `parent_categories` (`ParentCategoryID`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `chats`

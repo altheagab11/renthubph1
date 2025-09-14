@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/database.php';
 
 class Auth {
     private $conn;
+    private $last_user_id; // Add this property to store last inserted user ID
     
     public function __construct() {
         $database = new Database();
@@ -30,6 +31,7 @@ class Auth {
     }
     
     public function register($name, $email, $password, $phone, $role = 2) {
+        // Check if email already exists
         $query = "SELECT UserID FROM user_accounts WHERE User_Email = ?";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(1, $email);
@@ -39,16 +41,29 @@ class Auth {
             return false; // Email already exists
         }
         
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-        $query = "INSERT INTO user_accounts (User_Name, User_Email, User_Password, User_Phone, User_Role) VALUES (?, ?, ?, ?, ?)";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(1, $name);
-        $stmt->bindParam(2, $email);
-        $stmt->bindParam(3, $hashed_password);
-        $stmt->bindParam(4, $phone);
-        $stmt->bindParam(5, $role);
-        
-        return $stmt->execute();
+        // Insert new user
+        try {
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            $query = "INSERT INTO user_accounts (User_Name, User_Email, User_Password, User_Phone, User_Role, User_CreatedAt) VALUES (?, ?, ?, ?, ?, NOW())";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(1, $name);
+            $stmt->bindParam(2, $email);
+            $stmt->bindParam(3, $hashed_password);
+            $stmt->bindParam(4, $phone);
+            $stmt->bindParam(5, $role);
+            
+            if ($stmt->execute()) {
+                $this->last_user_id = $this->conn->lastInsertId(); // Store the last inserted ID
+                return true;
+            }
+            return false;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+    
+    public function getLastRegisteredUserId() {
+        return $this->last_user_id ?? null;
     }
     
     public function logout() {
@@ -80,18 +95,8 @@ class Auth {
         // Determine the base URL based on current script location
         $scriptName = $_SERVER['SCRIPT_NAME'];
         $baseUrl = '';
-        
-        if (strpos($scriptName, '/admin/') !== false) {
-            $baseUrl = '..';
-        } elseif (strpos($scriptName, '/renter/') !== false) {
-            $baseUrl = '..';
-        } elseif (strpos($scriptName, '/owner/') !== false) {
-            $baseUrl = '..';
-        } else {
-            $baseUrl = '.';
-        }
-        
-        return $baseUrl;
+// (Removed duplicate standalone functions; now handled inside Auth class)
+
     }
 }
-?>
+?> 
