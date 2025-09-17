@@ -17,7 +17,7 @@ if ($_POST) {
     if (isset($_POST['remove_favorite'])) {
         $product_id = $_POST['product_id'];
         
-        $query = "DELETE FROM user_favorites WHERE UserID = ? AND ProductID = ?";
+        $query = "DELETE FROM favorites WHERE UserID = ? AND ProductID = ?";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $user_id);
         $stmt->bindParam(2, $product_id);
@@ -32,7 +32,7 @@ if ($_POST) {
     }
     
     if (isset($_POST['clear_all_favorites'])) {
-        $query = "DELETE FROM user_favorites WHERE UserID = ?";
+        $query = "DELETE FROM favorites WHERE UserID = ?";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $user_id);
         
@@ -52,7 +52,7 @@ $price_filter = isset($_GET['price']) ? $_GET['price'] : '';
 $sort_by = isset($_GET['sort']) ? $_GET['sort'] : 'newest';
 
 // Build query conditions
-$conditions = ["uf.UserID = ?", "p.Prod_Status = 'Active'", "p.Prod_Availability = 1"];
+$conditions = ["f.UserID = ?", "p.Prod_Status = 'Active'", "p.Prod_Availability = 1"];
 $params = [$user_id];
 
 if ($category_filter) {
@@ -79,28 +79,36 @@ if ($price_filter) {
 
 // Sort options
 $sort_options = [
-    'newest' => 'uf.UF_CreatedAt DESC',
-    'oldest' => 'uf.UF_CreatedAt ASC',
+    'newest' => 'f.Fav_AddedAt DESC',
+    'oldest' => 'f.Fav_AddedAt ASC',
     'price_low' => 'p.Prod_RentalPrice ASC',
     'price_high' => 'p.Prod_RentalPrice DESC',
     'name_asc' => 'p.Prod_Name ASC',
     'popular' => 'booking_count DESC'
 ];
 
-$order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'uf.UF_CreatedAt DESC';
+$order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'f.Fav_AddedAt DESC';
 
-// Get favorites
+// Get favorites with product details
 $query = "SELECT p.*, pi.PI_ImagePath, u.User_Name as Owner_Name, ua.UA_City, ua.UA_Province,
-          c.Cat_Name, uf.UF_CreatedAt as Favorited_At,
+          c.Cat_Name, f.Fav_AddedAt as Favorited_At,
           (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as booking_count,
           (SELECT AVG(Rev_Rating) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as avg_rating,
-          (SELECT COUNT(*) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as review_count
-          FROM user_favorites uf
-          JOIN products p ON uf.ProductID = p.ProductID
+          (SELECT COUNT(*) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as review_count,
+          pl.PL_PickupAvailable, pl.PL_DeliveryAvailable, pl.PL_DeliveryFee,
+          CONCAT_WS(', ', 
+                NULLIF(ua.UA_Street, ''), 
+                NULLIF(ua.UA_Barangay, ''), 
+                NULLIF(ua.UA_City, ''), 
+                NULLIF(ua.UA_Province, '')
+          ) as FullAddress
+          FROM favorites f
+          JOIN products p ON f.ProductID = p.ProductID
           LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
           JOIN user_accounts u ON p.OwnerID = u.UserID
           LEFT JOIN user_addresses ua ON u.UserID = ua.UserID AND ua.UA_IsDefault = 1
           LEFT JOIN categories c ON p.CategoryID = c.CategoryID
+          LEFT JOIN product_locations pl ON p.ProductID = pl.ProductID
           WHERE " . implode(' AND ', $conditions) . "
           ORDER BY " . $order_by;
 
@@ -111,8 +119,8 @@ $favorites = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Get categories for filter
 $query = "SELECT DISTINCT c.* FROM categories c
           JOIN products p ON c.CategoryID = p.CategoryID
-          JOIN user_favorites uf ON p.ProductID = uf.ProductID
-          WHERE uf.UserID = ? AND p.Prod_Status = 'Active'
+          JOIN favorites f ON p.ProductID = f.ProductID
+          WHERE f.UserID = ? AND p.Prod_Status = 'Active'
           ORDER BY c.Cat_Name";
 $stmt = $conn->prepare($query);
 $stmt->bindParam(1, $user_id);
@@ -153,6 +161,7 @@ $stats['most_expensive'] = $most_expensive;
     <title>My Favorites - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -427,6 +436,11 @@ $stats['most_expensive'] = $most_expensive;
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="browse.php">
+                        <i class="fas fa-search me-2"></i> Browse Items
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="bookings.php">
                         <i class="fas fa-calendar-check me-2"></i> My Bookings
                     </a>
@@ -437,13 +451,18 @@ $stats['most_expensive'] = $most_expensive;
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="reviews.php">
-                        <i class="fas fa-star me-2"></i> My Reviews
+                    <a class="nav-link" href="messages.php">
+                        <i class="fas fa-comments me-2"></i> Messages
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="messages.php">
-                        <i class="fas fa-comments me-2"></i> Messages
+                    <a class="nav-link" href="reviews.php">
+                        <i class="fas fa-star me-2"></i> Reviews
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="payment-history.php">
+                        <i class="fas fa-money-bill me-2"></i> Payment History
                     </a>
                 </li>
                 <li class="nav-item">
@@ -451,19 +470,19 @@ $stats['most_expensive'] = $most_expensive;
                         <i class="fas fa-user me-2"></i> Profile Settings
                     </a>
                 </li>
+                <?php if($_SESSION['user_role'] == 3): ?>
                 <li class="nav-item mt-3">
-                    <hr class="text-white-50">
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-home me-2"></i> Switch to Owner
+                        <i class="fas fa-store me-2"></i> Switch to Owner
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="../browse.php">
-                        <i class="fas fa-search me-2"></i> Browse Products
+                <?php else: ?>
+                <li class="nav-item mt-3">
+                    <a class="nav-link" href="upgrade.php" style="background-color: rgba(255,255,255,0.1);">
+                        <i class="fas fa-crown me-2"></i> Become an Owner
                     </a>
                 </li>
+                <?php endif; ?>
                 <li class="nav-item">
                     <a class="nav-link" href="../index.php">
                         <i class="fas fa-arrow-left me-2"></i> Back to Site
@@ -706,9 +725,10 @@ $stats['most_expensive'] = $most_expensive;
                     <div class="card-body p-4">
                         <div class="row">
                             <div class="col-md-3">
-                                <img src="<?php echo $favorite['PI_ImagePath'] ? htmlspecialchars($favorite['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
+                                <img src="<?php echo $favorite['PI_ImagePath'] ? '../' . htmlspecialchars($favorite['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
                                      class="img-fluid rounded" style="height: 180px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($favorite['Prod_Name']); ?>">
+                                     alt="<?php echo htmlspecialchars($favorite['Prod_Name']); ?>"
+                                     onerror="this.src='../assets/images/no-image.jpg'">
                             </div>
                             
                             <div class="col-md-6">
@@ -776,9 +796,10 @@ $stats['most_expensive'] = $most_expensive;
                                         
                                         <form method="POST" style="display: inline;">
                                             <input type="hidden" name="product_id" value="<?php echo $favorite['ProductID']; ?>">
-                                            <button type="submit" name="remove_favorite" class="btn action-btn remove w-100"
-                                                    onclick="return confirm('Remove this item from favorites?')">
-                                                <i class="fas fa-heart-broken me-1"></i>Remove
+                                            <button type="submit" name="remove_favorite" class="btn btn-outline-danger w-100"
+                                                    onclick="return confirm('Remove this item from favorites?')"
+                                                    style="border-radius: 15px;">
+                                                <i class="fas fa-heart-broken me-1"></i>Remove from Favorites
                                             </button>
                                         </form>
                                         

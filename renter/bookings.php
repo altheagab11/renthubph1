@@ -12,6 +12,62 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
+// Function to format booking notes JSON into readable format
+function formatBookingNotes($notes_json) {
+    if (empty($notes_json)) return '';
+    
+    $notes = json_decode($notes_json, true);
+    if (!$notes) return $notes_json; // Return original if not valid JSON
+    
+    $formatted = '<div class="booking-details">';
+    
+    // Contact Information
+    if (isset($notes['renter_name']) || isset($notes['renter_phone']) || isset($notes['renter_email'])) {
+        $formatted .= '<div class="mb-2"><strong>Contact Information:</strong><br>';
+        if (isset($notes['renter_name'])) $formatted .= '<small>Name: ' . htmlspecialchars($notes['renter_name']) . '</small><br>';
+        if (isset($notes['renter_phone'])) $formatted .= '<small>Phone: ' . htmlspecialchars($notes['renter_phone']) . '</small><br>';
+        if (isset($notes['renter_email'])) $formatted .= '<small>Email: ' . htmlspecialchars($notes['renter_email']) . '</small><br>';
+        if (isset($notes['emergency_contact']) && !empty($notes['emergency_contact'])) {
+            $formatted .= '<small>Emergency Contact: ' . htmlspecialchars($notes['emergency_contact']) . '</small><br>';
+        }
+        $formatted .= '</div>';
+    }
+    
+    // Address
+    if (isset($notes['renter_address'])) {
+        $formatted .= '<div class="mb-2"><strong>Address:</strong><br>';
+        $formatted .= '<small>' . htmlspecialchars($notes['renter_address']) . '</small></div>';
+    }
+    
+    // Pickup/Delivery
+    if (isset($notes['pickup_delivery'])) {
+        $formatted .= '<div class="mb-2"><strong>Service:</strong><br>';
+        $formatted .= '<small>' . ucfirst(htmlspecialchars($notes['pickup_delivery'])) . '</small></div>';
+    }
+    
+    // Payment Method
+    if (isset($notes['payment_method'])) {
+        $formatted .= '<div class="mb-2"><strong>Payment Method:</strong><br>';
+        $formatted .= '<small>' . htmlspecialchars($notes['payment_method']) . '</small>';
+        if (isset($notes['payment_account_name']) && !empty($notes['payment_account_name'])) {
+            $formatted .= '<br><small>Account Name: ' . htmlspecialchars($notes['payment_account_name']) . '</small>';
+        }
+        if (isset($notes['payment_account_number']) && !empty($notes['payment_account_number'])) {
+            $formatted .= '<br><small>Account Number: ' . htmlspecialchars($notes['payment_account_number']) . '</small>';
+        }
+        $formatted .= '</div>';
+    }
+    
+    // Special Instructions
+    if (isset($notes['special_instructions']) && !empty($notes['special_instructions'])) {
+        $formatted .= '<div class="mb-2"><strong>Special Instructions:</strong><br>';
+        $formatted .= '<small>' . htmlspecialchars($notes['special_instructions']) . '</small></div>';
+    }
+    
+    $formatted .= '</div>';
+    return $formatted;
+}
+
 // Handle booking actions
 if ($_POST) {
     if (isset($_POST['cancel_booking'])) {
@@ -142,6 +198,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     <title>My Bookings - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -401,6 +458,11 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="browse.php">
+                        <i class="fas fa-search me-2"></i> Browse Items
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link active" href="bookings.php">
                         <i class="fas fa-calendar-check me-2"></i> My Bookings
                     </a>
@@ -411,13 +473,18 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="reviews.php">
-                        <i class="fas fa-star me-2"></i> My Reviews
+                    <a class="nav-link" href="messages.php">
+                        <i class="fas fa-comments me-2"></i> Messages
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="messages.php">
-                        <i class="fas fa-comments me-2"></i> Messages
+                    <a class="nav-link" href="reviews.php">
+                        <i class="fas fa-star me-2"></i> Reviews
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="payment-history.php">
+                        <i class="fas fa-money-bill me-2"></i> Payment History
                     </a>
                 </li>
                 <li class="nav-item">
@@ -425,19 +492,19 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                         <i class="fas fa-user me-2"></i> Profile Settings
                     </a>
                 </li>
+                <?php if($_SESSION['user_role'] == 3): ?>
                 <li class="nav-item mt-3">
-                    <hr class="text-white-50">
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-home me-2"></i> Switch to Owner
+                        <i class="fas fa-store me-2"></i> Switch to Owner
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="../browse.php">
-                        <i class="fas fa-search me-2"></i> Browse Products
+                <?php else: ?>
+                <li class="nav-item mt-3">
+                    <a class="nav-link" href="upgrade.php" style="background-color: rgba(255,255,255,0.1);">
+                        <i class="fas fa-crown me-2"></i> Become an Owner
                     </a>
                 </li>
+                <?php endif; ?>
                 <li class="nav-item">
                     <a class="nav-link" href="../index.php">
                         <i class="fas fa-arrow-left me-2"></i> Back to Site
@@ -642,9 +709,10 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     <div class="card-body p-4">
                         <div class="row">
                             <div class="col-md-3">
-                                <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
+                                <img src="<?php echo $booking['PI_ImagePath'] ? '../' . htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
                                      class="img-fluid rounded" style="height: 180px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                     alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>"
+                                     onerror="this.src='../assets/images/no-image.jpg'">
                             </div>
                             
                             <div class="col-md-6">
@@ -681,8 +749,8 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         </div>
                                     </div>
                                     <?php if($booking['Book_Notes']): ?>
-                                        <p class="mb-1 small"><strong>Notes:</strong></p>
-                                        <p class="mb-0 small"><?php echo nl2br(htmlspecialchars($booking['Book_Notes'])); ?></p>
+                                        <p class="mb-1 small"><strong>Booking Details:</strong></p>
+                                        <div class="mb-0 small"><?php echo formatBookingNotes($booking['Book_Notes']); ?></div>
                                     <?php endif; ?>
                                 </div>
                             </div>

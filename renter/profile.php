@@ -309,6 +309,7 @@ function getFieldValue($user_info, $field, $default = '') {
     <title>Profile Settings - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -593,6 +594,11 @@ function getFieldValue($user_info, $field, $default = '') {
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="browse.php">
+                        <i class="fas fa-search me-2"></i> Browse Items
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="bookings.php">
                         <i class="fas fa-calendar-check me-2"></i> My Bookings
                     </a>
@@ -603,13 +609,18 @@ function getFieldValue($user_info, $field, $default = '') {
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="reviews.php">
-                        <i class="fas fa-star me-2"></i> My Reviews
+                    <a class="nav-link" href="messages.php">
+                        <i class="fas fa-comments me-2"></i> Messages
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="messages.php">
-                        <i class="fas fa-comments me-2"></i> Messages
+                    <a class="nav-link" href="reviews.php">
+                        <i class="fas fa-star me-2"></i> Reviews
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="payment-history.php">
+                        <i class="fas fa-money-bill me-2"></i> Payment History
                     </a>
                 </li>
                 <li class="nav-item">
@@ -617,19 +628,19 @@ function getFieldValue($user_info, $field, $default = '') {
                         <i class="fas fa-user me-2"></i> Profile Settings
                     </a>
                 </li>
+                <?php if($_SESSION['user_role'] == 3): ?>
                 <li class="nav-item mt-3">
-                    <hr class="text-white-50">
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-home me-2"></i> Switch to Owner
+                        <i class="fas fa-store me-2"></i> Switch to Owner
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="../browse.php">
-                        <i class="fas fa-search me-2"></i> Browse Products
+                <?php else: ?>
+                <li class="nav-item mt-3">
+                    <a class="nav-link" href="upgrade.php" style="background-color: rgba(255,255,255,0.1);">
+                        <i class="fas fa-crown me-2"></i> Become an Owner
                     </a>
                 </li>
+                <?php endif; ?>
                 <li class="nav-item">
                     <a class="nav-link" href="../index.php">
                         <i class="fas fa-arrow-left me-2"></i> Back to Site

@@ -1,0 +1,43 @@
+/* Sidebar Custom Scrollbar Styles */
+.sidebar {
+    height: 100vh !important;
+    overflow-y: auto;
+}
+
+/* Custom Scrollbar for Sidebar - WebKit browsers (Chrome, Safari, Edge) */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    transition: background 0.3s ease;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Custom Scrollbar for Sidebar - Firefox */
+.sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+}
+
+/* Optional: Hide scrollbar completely on smaller screens */
+@media (max-width: 768px) {
+    .sidebar {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE and Edge */
+    }
+    
+    .sidebar::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
+    }
+}

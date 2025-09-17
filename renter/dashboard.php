@@ -64,24 +64,59 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <title>Renter Dashboard - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <style>
-        .sidebar {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        :root {
+            --sidebar-width: 250px;
         }
+        
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        
         .sidebar .nav-link {
             color: rgba(255,255,255,0.8);
             padding: 0.75rem 1rem;
             border-radius: 0.5rem;
             margin-bottom: 0.25rem;
+            transition: all 0.3s;
         }
+        
         .sidebar .nav-link:hover,
         .sidebar .nav-link.active {
             color: #fff;
             background-color: rgba(255,255,255,0.2);
         }
+        
         .main-content {
-            margin-left: 250px;
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                margin-left: calc(-1 * var(--sidebar-width));
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                z-index: 1050;
+            }
+            
+            .sidebar.show {
+                margin-left: 0;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
         }
         .stat-card {
             border: none;
@@ -114,77 +149,77 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
     <!-- Sidebar -->
-    <nav class="sidebar position-fixed top-0 start-0" style="width: 250px; z-index: 1000;">
+    <nav class="sidebar">
         <div class="p-3">
-            <h4 class="text-white">
-                <i class="fas fa-home"></i> RentHub PH
+            <h4 class="text-white mb-1">
+                <i class="fas fa-search"></i> RentHub PH
             </h4>
-            <p class="text-white-50 small">Renter Dashboard</p>
+            <p class="text-white-50 small mb-0">Renter Dashboard</p>
         </div>
         
-        <div class="px-3">
+        <div class="px-3 pb-3">
             <ul class="nav flex-column">
                 <li class="nav-item">
                     <a class="nav-link active" href="dashboard.php">
-                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                        <i class="fas fa-tachometer-alt me-2"></i> Dashboard
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="browse.php">
-                        <i class="fas fa-search"></i> Browse Items
+                        <i class="fas fa-search me-2"></i> Browse Items
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="bookings.php">
-                        <i class="fas fa-calendar-check"></i> My Bookings
+                        <i class="fas fa-calendar-check me-2"></i> My Bookings
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="favorites.php">
-                        <i class="fas fa-heart"></i> Favorites
+                        <i class="fas fa-heart me-2"></i> Favorites
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="messages.php">
-                        <i class="fas fa-comments"></i> Messages
+                        <i class="fas fa-comments me-2"></i> Messages
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="reviews.php">
-                        <i class="fas fa-star"></i> Reviews
+                        <i class="fas fa-star me-2"></i> Reviews
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="payment-history.php">
-                        <i class="fas fa-money-bill"></i> Payment History
+                        <i class="fas fa-money-bill me-2"></i> Payment History
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="profile.php">
-                        <i class="fas fa-user"></i> Profile Settings
+                        <i class="fas fa-user me-2"></i> Profile Settings
                     </a>
                 </li>
                 <?php if($_SESSION['user_role'] == 3): ?>
                 <li class="nav-item mt-3">
                     <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-store"></i> Switch to Owner
+                        <i class="fas fa-store me-2"></i> Switch to Owner
                     </a>
                 </li>
                 <?php else: ?>
                 <li class="nav-item mt-3">
                     <a class="nav-link" href="upgrade.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-crown"></i> Become an Owner
+                        <i class="fas fa-crown me-2"></i> Become an Owner
                     </a>
                 </li>
                 <?php endif; ?>
                 <li class="nav-item">
                     <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left"></i> Back to Site
+                        <i class="fas fa-arrow-left me-2"></i> Back to Site
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="../logout.php">
-                        <i class="fas fa-sign-out-alt"></i> Logout
+                        <i class="fas fa-sign-out-alt me-2"></i> Logout
                     </a>
                 </li>
             </ul>
@@ -194,9 +229,14 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Main Content -->
     <div class="main-content">
         <!-- Top Navigation -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
             <div class="container-fluid">
-                <h5 class="mb-0">Welcome back, <?php echo htmlspecialchars($_SESSION['user_name']); ?>!</h5>
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-outline-secondary d-md-none me-3" type="button" id="sidebarToggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h5 class="mb-0">Welcome back, <?php echo htmlspecialchars($_SESSION['user_name']); ?>!</h5>
+                </div>
                 <div class="navbar-nav ms-auto">
                     <div class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -434,5 +474,11 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sidebar toggle for mobile
+        document.getElementById('sidebarToggle')?.addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('show');
+        });
+    </script>
 </body>
 </html>
