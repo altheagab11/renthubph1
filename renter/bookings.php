@@ -100,20 +100,52 @@ if ($_POST) {
         }
     }
     
-    if (isset($_POST['confirm_received'])) {
+    if (isset($_POST['confirm_payment'])) {
         $booking_id = $_POST['booking_id'];
         
-        $query = "UPDATE bookings SET Book_Status = 'Completed', Book_UpdatedAt = NOW() WHERE BookingID = ? AND RenterID = ? AND Book_Status = 'Active'";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $booking_id);
-        $stmt->bindParam(2, $user_id);
+        // First check if booking is confirmed and has a payment record
+        $check_query = "SELECT b.Book_Status, b.Book_TotalAmount, b.Book_Notes 
+                       FROM bookings b 
+                       WHERE b.BookingID = ? AND b.RenterID = ? AND b.Book_Status = 'Confirmed'";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->execute([$booking_id, $user_id]);
+        $booking_data = $check_stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($stmt->execute()) {
-            $message = "Booking marked as completed! You can now leave a review.";
+        if ($booking_data) {
+            // Check if payment record exists, if not create it
+            $payment_check = "SELECT PaymentID FROM payments WHERE BookingID = ?";
+            $payment_check_stmt = $conn->prepare($payment_check);
+            $payment_check_stmt->execute([$booking_id]);
+            $existing_payment = $payment_check_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$existing_payment) {
+                // Create payment record
+                $notes = json_decode($booking_data['Book_Notes'], true);
+                $payment_method = $notes['payment_method'] ?? 'Cash';
+                
+                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_CreatedAt) 
+                                  VALUES (?, ?, 'Rental Payment', ?, 'Pending', NOW())";
+                $create_payment_stmt = $conn->prepare($create_payment);
+                $create_payment_stmt->execute([$booking_id, $booking_data['Book_TotalAmount'], $payment_method]);
+            }
+            
+            // Update payment status to completed
+            $payment_query = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
+                             WHERE BookingID = ? AND Pay_Status = 'Pending'";
+            $payment_stmt = $conn->prepare($payment_query);
+            $payment_stmt->execute([$booking_id]);
+            
+            // Update booking status to Active (rental is now active)
+            $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
+                             WHERE BookingID = ? AND RenterID = ?";
+            $booking_stmt = $conn->prepare($booking_query);
+            $booking_stmt->execute([$booking_id, $user_id]);
+            
+            $message = "Payment confirmed successfully! Your rental is now active.";
             $message_type = "success";
         } else {
-            $message = "Failed to update booking status.";
-            $message_type = "danger";
+            $message = "Cannot process payment. Booking must be approved by owner first.";
+            $message_type = "warning";
         }
     }
 }
@@ -145,12 +177,14 @@ $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'b.Book_C
 // Get bookings
 $query = "SELECT b.*, p.Prod_Name, p.Prod_Description, pi.PI_ImagePath, u.User_Name as Owner_Name, u.User_Phone as Owner_Phone,
           ua.UA_City, ua.UA_Province,
+          pay.PaymentID, pay.Pay_Amount, pay.Pay_Type, pay.Pay_Method, pay.Pay_Status, pay.Pay_CreatedAt as Payment_CreatedAt, pay.Pay_ProcessedAt,
           (SELECT COUNT(*) FROM reviews WHERE BookingID = b.BookingID) as has_review
           FROM bookings b
           JOIN products p ON b.ProductID = p.ProductID
           LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
           JOIN user_accounts u ON p.OwnerID = u.UserID
           LEFT JOIN user_addresses ua ON u.UserID = ua.UserID AND ua.UA_IsDefault = 1
+          LEFT JOIN payments pay ON b.BookingID = pay.BookingID
           WHERE " . implode(' AND ', $conditions) . "
           ORDER BY " . $order_by;
 
@@ -295,6 +329,15 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         .status-badge.active { background: #28a745; }
         .status-badge.completed { background: #6c757d; }
         .status-badge.cancelled { background: #dc3545; }
+        
+        .payment-status {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+        }
+        .payment-status.pending { background: #ffeaa7; color: #2d3436; }
+        .payment-status.completed { background: #00b894; color: white; }
+        .payment-status.failed { background: #e17055; color: white; }
         
         .search-filters {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -506,11 +549,6 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 </li>
                 <?php endif; ?>
                 <li class="nav-item">
-                    <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Site
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../logout.php">
                         <i class="fas fa-sign-out-alt me-2"></i> Logout
                     </a>
@@ -704,6 +742,11 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                         <span class="badge status-badge <?php echo strtolower($booking['Book_Status']); ?>">
                             <?php echo htmlspecialchars($booking['Book_Status']); ?>
                         </span>
+                        <?php if($booking['PaymentID']): ?>
+                        <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
+                            Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
+                        </span>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="card-body p-4">
@@ -783,6 +826,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     
                                     <div class="d-flex flex-column gap-2 mt-3">
                                         <?php if($booking['Book_Status'] == 'Pending'): ?>
+                                            <!-- Cancel Booking Button (for pending bookings) -->
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
                                                 <button type="submit" name="cancel_booking" class="btn action-btn cancel btn-sm" 
@@ -790,16 +834,29 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                                     <i class="fas fa-times me-1"></i>Cancel
                                                 </button>
                                             </form>
+                                            <div class="text-info small mt-2">
+                                                <i class="fas fa-clock me-1"></i>Waiting for owner approval
+                                            </div>
                                         <?php endif; ?>
                                         
-                                        <?php if($booking['Book_Status'] == 'Active'): ?>
+                                        <?php if($booking['Book_Status'] == 'Confirmed'): ?>
+                                            <!-- Payment options for confirmed bookings -->
+                                            <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
-                                                <button type="submit" name="confirm_received" class="btn action-btn complete btn-sm"
-                                                        onclick="return confirm('Confirm that you have completed this rental?')">
-                                                    <i class="fas fa-check me-1"></i>Mark Complete
+                                                <button type="submit" name="confirm_payment" class="btn btn-success btn-sm" 
+                                                        onclick="return confirm('Confirm that you have made the payment?')">
+                                                    <i class="fas fa-credit-card me-1"></i>Confirm Payment
                                                 </button>
                                             </form>
+                                            <div class="text-warning small mt-2">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>Please make payment to activate rental
+                                            </div>
+                                            <?php elseif($booking['Pay_Status'] == 'Completed'): ?>
+                                            <div class="text-success small">
+                                                <i class="fas fa-check-circle me-1"></i>Payment Confirmed
+                                            </div>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                         
                                         <?php if($booking['Owner_Phone']): ?>

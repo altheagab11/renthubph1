@@ -500,11 +500,6 @@ if ($payments_table_exists) {
                 </li>
                 <?php endif; ?>
                 <li class="nav-item">
-                    <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Site
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../logout.php">
                         <i class="fas fa-sign-out-alt me-2"></i> Logout
                     </a>

@@ -117,7 +117,7 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
         ]);
         
         if ($booking_result) {
-            echo json_encode(['success' => true, 'message' => 'Booking created successfully']);
+            echo json_encode(['success' => true, 'message' => 'Booking request sent successfully! Waiting for owner approval.']);
         } else {
             throw new Exception("Failed to create booking");
         }
@@ -145,9 +145,14 @@ $params = [];
 
 // Only apply status filters if not showing all
 if (!$show_all) {
-    $where_conditions[] = "(p.Prod_Availability = 'Available' OR p.Prod_Availability IS NULL)";
-    $where_conditions[] = "(p.Prod_Status = 'Active' OR p.Prod_Status IS NULL)";
+    // Show products unless they are explicitly marked as unavailable or inactive
+    $where_conditions[] = "(p.Prod_Availability != 'Unavailable' OR p.Prod_Availability IS NULL)";
+    $where_conditions[] = "(p.Prod_Status != 'Inactive' OR p.Prod_Status IS NULL)";
 }
+
+// Exclude user's own products (owners shouldn't see their own items when browsing to rent)
+$where_conditions[] = "p.OwnerID != ?";
+$params[] = $user_id;
 
 if (!empty($category_filter)) {
     $where_conditions[] = "p.CategoryID = ?";
@@ -789,11 +794,6 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                 </li>
                 <?php endif; ?>
                 <li class="nav-item">
-                    <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Site
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../logout.php">
                         <i class="fas fa-sign-out-alt me-2"></i> Logout
                     </a>
@@ -843,34 +843,6 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
 
         <!-- Browse Content -->
         <div class="container-fluid p-4">
-            <!-- Debug Information (same as before) -->
-            <?php if($total_all_products == 0): ?>
-            <div class="debug-info">
-                <h6><i class="fas fa-info-circle"></i> Database Status</h6>
-                <p class="mb-2"><strong>Total products in database:</strong> <?php echo $total_all_products; ?></p>
-                <p class="mb-0">Your products table appears to be empty. You may need to add some products first.</p>
-            </div>
-            <?php elseif($total_products == 0 && !$show_all): ?>
-            <div class="debug-info">
-                <h6><i class="fas fa-info-circle"></i> Filter Status</h6>
-                <p class="mb-2"><strong>Total products in database:</strong> <?php echo $total_all_products; ?></p>
-                <p class="mb-2"><strong>Products matching current filters:</strong> <?php echo $total_products; ?></p>
-                <p class="mb-2">No products found with current filters (Available status and Active status).</p>
-                
-                <a href="?show_all=1" class="btn btn-warning btn-sm">
-                    <i class="fas fa-eye"></i> Show All Products (Debug Mode)
-                </a>
-            </div>
-            <?php elseif($show_all): ?>
-            <div class="debug-info">
-                <h6><i class="fas fa-eye"></i> Debug Mode Active</h6>
-                <p class="mb-2">Showing all products regardless of status. Found <?php echo $total_products; ?> products.</p>
-                <a href="?" class="btn btn-primary btn-sm">
-                    <i class="fas fa-filter"></i> Back to Normal View
-                </a>
-            </div>
-            <?php endif; ?>
-
             <!-- Filters (same as before) -->
             <div class="row mb-4">
                 <div class="col-12">
