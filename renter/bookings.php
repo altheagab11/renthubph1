@@ -122,11 +122,22 @@ if ($_POST) {
                 // Create payment record
                 $notes = json_decode($booking_data['Book_Notes'], true);
                 $payment_method = $notes['payment_method'] ?? 'Cash';
-                
-                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_CreatedAt) 
-                                  VALUES (?, ?, 'Rental Payment', ?, 'Pending', NOW())";
+
+                // Generate unique transaction ID
+                $user_id = $_SESSION['user_id'];
+                $now = date('YmdHis');
+                $random = mt_rand(1000, 9999);
+                $pay_transaction_id = "TXN{$now}-USER{$user_id}-{$random}";
+
+                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt) 
+                                  VALUES (?, ?, 'Rental Payment', ?, 'Pending', ?, NOW())";
                 $create_payment_stmt = $conn->prepare($create_payment);
-                $create_payment_stmt->execute([$booking_id, $booking_data['Book_TotalAmount'], $payment_method]);
+                $create_payment_stmt->execute([
+                    $booking_id,
+                    $booking_data['Book_TotalAmount'],
+                    $payment_method,
+                    $pay_transaction_id
+                ]);
             }
             
             // Update payment status to completed
