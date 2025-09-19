@@ -185,6 +185,7 @@ if ($messages_table_exists) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
+    <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -235,10 +236,7 @@ if ($messages_table_exists) {
             margin-bottom: 1.5rem;
         }
         
-        .stat-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-        }
+    /* .stat-card:hover removed: no movement or shadow change on hover */
         
         .stat-card.total { background: var(--info-gradient); color: white; }
         .stat-card.unread { background: var(--accent-gradient); color: white; }
@@ -785,7 +783,7 @@ if ($messages_table_exists) {
                                                 </small>
                                             </div>
                                         </div>
-                                        <p class="mb-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                        <p class="mb-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                                             <?php echo htmlspecialchars($conversation['last_message']); ?>
                                         </p>
                                         <?php if($conversation['UA_City']): ?>

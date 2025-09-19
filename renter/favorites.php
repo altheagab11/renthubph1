@@ -162,6 +162,7 @@ $stats['most_expensive'] = $most_expensive;
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
+    <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -206,15 +207,13 @@ $stats['most_expensive'] = $most_expensive;
         .stat-card {
             border: none;
             border-radius: 20px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             overflow: hidden;
             margin-bottom: 1.5rem;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            opacity: 1 !important;
+            filter: none !important;
+            transform: none !important;
+            transition: none !important;
         }
         
         .stat-card.total { background: var(--accent-gradient); color: white; }
@@ -232,10 +231,9 @@ $stats['most_expensive'] = $most_expensive;
             margin-bottom: 2rem;
             border-left: 4px solid #f093fb;
         }
-        
         .favorite-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            transform: translateY(-10px) !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15) !important;
         }
         
         .favorite-badge {
@@ -744,7 +742,7 @@ $stats['most_expensive'] = $most_expensive;
                                 </div>
                                 
                                 <h5 class="mb-2"><?php echo htmlspecialchars($favorite['Prod_Name']); ?></h5>
-                                <p class="text-muted mb-3" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                <p class="text-muted mb-3" style="display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                                     <?php echo htmlspecialchars($favorite['Prod_Description']); ?>
                                 </p>
                                 

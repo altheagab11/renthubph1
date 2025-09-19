@@ -310,6 +310,7 @@ function getFieldValue($user_info, $field, $default = '') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
+    <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -398,10 +399,6 @@ function getFieldValue($user_info, $field, $default = '') {
             margin-bottom: 1.5rem;
         }
         
-        .stat-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-        }
         
         .stat-card.bookings { background: var(--primary-gradient); color: white; }
         .stat-card.spent { background: var(--warning-gradient); color: white; }

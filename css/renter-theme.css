@@ -1,0 +1,64 @@
+/* Unified Renter Theme for Cards, Badges, Buttons, Sidebar, and Main Content */
+:root {
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    --warning-gradient: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+    --success-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    --danger-gradient: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+    --secondary-gradient: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%);
+    --sidebar-width: 250px;
+}
+
+.card, .product-card, .booking-card, .review-card, .favorite-card, .payment-card {
+    border: none;
+    border-radius: 18px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    background: #fff;
+}
+
+.status-badge, .badge.status-badge {
+    border-radius: 1rem;
+    font-size: 1em;
+    font-weight: 500;
+    padding: 0.4em 1.1em;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+}
+.status-badge.pending, .badge.status-badge.bg-warning { background: #ffc107; color: #222; }
+.status-badge.confirmed, .badge.status-badge.bg-success { background: #43e97b; color: #fff; }
+.status-badge.cancelled, .badge.status-badge.bg-danger { background: #f5576c; color: #fff; }
+.status-badge.completed, .badge.status-badge.bg-secondary { background: #6c757d; color: #fff; }
+
+.btn, .action-btn {
+    border-radius: 1.5rem;
+    font-weight: 500;
+    transition: box-shadow 0.2s, background 0.2s;
+}
+.btn-primary, .action-btn.book, .action-btn.contact {
+    background: var(--primary-gradient);
+    color: #fff;
+    border: none;
+}
+.btn-primary:hover, .action-btn.book:hover, .action-btn.contact:hover {
+    background: var(--accent-gradient);
+    color: #fff;
+}
+
+/* Utility for stat cards */
+.stat-card {
+    border-radius: 18px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    color: #fff;
+    font-weight: 600;
+    background: var(--primary-gradient);
+}
+
+/* For sidebar and main-content consistency */
+.sidebar {
+    background: var(--primary-gradient);
+    width: var(--sidebar-width);
+}
+.main-content {
+    background: #f8f9fa;
+}
