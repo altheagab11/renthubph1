@@ -749,24 +749,27 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             <?php else: ?>
                 <?php foreach($bookings as $booking): ?>
                 <div class="booking-card card">
-                    <div class="booking-status">
-                        <span class="badge status-badge <?php echo strtolower($booking['Book_Status']); ?>">
-                            <?php echo htmlspecialchars($booking['Book_Status']); ?>
-                        </span>
-                        <?php if($booking['PaymentID']): ?>
-                        <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
-                            Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
-                        </span>
-                        <?php endif; ?>
-                    </div>
+                        <div class="booking-status">
+                            <?php if($booking['PaymentID']): ?>
+                            <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
+                                Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
+                            </span>
+                            <?php endif; ?>
+                        </div>
                     
                     <div class="card-body p-4">
                         <div class="row">
                             <div class="col-md-3">
-                                <img src="<?php echo $booking['PI_ImagePath'] ? '../' . htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                     class="img-fluid rounded" style="height: 180px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>"
-                                     onerror="this.src='../assets/images/no-image.jpg'">
+                                <?php if (!empty($booking['PI_ImagePath'])): ?>
+                                    <img src="<?php echo '../' . htmlspecialchars($booking['PI_ImagePath']); ?>" 
+                                         class="img-fluid rounded" style="height: 180px; width: 100%; object-fit: cover;" 
+                                         alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>"
+                                         onerror="this.src='../assets/images/no-image.jpg'">
+                                <?php else: ?>
+                                    <div class="d-flex align-items-center justify-content-center bg-light border rounded" style="height: 180px; width: 100%;">
+                                        <i class="fas fa-image fa-3x text-muted"></i>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                             
                             <div class="col-md-6">
@@ -788,41 +791,47 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     <?php endif; ?>
                                 </div>
                                 
-                                <div class="booking-details">
-                                    <h6 class="mb-2">
+                                <div class="booking-details mt-3">
+                                    <h6 class="mb-2 fw-bold">
                                         <i class="fas fa-calendar me-2"></i>Booking Details
                                     </h6>
-                                    <div class="row">
+                                    <div class="row mb-2">
                                         <div class="col-6">
-                                            <p class="mb-1 small"><strong>Start Date:</strong></p>
-                                            <p class="mb-2"><?php echo date('M j, Y', strtotime($booking['Book_StartDate'])); ?></p>
+                                            <div class="small"><strong>Start Date:</strong> <?php echo date('M j, Y', strtotime($booking['Book_StartDate'])); ?></div>
                                         </div>
                                         <div class="col-6">
-                                            <p class="mb-1 small"><strong>End Date:</strong></p>
-                                            <p class="mb-2"><?php echo date('M j, Y', strtotime($booking['Book_EndDate'])); ?></p>
+                                            <div class="small"><strong>End Date:</strong> <?php echo date('M j, Y', strtotime($booking['Book_EndDate'])); ?></div>
                                         </div>
                                     </div>
                                     <?php if($booking['Book_Notes']): ?>
-                                        <p class="mb-1 small"><strong>Booking Details:</strong></p>
+                                        <div class="mb-1 small fw-semibold">Booking Details:</div>
                                         <div class="mb-0 small"><?php echo formatBookingNotes($booking['Book_Notes']); ?></div>
                                     <?php endif; ?>
                                 </div>
                             </div>
                             
                             <div class="col-md-3">
-                                <div class="text-end">
-                                    <h4 class="text-primary mb-2">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
-                                    
-                                    <?php
-                                    $start_date = new DateTime($booking['Book_StartDate']);
-                                    $end_date = new DateTime($booking['Book_EndDate']);
-                                    $duration = $start_date->diff($end_date)->days + 1;
-                                    ?>
-                                    <div class="duration-badge mb-3">
-                                        <?php echo $duration; ?> day<?php echo $duration > 1 ? 's' : ''; ?>
-                                    </div>
-                                    
-                                    <div class="booking-timeline">
+                                <div class="d-flex align-items-center justify-content-between mb-2" style="gap: 0.5rem;">
+                                    <h4 class="text-primary mb-0">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
+                                    <?php if($booking['Book_Status'] == 'Pending'): ?>
+                                        <span class="badge status-badge px-3 py-2 fs-6 bg-warning text-dark" style="border-radius: 1rem;">Pending</span>
+                                    <?php elseif($booking['Book_Status'] == 'Confirmed'): ?>
+                                        <span class="badge status-badge px-3 py-2 fs-6 bg-success" style="border-radius: 1rem;">Confirmed</span>
+                                    <?php elseif($booking['Book_Status'] == 'Cancelled'): ?>
+                                        <span class="badge status-badge px-3 py-2 fs-6 bg-danger" style="border-radius: 1rem;">Cancelled</span>
+                                    <?php elseif($booking['Book_Status'] == 'Completed'): ?>
+                                        <span class="badge status-badge px-3 py-2 fs-6 bg-secondary" style="border-radius: 1rem;">Completed</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php
+                                $start_date = new DateTime($booking['Book_StartDate']);
+                                $end_date = new DateTime($booking['Book_EndDate']);
+                                $duration = $start_date->diff($end_date)->days + 1;
+                                ?>
+                                <div class="duration-badge mb-3">
+                                    <?php echo $duration; ?> day<?php echo $duration > 1 ? 's' : ''; ?>
+                                </div>
+                                <div class="booking-timeline">
                                         <div class="timeline-item">
                                             <small class="text-muted">Booked:</small><br>
                                             <small><?php echo date('M j, Y', strtotime($booking['Book_CreatedAt'])); ?></small>

@@ -720,10 +720,16 @@ $stats['most_expensive'] = $most_expensive;
                     <div class="card-body p-4">
                         <div class="row">
                             <div class="col-md-3">
-                                <img src="<?php echo $favorite['PI_ImagePath'] ? '../' . htmlspecialchars($favorite['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                     class="img-fluid rounded" style="height: 180px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($favorite['Prod_Name']); ?>"
-                                     onerror="this.src='../assets/images/no-image.jpg'">
+                                <?php if (!empty($favorite['PI_ImagePath'])): ?>
+                                    <img src="<?php echo '../' . htmlspecialchars($favorite['PI_ImagePath']); ?>" 
+                                         class="img-fluid rounded" style="height: 180px; width: 100%; object-fit: cover;" 
+                                         alt="<?php echo htmlspecialchars($favorite['Prod_Name']); ?>"
+                                         onerror="this.src='../assets/images/no-image.jpg'">
+                                <?php else: ?>
+                                    <div class="d-flex align-items-center justify-content-center bg-light border rounded" style="height: 180px; width: 100%;">
+                                        <i class="fas fa-image fa-3x text-muted"></i>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                             
                             <div class="col-md-6">
