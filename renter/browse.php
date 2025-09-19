@@ -38,58 +38,70 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
                 throw new Exception("$field is required");
             }
         }
-        
+
         // Get product details
         $product_query = "SELECT p.*, p.OwnerID FROM products p WHERE p.ProductID = ?";
         $product_stmt = $conn->prepare($product_query);
         $product_stmt->execute([$_POST['product_id']]);
         $product = $product_stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if (!$product) {
             throw new Exception("Product not found");
         }
-        
+
+        // Get product location details
+
+        $location_query = "SELECT PL_DeliveryFee, PL_PickupAvailable, PL_DeliveryAvailable FROM product_locations WHERE ProductID = ?";
+        $location_stmt = $conn->prepare($location_query);
+        $location_stmt->execute([$_POST['product_id']]);
+        $location = $location_stmt->fetch(PDO::FETCH_ASSOC);
+
         // Calculate duration and total amount
         $start_date = new DateTime($_POST['rental_start_date']);
         $end_date = new DateTime($_POST['rental_end_date']);
         $interval = $start_date->diff($end_date);
         $duration_days = $interval->days + 1; // Include both start and end date
-        
+
         $rental_price = $product['Prod_RentalPrice'];
         $security_deposit = $product['Prod_SecurityDeposit'] ?? 0;
         $price_type = $product['Prod_PriceType'];
-        
+
         if (strpos(strtolower($price_type), 'hour') !== false) {
             $duration_hours = $interval->days * 24 + $interval->h;
             $rental_amount = $rental_price * $duration_hours;
         } else {
             $rental_amount = $rental_price * $duration_days;
         }
-        
-        // Add delivery fee if delivery is selected
+
+        // Set delivery fee and pickup type based on user selection
+        $pickup_type = 'Pickup'; // Default
         $delivery_fee = 0;
-        if ($_POST['pickup_delivery'] === 'delivery') {
-            // Get delivery fee from product_locations
-            $delivery_query = "SELECT PL_DeliveryFee FROM product_locations WHERE ProductID = ?";
-            $delivery_stmt = $conn->prepare($delivery_query);
-            $delivery_stmt->execute([$_POST['product_id']]);
-            $delivery_result = $delivery_stmt->fetch(PDO::FETCH_ASSOC);
-            $delivery_fee = $delivery_result['PL_DeliveryFee'] ?? 0;
+        if (isset($_POST['pickup_delivery'])) {
+            $pickup_delivery = strtolower(trim($_POST['pickup_delivery']));
+            if ($pickup_delivery === 'delivery') {
+                $pickup_type = 'Delivery';
+                $delivery_fee = $location['PL_DeliveryFee'] ?? 0;
+            } elseif ($pickup_delivery === 'pickup') {
+                $pickup_type = 'Pickup';
+                $delivery_fee = 0;
+            }
         }
-        
+
         $total_amount = $rental_amount + $security_deposit + $delivery_fee;
-        
+
         // Insert booking record
         $booking_query = "INSERT INTO bookings (
             ProductID, RenterID, OwnerID, 
             Book_StartDate, Book_EndDate, Book_TotalAmount,
+            Book_SecurityDeposit, Book_DeliveryFee, Book_PickupType,
             Book_Status, Book_Notes
         ) VALUES (
             ?, ?, ?, 
             ?, ?, ?,
+            ?, ?, ?,
             'Pending', ?
         )";
-        
+
         // Prepare booking notes with all the additional details
         $booking_notes = json_encode([
             'payment_method' => $_POST['payment_method'],
@@ -104,7 +116,7 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
             'payment_account_number' => $_POST['payment_account_number'] ?? '',
             'terms_agreement' => $_POST['terms_agreement'] ?? ''
         ]);
-        
+
         $booking_stmt = $conn->prepare($booking_query);
         $booking_result = $booking_stmt->execute([
             $_POST['product_id'],
@@ -113,6 +125,9 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
             $_POST['rental_start_date'],
             $_POST['rental_end_date'],
             $total_amount,
+            $security_deposit,
+            $delivery_fee,
+            $pickup_type,
             $booking_notes
         ]);
         

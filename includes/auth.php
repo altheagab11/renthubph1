@@ -30,7 +30,7 @@ class Auth {
         return false;
     }
     
-    public function register($name, $email, $password, $phone, $role = 2) {
+    public function register($name, $email, $password, $phone, $role = 2, $photo = null, $birthdate = null, $gender = null) {
         // Check if email already exists
         $query = "SELECT UserID FROM user_accounts WHERE User_Email = ?";
         $stmt = $this->conn->prepare($query);
@@ -44,14 +44,16 @@ class Auth {
         // Insert new user
         try {
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $query = "INSERT INTO user_accounts (User_Name, User_Email, User_Password, User_Phone, User_Role, User_CreatedAt) VALUES (?, ?, ?, ?, ?, NOW())";
+            $query = "INSERT INTO user_accounts (User_Name, User_Email, User_Password, User_Phone, User_Role, User_Photo, User_Birthdate, User_Gender, User_CreatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(1, $name);
             $stmt->bindParam(2, $email);
             $stmt->bindParam(3, $hashed_password);
             $stmt->bindParam(4, $phone);
             $stmt->bindParam(5, $role);
-            
+            $stmt->bindParam(6, $photo);
+            $stmt->bindParam(7, $birthdate);
+            $stmt->bindParam(8, $gender);
             if ($stmt->execute()) {
                 $this->last_user_id = $this->conn->lastInsertId(); // Store the last inserted ID
                 return true;

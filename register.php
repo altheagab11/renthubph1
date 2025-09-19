@@ -13,16 +13,43 @@ $conn = $database->getConnection();
 
 if($_POST) {
     $role = ($_POST['user_type'] == 'owner') ? 3 : 2;
-    
-    if($auth->register($_POST['name'], $_POST['email'], $_POST['password'], $_POST['phone'], $role)) {
+    $birthdate = $_POST['birthdate'] ?? null;
+    $gender = $_POST['gender'] ?? null;
+    $photo_filename = null;
+
+    // Handle image upload if a file was submitted
+    if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+        $max_size = 2 * 1024 * 1024; // 2MB
+        $file_type = $_FILES['photo']['type'];
+        $file_size = $_FILES['photo']['size'];
+        if (in_array($file_type, $allowed_types) && $file_size <= $max_size) {
+            $ext = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
+            $photo_filename = 'user_' . time() . '_' . rand(1000,9999) . '.' . $ext;
+            $upload_dir = __DIR__ . '/uploads/users/';
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0777, true);
+            }
+            move_uploaded_file($_FILES['photo']['tmp_name'], $upload_dir . $photo_filename);
+        }
+    }
+
+    if($auth->register(
+        $_POST['name'],
+        $_POST['email'],
+        $_POST['password'],
+        $_POST['phone'],
+        $role,
+        $photo_filename,
+        $birthdate,
+        $gender
+    )) {
         // Get the newly registered user ID
         $new_user_id = $auth->getLastRegisteredUserId();
-        
-        // If address information is provided, save it
+        // ...existing code for address...
         if (isset($_POST['save_address']) && $_POST['save_address'] == '1' && 
             !empty($_POST['street']) && !empty($_POST['barangay']) && 
             !empty($_POST['city']) && !empty($_POST['province'])) {
-            
             try {
                 $street = trim($_POST['street']);
                 $barangay = trim($_POST['barangay']);
@@ -32,7 +59,6 @@ if($_POST) {
                 $latitude = $_POST['latitude'] ?? null;
                 $longitude = $_POST['longitude'] ?? null;
                 $address_type = $_POST['address_type'] ?? 'Home';
-                
                 $query = "INSERT INTO user_addresses (UserID, UA_Street, UA_Barangay, UA_City, UA_Province, UA_ZipCode, UA_Latitude, UA_Longitude, UA_AddressType, UA_IsDefault, UA_CreatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())";
                 $stmt = $conn->prepare($query);
                 $stmt->bindParam(1, $new_user_id);
@@ -45,7 +71,6 @@ if($_POST) {
                 $stmt->bindParam(8, $longitude);
                 $stmt->bindParam(9, $address_type);
                 $stmt->execute();
-                
                 $success = "Registration successful with address! You can now login.";
             } catch (PDOException $e) {
                 $success = "Registration successful! You can now login. (Address can be added later)";
@@ -246,7 +271,12 @@ if($_POST) {
                 </div>
             <?php else: ?>
 
-            <form method="POST" id="registrationForm">
+            <form method="POST" id="registrationForm" enctype="multipart/form-data">
+                <div class="mb-4">
+                    <label for="photo" class="form-label">Profile Photo (optional)</label>
+                    <input class="form-control" type="file" id="photo" name="photo" accept="image/*">
+                    <small class="text-muted">JPG, PNG, or GIF. Max 2MB.</small>
+                </div>
                 <div class="mb-4">
                     <label class="form-label fw-bold">I want to:</label>
                     <div class="row">
@@ -298,6 +328,27 @@ if($_POST) {
                                    placeholder="+63 9XX XXX XXXX">
                         </div>
                     </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="birthdate" class="form-label">Date of Birth <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-calendar"></i></span>
+                                <input type="date" class="form-control" id="birthdate" name="birthdate" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="gender" class="form-label">Gender <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-venus-mars"></i></span>
+                                <select class="form-select" id="gender" name="gender" required>
+                                    <option value="">Select Gender</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
 
                     <div class="col-md-6 mb-3">
                         <label for="password" class="form-label">Password <span class="text-danger">*</span></label>

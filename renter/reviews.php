@@ -19,8 +19,8 @@ if ($_POST) {
         $rating = $_POST['rating'];
         $comment = trim($_POST['comment']);
         
-        // Check if booking exists and belongs to user
-        $query = "SELECT b.*, p.Prod_Name FROM bookings b 
+        // Check if booking exists and belongs to user, and get owner id
+        $query = "SELECT b.*, p.Prod_Name, p.OwnerID FROM bookings b 
                   JOIN products p ON b.ProductID = p.ProductID 
                   WHERE b.BookingID = ? AND b.RenterID = ? AND b.Book_Status = 'Completed'";
         $stmt = $conn->prepare($query);
@@ -28,15 +28,17 @@ if ($_POST) {
         $stmt->bindParam(2, $user_id);
         $stmt->execute();
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($booking) {
             try {
-                $query = "INSERT INTO reviews (BookingID, Rev_Rating, Rev_Comment, Rev_CreatedAt) VALUES (?, ?, ?, NOW())";
+                $query = "INSERT INTO reviews (BookingID, ReviewerID, RevieweeID, Rev_Rating, Rev_Comment, Rev_CreatedAt) VALUES (?, ?, ?, ?, ?, NOW())";
                 $stmt = $conn->prepare($query);
                 $stmt->bindParam(1, $booking_id);
-                $stmt->bindParam(2, $rating);
-                $stmt->bindParam(3, $comment);
-                
+                $stmt->bindParam(2, $user_id); // ReviewerID
+                $stmt->bindParam(3, $booking['OwnerID']); // RevieweeID
+                $stmt->bindParam(4, $rating);
+                $stmt->bindParam(5, $comment);
+
                 if ($stmt->execute()) {
                     $message = "Review submitted successfully!";
                     $message_type = "success";
