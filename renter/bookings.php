@@ -101,26 +101,27 @@ if ($_POST) {
         }
     }
     
+    // When booking is accepted (confirmed), create a payment record with status 'Pending' if not exists
     if (isset($_POST['confirm_payment'])) {
         $booking_id = $_POST['booking_id'];
-        
-        // First check if booking is confirmed and has a payment record
+
+        // Check if booking is confirmed
         $check_query = "SELECT b.Book_Status, b.Book_TotalAmount, b.Book_Notes 
                        FROM bookings b 
                        WHERE b.BookingID = ? AND b.RenterID = ? AND b.Book_Status = 'Confirmed'";
         $check_stmt = $conn->prepare($check_query);
         $check_stmt->execute([$booking_id, $user_id]);
         $booking_data = $check_stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($booking_data) {
-            // Check if payment record exists, if not create it
-            $payment_check = "SELECT PaymentID FROM payments WHERE BookingID = ?";
+            // Check if payment record exists, if not create it as Pending
+            $payment_check = "SELECT PaymentID, Pay_Status FROM payments WHERE BookingID = ?";
             $payment_check_stmt = $conn->prepare($payment_check);
             $payment_check_stmt->execute([$booking_id]);
             $existing_payment = $payment_check_stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$existing_payment) {
-                // Create payment record
+                // Create payment record as Pending
                 $notes = json_decode($booking_data['Book_Notes'], true);
                 $payment_method = $notes['payment_method'] ?? 'Cash';
 
@@ -139,22 +140,27 @@ if ($_POST) {
                     $payment_method,
                     $pay_transaction_id
                 ]);
+                $message = "Payment is now pending. Please complete your payment.";
+                $message_type = "info";
+            } elseif ($existing_payment['Pay_Status'] === 'Pending') {
+                // If payment is already pending, mark as completed now
+                $payment_query = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
+                                 WHERE BookingID = ? AND Pay_Status = 'Pending'";
+                $payment_stmt = $conn->prepare($payment_query);
+                $payment_stmt->execute([$booking_id]);
+
+                // Update booking status to Active (rental is now active)
+                $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
+                                 WHERE BookingID = ? AND RenterID = ?";
+                $booking_stmt = $conn->prepare($booking_query);
+                $booking_stmt->execute([$booking_id, $user_id]);
+
+                $message = "Payment confirmed successfully! Your rental is now active.";
+                $message_type = "success";
+            } else {
+                $message = "Payment already completed for this booking.";
+                $message_type = "info";
             }
-            
-            // Update payment status to completed
-            $payment_query = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
-                             WHERE BookingID = ? AND Pay_Status = 'Pending'";
-            $payment_stmt = $conn->prepare($payment_query);
-            $payment_stmt->execute([$booking_id]);
-            
-            // Update booking status to Active (rental is now active)
-            $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
-                             WHERE BookingID = ? AND RenterID = ?";
-            $booking_stmt = $conn->prepare($booking_query);
-            $booking_stmt->execute([$booking_id, $user_id]);
-            
-            $message = "Payment confirmed successfully! Your rental is now active.";
-            $message_type = "success";
         } else {
             $message = "Cannot process payment. Booking must be approved by owner first.";
             $message_type = "warning";

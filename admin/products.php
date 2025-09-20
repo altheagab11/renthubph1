@@ -132,8 +132,8 @@
         'oldest' => 'p.Prod_CreatedAt ASC',
         'name_asc' => 'p.Prod_Name ASC',
         'name_desc' => 'p.Prod_Name DESC',
-        'price_low' => 'p.Prod_PricePerDay ASC',
-        'price_high' => 'p.Prod_PricePerDay DESC'
+        'price_low' => 'p.Prod_RentalPrice ASC',
+        'price_high' => 'p.Prod_RentalPrice DESC'
     ];
 
     $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'p.Prod_CreatedAt DESC';
@@ -796,7 +796,7 @@
                                                 
                                                 <div class="col-md-2">
                                                         <div class="price-tag">
-                                                            <?php echo formatCurrency($product['Prod_PricePerDay']); ?>
+                                                            <?php echo formatCurrency($product['Prod_RentalPrice']); ?>
                                                             <small class="d-block" style="font-size: 0.75rem; opacity: 0.9;">per day</small>
                                                         </div>
                                                     

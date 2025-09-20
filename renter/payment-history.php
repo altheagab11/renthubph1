@@ -98,7 +98,16 @@ if ($payments_table_exists) {
     $stats['total_payments'] = count($payments);
     $stats['total_amount'] = array_sum(array_column($payments, 'Pay_Amount'));
     $stats['successful_payments'] = count(array_filter($payments, function($p) { return $p['Pay_Status'] == 'Completed'; }));
-    $stats['pending_payments'] = count(array_filter($payments, function($p) { return $p['Pay_Status'] == 'Pending'; }));
+    // Count pending payments: payments with status 'Pending' plus confirmed bookings with no payment record
+    $pending_payments = count(array_filter($payments, function($p) { return $p['Pay_Status'] == 'Pending'; }));
+
+    // Add confirmed bookings with no payment record
+    $query = "SELECT COUNT(*) as total FROM bookings b LEFT JOIN payments p ON b.BookingID = p.BookingID WHERE b.RenterID = ? AND b.Book_Status = 'Confirmed' AND p.PaymentID IS NULL";
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(1, $user_id);
+    $stmt->execute();
+    $pending_no_payment = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    $stats['pending_payments'] = $pending_payments + $pending_no_payment;
 
 } else {
     // Show sample data from bookings

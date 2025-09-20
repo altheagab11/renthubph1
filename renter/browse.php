@@ -114,6 +114,22 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
         ]);
        
         if ($booking_result) {
+
+              // Conversation logic: create if it doesn't exist yet
+            // Use $user_id (renter), $product['OwnerID'] (owner), $_POST['product_id'] (product)
+            $check_conv_query = "SELECT ConversationID FROM conversations WHERE ((User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)) AND ProductID = ?";
+            $check_conv_stmt = $conn->prepare($check_conv_query);
+            $check_conv_stmt->execute([
+                $user_id, $product['OwnerID'],
+                $product['OwnerID'], $user_id,
+                $_POST['product_id']
+            ]);
+            if (!$check_conv_stmt->fetch()) {
+                // No conversation exists, create it
+                $create_conv_stmt = $conn->prepare("INSERT INTO conversations (User1ID, User2ID, ProductID) VALUES (?, ?, ?)");
+                $create_conv_stmt->execute([$user_id, $product['OwnerID'], $_POST['product_id']]);
+            }
+
             echo json_encode(['success' => true, 'message' => 'Booking request sent successfully! Waiting for owner approval.']);
         } else {
             throw new Exception("Failed to create booking");
