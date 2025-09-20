@@ -12,13 +12,13 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
-// Function to format booking notes JSON into readable format
+// Function to format booking notes JSON into readable format and return payment method
 function formatBookingNotes($notes_json) {
-    if (empty($notes_json)) return '';
-    
+    if (empty($notes_json)) return ['html' => '', 'payment_method' => ''];
+
     $notes = json_decode($notes_json, true);
-    if (!$notes) return $notes_json; // Return original if not valid JSON
-    
+    if (!$notes) return ['html' => $notes_json, 'payment_method' => ''];
+
     $formatted = '<div class="booking-details">';
     
     // Contact Information
@@ -46,9 +46,10 @@ function formatBookingNotes($notes_json) {
     }
     
     // Payment Method
-    if (isset($notes['payment_method'])) {
+    $payment_method = isset($notes['payment_method']) ? $notes['payment_method'] : '';
+    if ($payment_method) {
         $formatted .= '<div class="mb-2"><strong>Payment Method:</strong><br>';
-        $formatted .= '<small>' . htmlspecialchars($notes['payment_method']) . '</small>';
+        $formatted .= '<small>' . htmlspecialchars($payment_method) . '</small>';
         if (isset($notes['payment_account_name']) && !empty($notes['payment_account_name'])) {
             $formatted .= '<br><small>Account Name: ' . htmlspecialchars($notes['payment_account_name']) . '</small>';
         }
@@ -65,7 +66,7 @@ function formatBookingNotes($notes_json) {
     }
     
     $formatted .= '</div>';
-    return $formatted;
+    return ['html' => $formatted, 'payment_method' => $payment_method];
 }
 
 // Handle booking actions
@@ -278,6 +279,20 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             color: #fff !important;
             opacity: 0.65 !important;
             pointer-events: none !important;
+        }
+
+        /* QR code styling */
+        .qr-code-container {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .qr-code-container img {
+            max-width: 200px;
+            width: 100%;
+            height: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
         }
 
         /* Ensure sidebar doesn't interfere with modal */
@@ -783,7 +798,8 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 </div>
             <?php else: ?>
                 <?php foreach($bookings as $booking): ?>
-                <div class="booking-card card">
+                <?php $booking_notes = formatBookingNotes($booking['Book_Notes']); ?>
+                <div class="booking-card card" data-payment-method="<?php echo htmlspecialchars($booking_notes['payment_method']); ?>">
                     <div class="booking-status">
                         <?php if($booking['PaymentID']): ?>
                         <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
@@ -840,7 +856,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     </div>
                                     <?php if($booking['Book_Notes']): ?>
                                         <div class="mb-1 small fw-semibold">Booking Details:</div>
-                                        <div class="mb-0 small"><?php echo formatBookingNotes($booking['Book_Notes']); ?></div>
+                                        <div class="mb-0 small"><?php echo $booking_notes['html']; ?></div>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -897,7 +913,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     <?php if($booking['Book_Status'] == 'Confirmed'): ?>
                                         <!-- Payment options for confirmed bookings -->
                                         <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
-                                        <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>); return false;">
+                                        <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
                                             <i class="fas fa-credit-card me-1"></i>Confirm Payment
                                         </button>
                                         <div class="text-warning small mt-2">
@@ -945,13 +961,35 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                             </div>
                             <form id="paymentCompletionForm" method="POST">
                                 <div class="modal-body">
-                                    <div class="mb-3">
-                                        <label for="payment_account_name_complete" class="form-label">Account Holder Name</label>
-                                        <input type="text" class="form-control" id="payment_account_name_complete" name="payment_account_name_complete" required placeholder="Your name as it appears on your account" />
+                                    <div id="gcash-payment" style="display: none;">
+                                        <div class="qr-code-container">
+                                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PAYMENT-1234567890&color=0A4FA3&bgcolor=FFFFFF" alt="GCash QR Code" />
+                                        </div>
+                                        <p class="text-center">Scan this QR code using the GCash app to complete your payment.</p>
                                     </div>
-                                    <div class="mb-3">
-                                        <label for="payment_account_number_complete" class="form-label">Account Number/Mobile</label>
-                                        <input type="text" class="form-control" id="payment_account_number_complete" name="payment_account_number_complete" required placeholder="Account number or mobile number" />
+                                    <div id="maya-payment" style="display: none;">
+                                        <div class="qr-code-container">
+                                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PAYMENT-1234567890&color=0A4FA3&bgcolor=FFFFFF" alt="Maya QR Code" />
+                                        </div>
+                                        <p class="text-center">Scan this QR code using the Maya app to complete your payment.</p>
+                                    </div>
+                                    <div id="card-payment" style="display: none;">
+                                        <div class="mb-3">
+                                            <label for="cardholder_name" class="form-label">Cardholder Name</label>
+                                            <input type="text" class="form-control" id="cardholder_name" name="cardholder_name" placeholder="Your name as it appears on the card" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="card_number" class="form-label">Card Number</label>
+                                            <input type="text" class="form-control" id="card_number" name="card_number" placeholder="1234 5678 9012 3456" required pattern="\d{4} \d{4} \d{4} \d{4}" maxlength="19">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="expiry_date" class="form-label">Expiration Date</label>
+                                            <input type="text" class="form-control" id="expiry_date" name="expiry_date" placeholder="MM/YY" required pattern="(0[1-9]|1[0-2])\/\d{2}" maxlength="5">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="cvv" class="form-label">CVV</label>
+                                            <input type="text" class="form-control" id="cvv" name="cvv" placeholder="123" required pattern="\d{3,4}" maxlength="4">
+                                        </div>
                                     </div>
                                     <input type="hidden" id="payment_booking_id" name="booking_id" />
                                     <div class="alert alert-info mt-3">
@@ -1058,10 +1096,76 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             timelineObserver.observe(timeline);
         });
 
+        // Format card number, expiry, and CVV inputs as user types
+        document.addEventListener('DOMContentLoaded', function() {
+            var cardNumberInput = document.getElementById('card_number');
+            if (cardNumberInput) {
+                cardNumberInput.addEventListener('input', function(e) {
+                    let value = this.value.replace(/\D/g, '');
+                    if (value.length > 16) value = value.slice(0, 16);
+                    let formatted = value.replace(/(.{4})/g, '$1 ').trim();
+                    this.value = formatted;
+                });
+            }
+
+            var expiryInput = document.getElementById('expiry_date');
+            if (expiryInput) {
+                expiryInput.addEventListener('input', function(e) {
+                    let value = this.value.replace(/[^\d]/g, '');
+                    if (value.length > 4) value = value.slice(0, 4);
+                    if (value.length > 2) {
+                        value = value.slice(0,2) + '/' + value.slice(2);
+                    }
+                    this.value = value;
+                });
+            }
+
+            var cvvInput = document.getElementById('cvv');
+            if (cvvInput) {
+                cvvInput.addEventListener('input', function(e) {
+                    let value = this.value.replace(/\D/g, '');
+                    if (value.length > 4) value = value.slice(0, 4);
+                    this.value = value;
+                });
+            }
+        });
+
         // Payment modal handling
-        function showPaymentModal(bookingId) {
+        function showPaymentModal(bookingId, paymentMethod) {
             // Set the booking ID in the hidden input
             document.getElementById('payment_booking_id').value = bookingId;
+
+            // Get modal elements
+            const gcashPayment = document.getElementById('gcash-payment');
+            const mayaPayment = document.getElementById('maya-payment');
+            const cardPayment = document.getElementById('card-payment');
+            const submitButton = document.querySelector('#paymentCompletionModal .btn-success');
+
+            // Reset visibility and input requirements
+            gcashPayment.style.display = 'none';
+            mayaPayment.style.display = 'none';
+            cardPayment.style.display = 'none';
+            document.getElementById('cardholder_name').required = false;
+            document.getElementById('card_number').required = false;
+            document.getElementById('expiry_date').required = false;
+            document.getElementById('cvv').required = false;
+
+            // Show appropriate content based on payment method
+            if (paymentMethod.toLowerCase() === 'gcash') {
+                gcashPayment.style.display = 'block';
+                submitButton.disabled = false;
+            } else if (paymentMethod.toLowerCase() === 'maya') {
+                mayaPayment.style.display = 'block';
+                submitButton.disabled = false;
+            } else {
+                cardPayment.style.display = 'block';
+                document.getElementById('cardholder_name').required = true;
+                document.getElementById('card_number').required = true;
+                document.getElementById('expiry_date').required = true;
+                document.getElementById('cvv').required = true;
+                submitButton.disabled = true;
+            }
+
             // Initialize and show the modal
             var modalElement = document.getElementById('paymentCompletionModal');
             var modal = new bootstrap.Modal(modalElement, {
@@ -1070,6 +1174,19 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             });
             modal.show();
         }
+
+        // Enable/disable submit button based on input validation for card payments
+        document.getElementById('paymentCompletionForm').addEventListener('input', function() {
+            const cardPayment = document.getElementById('card-payment');
+            const submitButton = document.querySelector('#paymentCompletionModal .btn-success');
+            if (cardPayment.style.display === 'block') {
+                const cardholderName = document.getElementById('cardholder_name').value.trim();
+                const cardNumber = document.getElementById('card_number').value.trim();
+                const expiryDate = document.getElementById('expiry_date').value.trim();
+                const cvv = document.getElementById('cvv').value.trim();
+                submitButton.disabled = !(cardholderName && cardNumber && expiryDate && cvv);
+            }
+        });
 
         // Handle payment form submission
         document.getElementById('paymentCompletionForm').addEventListener('submit', function(e) {
