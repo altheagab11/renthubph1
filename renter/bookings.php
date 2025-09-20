@@ -246,6 +246,45 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
+        /* Ensure modal appears above backdrop and other elements */
+        .modal {
+            z-index: 1055 !important; /* Higher than default backdrop z-index (1050) */
+        }
+
+        /* Customize backdrop to appear below modal */
+        .modal-backdrop {
+            z-index: 1050 !important; /* Default Bootstrap backdrop z-index */
+            background-color: #000 !important;
+            opacity: 0.5 !important;
+        }
+
+        /* Ensure modal dialog is fully interactive */
+        .modal-dialog {
+            z-index: 1060 !important; /* Higher than modal and backdrop */
+        }
+
+        /* Ensure modal submit button is green and clickable */
+        #paymentCompletionModal .modal-footer .btn-success {
+            background-color: #28a745 !important;
+            border-color: #28a745 !important;
+            color: #fff !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+
+        #paymentCompletionModal .modal-footer .btn-success:disabled {
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+            color: #fff !important;
+            opacity: 0.65 !important;
+            pointer-events: none !important;
+        }
+
+        /* Ensure sidebar doesn't interfere with modal */
+        .sidebar {
+            z-index: 1000 !important; /* Lower than modal */
+        }
+
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -294,8 +333,6 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             overflow: hidden;
             margin-bottom: 1.5rem;
         }
-        
-    /* .stat-card:hover removed: no movement or shadow change on hover */
         
         .stat-card.total { background: var(--primary-gradient); color: white; }
         .stat-card.active { background: var(--warning-gradient); color: white; }
@@ -747,13 +784,13 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             <?php else: ?>
                 <?php foreach($bookings as $booking): ?>
                 <div class="booking-card card">
-                        <div class="booking-status">
-                            <?php if($booking['PaymentID']): ?>
-                            <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
-                                Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
-                            </span>
-                            <?php endif; ?>
-                        </div>
+                    <div class="booking-status">
+                        <?php if($booking['PaymentID']): ?>
+                        <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
+                            Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
+                        </span>
+                        <?php endif; ?>
+                    </div>
                     
                     <div class="card-body p-4">
                         <div class="row">
@@ -830,78 +867,106 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     <?php echo $duration; ?> day<?php echo $duration > 1 ? 's' : ''; ?>
                                 </div>
                                 <div class="booking-timeline">
-                                        <div class="timeline-item">
-                                            <small class="text-muted">Booked:</small><br>
-                                            <small><?php echo date('M j, Y', strtotime($booking['Book_CreatedAt'])); ?></small>
-                                        </div>
-                                        <?php if($booking['Book_UpdatedAt'] != $booking['Book_CreatedAt']): ?>
-                                        <div class="timeline-item">
-                                            <small class="text-muted">Updated:</small><br>
-                                            <small><?php echo date('M j, Y', strtotime($booking['Book_UpdatedAt'])); ?></small>
-                                        </div>
-                                        <?php endif; ?>
+                                    <div class="timeline-item">
+                                        <small class="text-muted">Booked:</small><br>
+                                        <small><?php echo date('M j, Y', strtotime($booking['Book_CreatedAt'])); ?></small>
                                     </div>
+                                    <?php if($booking['Book_UpdatedAt'] != $booking['Book_CreatedAt']): ?>
+                                    <div class="timeline-item">
+                                        <small class="text-muted">Updated:</small><br>
+                                        <small><?php echo date('M j, Y', strtotime($booking['Book_UpdatedAt'])); ?></small>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <div class="d-flex flex-column gap-2 mt-3">
+                                    <?php if($booking['Book_Status'] == 'Pending'): ?>
+                                        <!-- Cancel Booking Button (for pending bookings) -->
+                                        <form method="POST" style="display: inline;">
+                                            <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
+                                            <button type="submit" name="cancel_booking" class="btn action-btn cancel btn-sm" 
+                                                    onclick="return confirm('Are you sure you want to cancel this booking?')">
+                                                <i class="fas fa-times me-1"></i>Cancel
+                                            </button>
+                                        </form>
+                                        <div class="text-info small mt-2">
+                                            <i class="fas fa-clock me-1"></i>Waiting for owner approval
+                                        </div>
+                                    <?php endif; ?>
                                     
-                                    <div class="d-flex flex-column gap-2 mt-3">
-                                        <?php if($booking['Book_Status'] == 'Pending'): ?>
-                                            <!-- Cancel Booking Button (for pending bookings) -->
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
-                                                <button type="submit" name="cancel_booking" class="btn action-btn cancel btn-sm" 
-                                                        onclick="return confirm('Are you sure you want to cancel this booking?')">
-                                                    <i class="fas fa-times me-1"></i>Cancel
-                                                </button>
-                                            </form>
-                                            <div class="text-info small mt-2">
-                                                <i class="fas fa-clock me-1"></i>Waiting for owner approval
-                                            </div>
+                                    <?php if($booking['Book_Status'] == 'Confirmed'): ?>
+                                        <!-- Payment options for confirmed bookings -->
+                                        <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
+                                        <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>); return false;">
+                                            <i class="fas fa-credit-card me-1"></i>Confirm Payment
+                                        </button>
+                                        <div class="text-warning small mt-2">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Please make payment to activate rental
+                                        </div>
+                                        <?php elseif($booking['Pay_Status'] == 'Completed'): ?>
+                                        <div class="text-success small">
+                                            <i class="fas fa-check-circle me-1"></i>Payment Confirmed
+                                        </div>
                                         <?php endif; ?>
-                                        
-                                        <?php if($booking['Book_Status'] == 'Confirmed'): ?>
-                                            <!-- Payment options for confirmed bookings -->
-                                            <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
-                                                <button type="submit" name="confirm_payment" class="btn btn-success btn-sm" 
-                                                        onclick="return confirm('Confirm that you have made the payment?')">
-                                                    <i class="fas fa-credit-card me-1"></i>Confirm Payment
-                                                </button>
-                                            </form>
-                                            <div class="text-warning small mt-2">
-                                                <i class="fas fa-exclamation-triangle me-1"></i>Please make payment to activate rental
-                                            </div>
-                                            <?php elseif($booking['Pay_Status'] == 'Completed'): ?>
-                                            <div class="text-success small">
-                                                <i class="fas fa-check-circle me-1"></i>Payment Confirmed
-                                            </div>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-                                        
-                                        <?php if($booking['Owner_Phone']): ?>
-                                            <a href="tel:<?php echo htmlspecialchars($booking['Owner_Phone']); ?>" 
-                                               class="btn action-btn contact btn-sm">
-                                                <i class="fas fa-phone me-1"></i>Contact
-                                            </a>
-                                        <?php endif; ?>
-                                        
-                                        <?php if($booking['Book_Status'] == 'Completed' && $booking['has_review'] == 0): ?>
-                                            <a href="add-review.php?booking=<?php echo $booking['BookingID']; ?>" 
-                                               class="btn action-btn review btn-sm">
-                                                <i class="fas fa-star me-1"></i>Review
-                                            </a>
-                                        <?php endif; ?>
-                                        
-                                        <a href="../product.php?id=<?php echo $booking['ProductID']; ?>" 
-                                           class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
-                                            <i class="fas fa-eye me-1"></i>View Product
+                                    <?php endif; ?>
+                                    
+                                    <?php if($booking['Owner_Phone']): ?>
+                                        <a href="tel:<?php echo htmlspecialchars($booking['Owner_Phone']); ?>" 
+                                           class="btn action-btn contact btn-sm">
+                                            <i class="fas fa-phone me-1"></i>Contact
                                         </a>
-                                    </div>
+                                    <?php endif; ?>
+                                    
+                                    <?php if($booking['Book_Status'] == 'Completed' && $booking['has_review'] == 0): ?>
+                                        <a href="add-review.php?booking=<?php echo $booking['BookingID']; ?>" 
+                                           class="btn action-btn review btn-sm">
+                                            <i class="fas fa-star me-1"></i>Review
+                                        </a>
+                                    <?php endif; ?>
+                                    
+                                    <a href="../product.php?id=<?php echo $booking['ProductID']; ?>" 
+                                       class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
+                                        <i class="fas fa-eye me-1"></i>View Product
+                                    </a>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <?php endforeach; ?>
+                
+                <!-- Payment Completion Modal -->
+                <div class="modal fade" id="paymentCompletionModal" tabindex="-1" aria-labelledby="paymentCompletionModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="paymentCompletionModalLabel">Complete Payment</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <form id="paymentCompletionForm" method="POST">
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label for="payment_account_name_complete" class="form-label">Account Holder Name</label>
+                                        <input type="text" class="form-control" id="payment_account_name_complete" name="payment_account_name_complete" required placeholder="Your name as it appears on your account" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="payment_account_number_complete" class="form-label">Account Number/Mobile</label>
+                                        <input type="text" class="form-control" id="payment_account_number_complete" name="payment_account_number_complete" required placeholder="Account number or mobile number" />
+                                    </div>
+                                    <input type="hidden" id="payment_booking_id" name="booking_id" />
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        <strong>Note:</strong> These details are for payment simulation only and will not be saved.
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-success" name="confirm_payment">Submit Payment</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -991,6 +1056,53 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 item.style.transition = 'all 0.4s ease';
             });
             timelineObserver.observe(timeline);
+        });
+
+        // Payment modal handling
+        function showPaymentModal(bookingId) {
+            // Set the booking ID in the hidden input
+            document.getElementById('payment_booking_id').value = bookingId;
+            // Initialize and show the modal
+            var modalElement = document.getElementById('paymentCompletionModal');
+            var modal = new bootstrap.Modal(modalElement, {
+                backdrop: 'static', // Prevent closing by clicking outside
+                keyboard: true // Allow closing with ESC key
+            });
+            modal.show();
+        }
+
+        // Handle payment form submission
+        document.getElementById('paymentCompletionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var bookingId = document.getElementById('payment_booking_id').value;
+            var form = this;
+            var formData = new FormData(form);
+            formData.append('confirm_payment', '1');
+            formData.append('booking_id', bookingId);
+
+            // Add loading state to submit button
+            var submitButton = form.querySelector('.btn-success');
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+            submitButton.disabled = true;
+
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(() => {
+                var modal = bootstrap.Modal.getInstance(document.getElementById('paymentCompletionModal'));
+                modal.hide();
+                setTimeout(function() {
+                    location.reload();
+                }, 300);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                submitButton.innerHTML = 'Submit Payment';
+                submitButton.disabled = false;
+                alert('An error occurred while processing the payment. Please try again.');
+            });
         });
     </script>
 </body>

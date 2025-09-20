@@ -353,7 +353,6 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
-    <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
             --sidebar-width: 250px;
@@ -1469,27 +1468,16 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                         </div>
                         
-                        <div id="digital_payment_details" class="row mb-4" style="display: none;">
-                            <div class="col-12 mb-2">
-                                <div class="alert alert-info">
-                                    <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Payment Instructions:</strong> After booking confirmation, you'll receive payment details from the owner.
+                        <!-- Payment account fields removed: will only show at payment completion step -->
+                        
+                        <div class="row mb-2">
+                            <div class="col-12">
+                                <div class="alert alert-info p-2 mb-2" style="font-size: 0.95em;">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <strong>Note:</strong> You can only complete your payment after the owner accepts your booking request.
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <label for="payment_account_name" class="form-label">Account Holder Name</label>
-                                <input type="text" class="form-control" id="payment_account_name" name="payment_account_name" 
-                                       placeholder="Your name as it appears on your account">
-                                <div class="form-text">Name registered to your payment account</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="payment_account_number" class="form-label">Account Number/Mobile</label>
-                                <input type="text" class="form-control" id="payment_account_number" name="payment_account_number" 
-                                       placeholder="Account number or mobile number">
-                                <div class="form-text">Your payment account identifier</div>
-                            </div>
                         </div>
-                        
                         <div class="row mb-4">
                             <div class="col-12">
                                 <div class="form-check">

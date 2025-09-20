@@ -12,33 +12,6 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
-// Handle message actions
-if ($_POST) {
-    if (isset($_POST['send_message'])) {
-        $conversation_id = $_POST['conversation_id'];
-        $message_content = trim($_POST['message_content']);
-        
-        if (!empty($message_content)) {
-            $query = "INSERT INTO messages (ConversationID, SenderID, Msg_Content) VALUES (?, ?, ?)";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $conversation_id);
-            $stmt->bindParam(2, $user_id);
-            $stmt->bindParam(3, $message_content);
-            
-            if ($stmt->execute()) {
-                // Update conversation last message
-                $query = "UPDATE conversations SET Conv_LastMessageAt = NOW() WHERE ConversationID = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $conversation_id);
-                $stmt->execute();
-                
-                $message = "Message sent successfully!";
-                $message_type = "success";
-            }
-        }
-    }
-}
-
 // Get filter parameters
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? $_GET['search'] : '';
@@ -130,7 +103,7 @@ if ($conversation_id) {
         $stmt->execute();
         $conversation_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Mark messages as read
+        // Mark messages as read (this will be handled by the API)
         $query = "UPDATE messages SET Msg_IsRead = 1 WHERE ConversationID = ? AND SenderID != ?";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $conversation_id);
@@ -156,21 +129,6 @@ $stmt->bindParam(2, $user_id);
 $stmt->bindParam(3, $user_id);
 $stmt->execute();
 $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-
-// Response rate (messages sent vs received)
-$query = "SELECT 
-          (SELECT COUNT(*) FROM messages m JOIN conversations c ON m.ConversationID = c.ConversationID WHERE m.SenderID = ? AND (c.User1ID = ? OR c.User2ID = ?)) as sent,
-          (SELECT COUNT(*) FROM messages m JOIN conversations c ON m.ConversationID = c.ConversationID WHERE m.SenderID != ? AND (c.User1ID = ? OR c.User2ID = ?)) as received";
-$stmt = $conn->prepare($query);
-$stmt->bindParam(1, $user_id);
-$stmt->bindParam(2, $user_id);
-$stmt->bindParam(3, $user_id);
-$stmt->bindParam(4, $user_id);
-$stmt->bindParam(5, $user_id);
-$stmt->bindParam(6, $user_id);
-$stmt->execute();
-$response_data = $stmt->fetch(PDO::FETCH_ASSOC);
-$stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data['sent'] / $response_data['received']) * 100, 1) : 0;
 ?>
 
 <!DOCTYPE html>
@@ -178,6 +136,7 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="user-id" content="<?php echo $user_id; ?>">
     <title>Messages - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -261,10 +220,15 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
             cursor: pointer;
             transition: all 0.3s ease;
             position: relative;
+            text-decoration: none;
+            color: inherit;
+            display: block;
         }
         
         .conversation-item:hover {
             background: #e9ecef;
+            text-decoration: none;
+            color: inherit;
         }
         
         .conversation-item.active {
@@ -337,6 +301,16 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
             font-size: 0.7rem;
             opacity: 0.7;
             margin-top: 0.25rem;
+        }
+        
+        .message-status {
+            font-size: 0.6rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 2px;
+        }
+        
+        .message-bubble.received .message-status {
+            color: #6c757d;
         }
         
         .chat-input {
@@ -435,6 +409,24 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
             padding: 1rem;
             margin-bottom: 1rem;
             border-left: 4px solid #11998e;
+        }
+        
+        .typing-indicator {
+            display: none;
+            padding: 0.5rem 1rem;
+            font-style: italic;
+            color: #6c757d;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .typing-indicator.show {
+            display: block;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
         }
         
         /* Mobile Responsiveness */
@@ -620,7 +612,7 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
 
             <!-- Statistics Cards -->
             <div class="row mb-4">
-                <div class="col-xl-4 col-md-6 mb-4">
+                <div class="col-xl-6 col-md-6 mb-4">
                     <div class="card stat-card conversations">
                         <div class="card-body">
                             <div class="row align-items-center">
@@ -638,7 +630,7 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
                     </div>
                 </div>
 
-                <div class="col-xl-4 col-md-6 mb-4">
+                <div class="col-xl-6 col-md-6 mb-4">
                     <div class="card stat-card unread">
                         <div class="card-body">
                             <div class="row align-items-center">
@@ -650,24 +642,6 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-envelope fa-2x opacity-75"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-xl-4 col-md-6 mb-4">
-                    <div class="card stat-card response">
-                        <div class="card-body">
-                            <div class="row align-items-center">
-                                <div class="col">
-                                    <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
-                                        Response Rate
-                                    </div>
-                                    <div class="h4 mb-0 font-weight-bold"><?php echo $stats['response_rate']; ?>%</div>
-                                </div>
-                                <div class="col-auto">
-                                    <i class="fas fa-reply fa-2x opacity-75"></i>
                                 </div>
                             </div>
                         </div>
@@ -728,8 +702,8 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
                         </div>
                     <?php else: ?>
                         <?php foreach($conversations as $conv): ?>
-                        <div class="conversation-item <?php echo $conv['ConversationID'] == $conversation_id ? 'active' : ''; ?>" 
-                             onclick="selectConversation(<?php echo $conv['ConversationID']; ?>)">
+                        <a href="?conversation=<?php echo $conv['ConversationID']; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter != 'all' ? '&status=' . urlencode($status_filter) : ''; ?>"
+                           class="conversation-item <?php echo $conv['ConversationID'] == $conversation_id ? 'active' : ''; ?>">
                             
                             <?php if($conv['unread_count'] > 0): ?>
                                 <div class="unread-badge"><?php echo $conv['unread_count']; ?></div>
@@ -761,7 +735,7 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
                                     </small>
                                 </div>
                             </div>
-                        </div>
+                        </a>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
@@ -829,10 +803,20 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
                                     </div>
                                     <div class="message-time">
                                         <?php echo date('M j, Y g:i A', strtotime($msg['Msg_CreatedAt'])); ?>
+                                        <?php if($msg['SenderID'] == $user_id): ?>
+                                            <div class="message-status">
+                                                <i class="fas fa-check"></i> Sent
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                                 <?php endforeach; ?>
                             <?php endif; ?>
+                        </div>
+
+                        <!-- Typing Indicator -->
+                        <div class="typing-indicator" id="typingIndicator">
+                            <i class="fas fa-ellipsis-h"></i> Someone is typing...
                         </div>
 
                         <!-- Chat Input -->
@@ -871,40 +855,10 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
             document.querySelector('.sidebar').classList.toggle('show');
         });
 
-        // Select conversation
-        function selectConversation(conversationId) {
-            const urlParams = new URLSearchParams(window.location.search);
-            urlParams.set('conversation', conversationId);
-            
-            // Preserve other filters
-            const search = urlParams.get('search');
-            const status = urlParams.get('status');
-            
-            let newUrl = 'messages.php?conversation=' + conversationId;
-            if (search) newUrl += '&search=' + encodeURIComponent(search);
-            if (status) newUrl += '&status=' + encodeURIComponent(status);
-            
-            window.location.href = newUrl;
-        }
-
-        // Auto-scroll to bottom of chat messages
-        const chatMessages = document.getElementById('chatMessages');
-        if (chatMessages) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
         // Auto-expand textarea
         document.querySelector('textarea[name="message_content"]')?.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-        });
-
-        // Send message on Enter (but not Shift+Enter)
-        document.querySelector('textarea[name="message_content"]')?.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.closest('form').submit();
-            }
         });
 
         // Auto-hide alerts
@@ -918,17 +872,9 @@ $stats['response_rate'] = $response_data['received'] > 0 ? round(($response_data
                 }
             });
         }, 3000);
-
-        // Refresh page every 30 seconds to check for new messages
-        <?php if($conversation_id): ?>
-        setInterval(() => {
-            // Only refresh if user hasn't typed anything recently
-            const textarea = document.querySelector('textarea[name="message_content"]');
-            if (!textarea || textarea.value.trim() === '') {
-                location.reload();
-            }
-        }, 30000);
-        <?php endif; ?>
     </script>
+    
+    <!-- Real-time Messaging Script -->
+    <script src="../js/realtime-messaging.js"></script>
 </body>
 </html>

@@ -12,167 +12,71 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
-// Handle message actions
-if ($_POST) {
-    if (isset($_POST['send_message'])) {
-        $recipient_id = $_POST['recipient_id'];
-        $message_content = trim($_POST['message_content']);
-        $booking_id = isset($_POST['booking_id']) ? $_POST['booking_id'] : null;
-        
-        if (!empty($message_content)) {
-            try {
-                $query = "INSERT INTO messages (SenderID, ReceiverID, BookingID, Msg_Content, Msg_SentAt) VALUES (?, ?, ?, ?, NOW())";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $user_id);
-                $stmt->bindParam(2, $recipient_id);
-                $stmt->bindParam(3, $booking_id);
-                $stmt->bindParam(4, $message_content);
-                
-                if ($stmt->execute()) {
-                    $message = "Message sent successfully!";
-                    $message_type = "success";
-                } else {
-                    $message = "Failed to send message. Please try again.";
-                    $message_type = "danger";
-                }
-            } catch (PDOException $e) {
-                $message = "Message sent successfully! (Database setup pending)";
-                $message_type = "success";
-            }
-        } else {
-            $message = "Please enter a message.";
-            $message_type = "warning";
-        }
-    }
-    
-    if (isset($_POST['mark_read'])) {
-        $message_id = $_POST['message_id'];
-        
-        try {
-            $query = "UPDATE messages SET Msg_IsRead = 1, Msg_ReadAt = NOW() WHERE MessageID = ? AND ReceiverID = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $message_id);
-            $stmt->bindParam(2, $user_id);
-            $stmt->execute();
-        } catch (PDOException $e) {
-            // Ignore error if table doesn't exist
-        }
-    }
-}
-
-// Check if messages table exists
-$messages_table_exists = false;
-try {
-    $query = "SELECT 1 FROM messages LIMIT 1";
-    $stmt = $conn->prepare($query);
-    $stmt->execute();
-    $messages_table_exists = true;
-} catch (PDOException $e) {
-    $messages_table_exists = false;
-}
-
+// Fetch conversations for this user
 $conversations = [];
-$active_conversation = null;
-$stats = [
-    'total_messages' => 0,
-    'unread_messages' => 0,
-    'active_conversations' => 0,
-    'avg_response_time' => '< 1 hour'
-];
+$query = "SELECT c.*, 
+                 CASE WHEN c.User1ID = ? THEN u2.UserID ELSE u1.UserID END as other_user_id,
+                 CASE WHEN c.User1ID = ? THEN u2.User_Name ELSE u1.User_Name END as other_user_name,
+                 CASE WHEN c.User1ID = ? THEN u2.User_Phone ELSE u1.User_Phone END as other_user_phone,
+                 p.Prod_Name,
+                 (SELECT COUNT(*) FROM messages WHERE ConversationID = c.ConversationID AND SenderID != ? AND Msg_IsRead = 0) as unread_count,
+                 (SELECT Msg_Content FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message,
+                 (SELECT Msg_CreatedAt FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message_time
+          FROM conversations c
+          LEFT JOIN user_accounts u1 ON c.User1ID = u1.UserID
+          LEFT JOIN user_accounts u2 ON c.User2ID = u2.UserID
+          LEFT JOIN products p ON c.ProductID = p.ProductID
+          WHERE c.User1ID = ? OR c.User2ID = ?
+          ORDER BY c.Conv_LastMessageAt DESC, c.ConversationID DESC";
+$stmt = $conn->prepare($query);
+$stmt->execute([$user_id, $user_id, $user_id, $user_id, $user_id, $user_id]);
+$conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-if ($messages_table_exists) {
-    // Get conversations (grouped by the other party)
-    $query = "SELECT 
-                CASE 
-                    WHEN m.SenderID = ? THEN m.ReceiverID 
-                    ELSE m.SenderID 
-                END as other_user_id,
-                u.User_Name as other_user_name,
-                u.User_Phone as other_user_phone,
-                ua.UA_City, ua.UA_Province,
-                MAX(m.Msg_SentAt) as last_message_time,
-                COUNT(*) as message_count,
-                SUM(CASE WHEN m.ReceiverID = ? AND m.Msg_IsRead = 0 THEN 1 ELSE 0 END) as unread_count,
-                (SELECT Msg_Content FROM messages m2 
-                 WHERE (m2.SenderID = ? AND m2.ReceiverID = other_user_id) 
-                    OR (m2.ReceiverID = ? AND m2.SenderID = other_user_id)
-                 ORDER BY m2.Msg_SentAt DESC LIMIT 1) as last_message
-              FROM messages m
-              JOIN user_accounts u ON u.UserID = CASE 
-                    WHEN m.SenderID = ? THEN m.ReceiverID 
-                    ELSE m.SenderID 
-                END
-              LEFT JOIN user_addresses ua ON u.UserID = ua.UserID AND ua.UA_IsDefault = 1
-              WHERE m.SenderID = ? OR m.ReceiverID = ?
-              GROUP BY other_user_id, u.User_Name, u.User_Phone, ua.UA_City, ua.UA_Province
-              ORDER BY last_message_time DESC";
+// Get statistics
+$stats = [];
 
-    try {
-        $stmt = $conn->prepare($query);
-        $stmt->execute([$user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $user_id]);
-        $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        $conversations = [];
-    }
+// Total conversations
+$stats['total_conversations'] = count($conversations);
 
-    // Calculate statistics
-    $stats['active_conversations'] = count($conversations);
-    $stats['total_messages'] = array_sum(array_column($conversations, 'message_count'));
-    $stats['unread_messages'] = array_sum(array_column($conversations, 'unread_count'));
+// Unread messages count
+$query = "SELECT COUNT(DISTINCT c.ConversationID) as total 
+          FROM conversations c 
+          WHERE (c.User1ID = ? OR c.User2ID = ?) 
+          AND EXISTS (SELECT 1 FROM messages m WHERE m.ConversationID = c.ConversationID AND m.SenderID != ? AND m.Msg_IsRead = 0)";
+$stmt = $conn->prepare($query);
+$stmt->bindParam(1, $user_id);
+$stmt->bindParam(2, $user_id);
+$stmt->bindParam(3, $user_id);
+$stmt->execute();
+$stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-    // Get active conversation details if specified
-    $active_user_id = isset($_GET['user']) ? $_GET['user'] : null;
-    if ($active_user_id) {
-        $query = "SELECT m.*, u_sender.User_Name as sender_name, u_receiver.User_Name as receiver_name,
-                  b.BookingID, p.Prod_Name
-                  FROM messages m
-                  JOIN user_accounts u_sender ON m.SenderID = u_sender.UserID
-                  JOIN user_accounts u_receiver ON m.ReceiverID = u_receiver.UserID
-                  LEFT JOIN bookings b ON m.BookingID = b.BookingID
-                  LEFT JOIN products p ON b.ProductID = p.ProductID
-                  WHERE (m.SenderID = ? AND m.ReceiverID = ?) OR (m.SenderID = ? AND m.ReceiverID = ?)
-                  ORDER BY m.Msg_SentAt ASC";
+// Figure out which conversation is active
+$active_conversation_id = isset($_GET['conversation']) ? intval($_GET['conversation']) : (isset($conversations[0]['ConversationID']) ? $conversations[0]['ConversationID'] : null);
 
-        try {
-            $stmt = $conn->prepare($query);
-            $stmt->execute([$user_id, $active_user_id, $active_user_id, $user_id]);
-            $active_conversation = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Mark messages as read
-            $query = "UPDATE messages SET Msg_IsRead = 1, Msg_ReadAt = NOW() WHERE SenderID = ? AND ReceiverID = ? AND Msg_IsRead = 0";
-            $stmt = $conn->prepare($query);
-            $stmt->execute([$active_user_id, $user_id]);
-        } catch (PDOException $e) {
-            $active_conversation = [];
+// Fetch messages for active conversation
+$messages = [];
+$other_user_name = '';
+$product_name = '';
+if ($active_conversation_id) {
+    foreach ($conversations as $conv) {
+        if ($conv['ConversationID'] == $active_conversation_id) {
+            $other_user_name = $conv['other_user_name'];
+            $product_name = $conv['Prod_Name'];
+            break;
         }
     }
 
-} else {
-    // Show sample conversations based on bookings
-    $query = "SELECT DISTINCT p.OwnerID as other_user_id, u.User_Name as other_user_name, u.User_Phone as other_user_phone,
-              ua.UA_City, ua.UA_Province, MAX(b.Book_CreatedAt) as last_message_time,
-              COUNT(*) as message_count, 0 as unread_count,
-              'Sample message about rental inquiry...' as last_message
-              FROM bookings b
-              JOIN products p ON b.ProductID = p.ProductID
-              JOIN user_accounts u ON p.OwnerID = u.UserID
-              LEFT JOIN user_addresses ua ON u.UserID = ua.UserID AND ua.UA_IsDefault = 1
-              WHERE b.RenterID = ?
-              GROUP BY p.OwnerID, u.User_Name, u.User_Phone, ua.UA_City, ua.UA_Province
-              ORDER BY last_message_time DESC
-              LIMIT 5";
-
-    try {
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $user_id);
-        $stmt->execute();
-        $sample_conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        $conversations = $sample_conversations;
-        $stats['active_conversations'] = count($conversations);
-    } catch (PDOException $e) {
-        $conversations = [];
-    }
+    $stmt = $conn->prepare("SELECT m.*, u.User_Name as sender_name
+        FROM messages m
+        LEFT JOIN user_accounts u ON m.SenderID = u.UserID
+        WHERE m.ConversationID = ?
+        ORDER BY m.Msg_CreatedAt ASC");
+    $stmt->execute([$active_conversation_id]);
+    $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Mark messages as read (this will be handled by the API)
+    $stmt = $conn->prepare("UPDATE messages SET Msg_IsRead = 1 WHERE ConversationID = ? AND SenderID != ?");
+    $stmt->execute([$active_conversation_id, $user_id]);
 }
 ?>
 
@@ -181,11 +85,11 @@ if ($messages_table_exists) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="user-id" content="<?php echo $user_id; ?>">
     <title>Messages - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
-    <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -236,7 +140,10 @@ if ($messages_table_exists) {
             margin-bottom: 1.5rem;
         }
         
-    /* .stat-card:hover removed: no movement or shadow change on hover */
+        .stat-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
         
         .stat-card.total { background: var(--info-gradient); color: white; }
         .stat-card.unread { background: var(--accent-gradient); color: white; }
@@ -267,6 +174,7 @@ if ($messages_table_exists) {
             text-decoration: none;
             color: inherit;
             display: block;
+            position: relative;
         }
         
         .conversation-item:hover {
@@ -281,6 +189,26 @@ if ($messages_table_exists) {
             color: white;
         }
         
+        .conversation-item.active .text-muted {
+            color: rgba(255,255,255,0.7) !important;
+        }
+        
+        .conversation-item .unread-badge {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        
         .conversation-avatar {
             width: 50px;
             height: 50px;
@@ -293,19 +221,6 @@ if ($messages_table_exists) {
             font-size: 1.2rem;
             margin-right: 1rem;
             flex-shrink: 0;
-        }
-        
-        .unread-badge {
-            background: var(--accent-gradient);
-            color: white;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-            font-weight: 600;
         }
         
         .chat-area {
@@ -372,6 +287,16 @@ if ($messages_table_exists) {
             text-align: right;
         }
         
+        .message-status {
+            font-size: 0.6rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 2px;
+        }
+        
+        .message-bubble.received .message-status {
+            color: #6c757d;
+        }
+        
         .chat-input {
             background: white;
             border-top: 1px solid #e9ecef;
@@ -432,15 +357,6 @@ if ($messages_table_exists) {
             margin-bottom: 1rem;
         }
         
-        .demo-notice {
-            background: var(--warning-gradient);
-            color: white;
-            border-radius: 20px;
-            padding: 2rem;
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
         .online-indicator {
             width: 12px;
             height: 12px;
@@ -457,42 +373,17 @@ if ($messages_table_exists) {
             padding: 0.5rem 1rem;
             font-style: italic;
             color: #6c757d;
+            animation: pulse 1.5s ease-in-out infinite;
         }
         
         .typing-indicator.show {
             display: block;
         }
         
-        .booking-reference {
-            background: rgba(79, 172, 254, 0.1);
-            border-radius: 10px;
-            padding: 0.5rem;
-            margin-bottom: 0.5rem;
-            font-size: 0.8rem;
-            color: #4facfe;
-        }
-        
-        .quick-replies {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-        
-        .quick-reply {
-            background: var(--info-gradient);
-            color: white;
-            border: none;
-            border-radius: 15px;
-            padding: 0.25rem 0.75rem;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .quick-reply:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
         }
         
         /* Mobile Responsiveness */
@@ -538,67 +429,22 @@ if ($messages_table_exists) {
             </h4>
             <p class="text-white-50 small mb-0">Renter Dashboard</p>
         </div>
-        
         <div class="px-3 pb-3">
             <ul class="nav flex-column">
-                <li class="nav-item">
-                    <a class="nav-link" href="dashboard.php">
-                        <i class="fas fa-tachometer-alt me-2"></i> Dashboard
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="browse.php">
-                        <i class="fas fa-search me-2"></i> Browse Items
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="bookings.php">
-                        <i class="fas fa-calendar-check me-2"></i> My Bookings
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="favorites.php">
-                        <i class="fas fa-heart me-2"></i> Favorites
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link active" href="messages.php">
-                        <i class="fas fa-comments me-2"></i> Messages
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="reviews.php">
-                        <i class="fas fa-star me-2"></i> Reviews
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="payment-history.php">
-                        <i class="fas fa-money-bill me-2"></i> Payment History
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="profile.php">
-                        <i class="fas fa-user me-2"></i> Profile Settings
-                    </a>
-                </li>
+                <li class="nav-item"><a class="nav-link" href="dashboard.php"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="browse.php"><i class="fas fa-search me-2"></i> Browse Items</a></li>
+                <li class="nav-item"><a class="nav-link" href="bookings.php"><i class="fas fa-calendar-check me-2"></i> My Bookings</a></li>
+                <li class="nav-item"><a class="nav-link" href="favorites.php"><i class="fas fa-heart me-2"></i> Favorites</a></li>
+                <li class="nav-item"><a class="nav-link active" href="messages.php"><i class="fas fa-comments me-2"></i> Messages</a></li>
+                <li class="nav-item"><a class="nav-link" href="reviews.php"><i class="fas fa-star me-2"></i> Reviews</a></li>
+                <li class="nav-item"><a class="nav-link" href="payment-history.php"><i class="fas fa-money-bill me-2"></i> Payment History</a></li>
+                <li class="nav-item"><a class="nav-link" href="profile.php"><i class="fas fa-user me-2"></i> Profile Settings</a></li>
                 <?php if($_SESSION['user_role'] == 3): ?>
-                <li class="nav-item mt-3">
-                    <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-store me-2"></i> Switch to Owner
-                    </a>
-                </li>
+                    <li class="nav-item mt-3"><a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);"><i class="fas fa-store me-2"></i> Switch to Owner</a></li>
                 <?php else: ?>
-                <li class="nav-item mt-3">
-                    <a class="nav-link" href="upgrade.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-crown me-2"></i> Become an Owner
-                    </a>
-                </li>
+                    <li class="nav-item mt-3"><a class="nav-link" href="upgrade.php" style="background-color: rgba(255,255,255,0.1);"><i class="fas fa-crown me-2"></i> Become an Owner</a></li>
                 <?php endif; ?>
-                <li class="nav-item">
-                    <a class="nav-link" href="../logout.php">
-                        <i class="fas fa-sign-out-alt me-2"></i> Logout
-                    </a>
-                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </div>
     </nav>
@@ -622,7 +468,7 @@ if ($messages_table_exists) {
                         <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
-                                <?php echo $stats['unread_messages']; ?>
+                                <?php echo $stats['unread_conversations']; ?>
                             </span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
@@ -658,27 +504,17 @@ if ($messages_table_exists) {
             </div>
             <?php endif; ?>
 
-            <?php if(!$messages_table_exists): ?>
-            <!-- Demo Notice -->
-            <div class="demo-notice">
-                <h5 class="mb-3">
-                    <i class="fas fa-database me-2"></i>Messages System Preview
-                </h5>
-                <p class="mb-0">The messaging system is being set up. Below are sample conversations based on your bookings. Once the database is configured, you'll be able to send and receive real messages!</p>
-            </div>
-            <?php endif; ?>
-
             <!-- Statistics Cards -->
             <div class="row mb-4">
-                <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card total">
+                <div class="col-xl-6 col-md-6 mb-4">
+                    <div class="card stat-card conversations">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
                                     <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
-                                        Total Messages
+                                        Total Conversations
                                     </div>
-                                    <div class="h4 mb-0 font-weight-bold"><?php echo number_format($stats['total_messages']); ?></div>
+                                    <div class="h4 mb-0 font-weight-bold"><?php echo number_format($stats['total_conversations']); ?></div>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-comments fa-2x opacity-75"></i>
@@ -688,7 +524,7 @@ if ($messages_table_exists) {
                     </div>
                 </div>
 
-                <div class="col-xl-3 col-md-6 mb-4">
+                <div class="col-xl-6 col-md-6 mb-4">
                     <div class="card stat-card unread">
                         <div class="card-body">
                             <div class="row align-items-center">
@@ -696,7 +532,7 @@ if ($messages_table_exists) {
                                     <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
                                         Unread Messages
                                     </div>
-                                    <div class="h4 mb-0 font-weight-bold"><?php echo number_format($stats['unread_messages']); ?></div>
+                                    <div class="h4 mb-0 font-weight-bold"><?php echo number_format($stats['unread_conversations']); ?></div>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-envelope fa-2x opacity-75"></i>
@@ -705,45 +541,8 @@ if ($messages_table_exists) {
                         </div>
                     </div>
                 </div>
-
-                <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card conversations">
-                        <div class="card-body">
-                            <div class="row align-items-center">
-                                <div class="col">
-                                    <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
-                                        Conversations
-                                    </div>
-                                    <div class="h4 mb-0 font-weight-bold"><?php echo number_format($stats['active_conversations']); ?></div>
-                                </div>
-                                <div class="col-auto">
-                                    <i class="fas fa-users fa-2x opacity-75"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card response">
-                        <div class="card-body">
-                            <div class="row align-items-center">
-                                <div class="col">
-                                    <div class="text-xs font-weight-bold text-uppercase mb-1 opacity-75">
-                                        Avg Response
-                                    </div>
-                                    <div class="h4 mb-0 font-weight-bold" style="font-size: 1.5rem;"><?php echo $stats['avg_response_time']; ?></div>
-                                </div>
-                                <div class="col-auto">
-                                    <i class="fas fa-clock fa-2x opacity-75"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Messages Container -->
             <div class="messages-container">
                 <div class="row g-0">
                     <!-- Conversations Sidebar -->
@@ -751,9 +550,11 @@ if ($messages_table_exists) {
                         <div class="p-3 border-bottom">
                             <h6 class="mb-0 text-primary">
                                 <i class="fas fa-users me-2"></i>Conversations (<?php echo count($conversations); ?>)
+                                <?php if($stats['unread_conversations'] > 0): ?>
+                                    <span class="badge bg-danger ms-2"><?php echo $stats['unread_conversations']; ?></span>
+                                <?php endif; ?>
                             </h6>
                         </div>
-                        
                         <?php if(empty($conversations)): ?>
                             <div class="text-center p-4">
                                 <i class="fas fa-comments fa-3x text-muted mb-3"></i>
@@ -761,163 +562,131 @@ if ($messages_table_exists) {
                                 <p class="text-muted small">Start by making a booking or contacting an owner!</p>
                             </div>
                         <?php else: ?>
-                            <?php foreach($conversations as $conversation): ?>
-                            <a href="?user=<?php echo $conversation['other_user_id']; ?>" 
-                               class="conversation-item <?php echo (isset($_GET['user']) && $_GET['user'] == $conversation['other_user_id']) ? 'active' : ''; ?>">
+                            <?php foreach($conversations as $conv): ?>
+                            <a href="?conversation=<?php echo $conv['ConversationID']; ?>" 
+                               class="conversation-item <?php echo ($active_conversation_id == $conv['ConversationID']) ? 'active' : ''; ?>">
+                                <?php if($conv['unread_count'] > 0): ?>
+                                    <div class="unread-badge"><?php echo $conv['unread_count']; ?></div>
+                                <?php endif; ?>
+                                
                                 <div class="d-flex align-items-center">
                                     <div class="conversation-avatar position-relative">
-                                        <?php echo strtoupper(substr($conversation['other_user_name'], 0, 1)); ?>
+                                        <?php echo strtoupper(substr($conv['other_user_name'], 0, 1)); ?>
                                         <div class="online-indicator"></div>
                                     </div>
                                     <div class="flex-grow-1">
                                         <div class="d-flex justify-content-between align-items-start mb-1">
-                                            <h6 class="mb-0"><?php echo htmlspecialchars($conversation['other_user_name']); ?></h6>
-                                            <div class="d-flex align-items-center">
-                                                <?php if($conversation['unread_count'] > 0): ?>
-                                                    <div class="unread-badge me-2">
-                                                        <?php echo $conversation['unread_count']; ?>
-                                                    </div>
-                                                <?php endif; ?>
-                                                <small class="text-muted">
-                                                    <?php echo date('M j', strtotime($conversation['last_message_time'])); ?>
-                                                </small>
-                                            </div>
-                                        </div>
-                                        <p class="mb-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                            <?php echo htmlspecialchars($conversation['last_message']); ?>
-                                        </p>
-                                        <?php if($conversation['UA_City']): ?>
+                                            <h6 class="mb-0"><?php echo htmlspecialchars($conv['other_user_name']); ?></h6>
                                             <small class="text-muted">
-                                                <i class="fas fa-map-marker-alt me-1"></i>
-                                                <?php echo htmlspecialchars($conversation['UA_City'] . ', ' . $conversation['UA_Province']); ?>
+                                                <?php 
+                                                echo $conv['last_message_time'] 
+                                                    ? date('M j', strtotime($conv['last_message_time'])) 
+                                                    : '';
+                                                ?>
                                             </small>
-                                        <?php endif; ?>
+                                        </div>
+                                        <p class="mb-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                            <?php echo htmlspecialchars($conv['Prod_Name']); ?>
+                                        </p>
+                                        <p class="mb-0 small text-muted" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            <?php echo htmlspecialchars(substr($conv['last_message'] ?? 'No messages yet', 0, 40)); ?>
+                                            <?php echo strlen($conv['last_message'] ?? '') > 40 ? '...' : ''; ?>
+                                        </p>
                                     </div>
                                 </div>
                             </a>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
-                    
+
                     <!-- Chat Area -->
                     <div class="col-md-8">
-                        <?php if($active_conversation): ?>
-                            <div class="chat-area">
-                                <!-- Chat Header -->
-                                <div class="chat-header">
-                                    <div class="d-flex align-items-center">
-                                        <button class="btn btn-outline-light btn-sm d-md-none me-3" onclick="toggleConversations()">
-                                            <i class="fas fa-arrow-left"></i>
+                        <?php if($active_conversation_id): ?>
+                        <div class="chat-area">
+                            <!-- Chat Header -->
+                            <div class="chat-header">
+                                <div class="d-flex align-items-center">
+                                    <div class="conversation-avatar me-3 position-relative">
+                                        <?php echo strtoupper(substr($other_user_name, 0, 1)); ?>
+                                        <div class="online-indicator"></div>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-0"><?php echo htmlspecialchars($other_user_name); ?></h6>
+                                        <small class="opacity-75">
+                                            <i class="fas fa-calendar text-warning me-1"></i>
+                                            <?php echo htmlspecialchars($product_name); ?>
+                                        </small>
+                                    </div>
+                                    <div class="ms-auto">
+                                        <button class="btn btn-outline-light btn-sm me-2">
+                                            <i class="fas fa-phone"></i>
                                         </button>
-                                        <div class="conversation-avatar me-3">
-                                            <?php 
-                                            $other_user = $active_conversation[0];
-                                            $other_name = $other_user['SenderID'] == $user_id ? $other_user['receiver_name'] : $other_user['sender_name'];
-                                            echo strtoupper(substr($other_name, 0, 1)); 
-                                            ?>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-0"><?php echo htmlspecialchars($other_name); ?></h6>
-                                            <small class="opacity-75">
-                                                <i class="fas fa-circle text-success me-1" style="font-size: 0.5rem;"></i>
-                                                Online
-                                            </small>
-                                        </div>
-                                        <div class="ms-auto">
-                                            <button class="btn btn-outline-light btn-sm">
-                                                <i class="fas fa-phone"></i>
-                                            </button>
-                                            <button class="btn btn-outline-light btn-sm">
-                                                <i class="fas fa-info-circle"></i>
-                                            </button>
-                                        </div>
+                                        <button class="btn btn-outline-light btn-sm">
+                                            <i class="fas fa-info-circle"></i>
+                                        </button>
                                     </div>
                                 </div>
-                                
-                                <!-- Chat Messages -->
-                                <div class="chat-messages" id="chatMessages">
-                                    <?php foreach($active_conversation as $msg): ?>
+                            </div>
+                            
+                            <!-- Chat Messages -->
+                            <div class="chat-messages" id="chatMessages">
+                                <?php if(empty($messages)): ?>
+                                    <div class="text-center text-muted py-5">
+                                        <i class="fas fa-comment-dots fa-3x mb-3"></i>
+                                        <h6>No messages yet</h6>
+                                        <p>Say hello to start the conversation!</p>
+                                    </div>
+                                <?php else: ?>
+                                    <?php foreach($messages as $msg): ?>
                                     <div class="message-bubble <?php echo $msg['SenderID'] == $user_id ? 'sent' : 'received'; ?>">
-                                        <?php if($msg['BookingID']): ?>
-                                            <div class="booking-reference">
-                                                <i class="fas fa-calendar me-1"></i>
-                                                Booking: <?php echo htmlspecialchars($msg['Prod_Name']); ?>
-                                            </div>
-                                        <?php endif; ?>
                                         <div class="message-content">
                                             <?php echo nl2br(htmlspecialchars($msg['Msg_Content'])); ?>
                                         </div>
                                         <div class="message-time">
-                                            <?php echo date('M j, g:i A', strtotime($msg['Msg_SentAt'])); ?>
+                                            <?php echo date('M j, g:i A', strtotime($msg['Msg_CreatedAt'])); ?>
                                             <?php if($msg['SenderID'] == $user_id): ?>
-                                                <i class="fas fa-check text-success ms-1"></i>
+                                                <div class="message-status">
+                                                    <i class="fas fa-check"></i> Sent
+                                                </div>
                                             <?php endif; ?>
                                         </div>
                                     </div>
                                     <?php endforeach; ?>
-                                    
-                                    <div class="typing-indicator" id="typingIndicator">
-                                        <i class="fas fa-circle"></i>
-                                        <i class="fas fa-circle"></i>
-                                        <i class="fas fa-circle"></i>
-                                        <?php echo htmlspecialchars($other_name); ?> is typing...
-                                    </div>
-                                </div>
-                                
-                                <!-- Chat Input -->
-                                <div class="chat-input">
-                                    <?php if($messages_table_exists): ?>
-                                    <div class="quick-replies">
-                                        <button class="quick-reply" onclick="insertQuickReply('Hello! Is this item still available?')">
-                                            Quick availability check
-                                        </button>
-                                        <button class="quick-reply" onclick="insertQuickReply('Thank you for the smooth transaction!')">
-                                            Thank you message
-                                        </button>
-                                        <button class="quick-reply" onclick="insertQuickReply('When can I pick this up?')">
-                                            Pickup inquiry
-                                        </button>
-                                    </div>
-                                    
-                                    <form method="POST" class="d-flex gap-2">
-                                        <input type="hidden" name="recipient_id" value="<?php echo htmlspecialchars($_GET['user']); ?>">
-                                        <textarea class="form-control" name="message_content" id="messageInput" 
-                                                rows="2" placeholder="Type your message..." required></textarea>
-                                        <button type="submit" name="send_message" class="btn-send">
-                                            <i class="fas fa-paper-plane"></i>
-                                        </button>
-                                    </form>
-                                    <?php else: ?>
-                                    <div class="d-flex gap-2">
-                                        <textarea class="form-control" rows="2" placeholder="Demo mode - messaging will be available soon!" disabled></textarea>
-                                        <button class="btn-send" disabled>
-                                            <i class="fas fa-database"></i>
-                                        </button>
-                                    </div>
-                                    <?php endif; ?>
-                                </div>
+                                <?php endif; ?>
                             </div>
+                            
+                            <!-- Typing Indicator -->
+                            <div class="typing-indicator" id="typingIndicator">
+                                <i class="fas fa-ellipsis-h"></i> <?php echo htmlspecialchars($other_user_name); ?> is typing...
+                            </div>
+                            
+                            <!-- Chat Input -->
+                            <div class="chat-input">
+                                <form method="POST" class="d-flex gap-2">
+                                    <input type="hidden" name="conversation_id" value="<?php echo $active_conversation_id; ?>">
+                                    <textarea class="form-control" name="message_content" id="messageInput"
+                                            rows="2" placeholder="Type your message..." required></textarea>
+                                    <button type="submit" name="send_message" class="btn-send">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                         <?php else: ?>
-                            <div class="chat-area d-flex align-items-center justify-content-center">
-                                <div class="text-center">
-                                    <i class="fas fa-comments fa-4x text-muted mb-3"></i>
-                                    <h5 class="text-muted">Select a conversation</h5>
-                                    <p class="text-muted">Choose a conversation from the sidebar to start messaging</p>
-                                    <?php if(!$messages_table_exists): ?>
-                                        <p class="text-warning small">
-                                            <i class="fas fa-database me-1"></i>
-                                            Messaging system in development
-                                        </p>
-                                    <?php endif; ?>
-                                </div>
+                        <div class="chat-area d-flex align-items-center justify-content-center">
+                            <div class="text-center">
+                                <i class="fas fa-comments fa-4x text-muted mb-3"></i>
+                                <h5 class="text-muted">No conversation selected</h5>
+                                <p class="text-muted">Choose a conversation from the sidebar to start messaging</p>
                             </div>
+                        </div>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Sidebar toggle for mobile
@@ -925,45 +694,10 @@ if ($messages_table_exists) {
             document.querySelector('.sidebar').classList.toggle('show');
         });
 
-        // Toggle conversations sidebar on mobile
-        function toggleConversations() {
-            document.querySelector('.conversations-sidebar').classList.toggle('show');
-        }
-
-        // Auto-scroll to bottom of chat
-        function scrollToBottom() {
-            const chatMessages = document.getElementById('chatMessages');
-            if (chatMessages) {
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
-        }
-
-        // Insert quick reply
-        function insertQuickReply(text) {
-            const messageInput = document.getElementById('messageInput');
-            if (messageInput) {
-                messageInput.value = text;
-                messageInput.focus();
-            }
-        }
-
-        // Auto-resize textarea
-        document.getElementById('messageInput')?.addEventListener('input', function() {
+        // Auto-expand textarea
+        document.querySelector('textarea[name="message_content"]')?.addEventListener('input', function() {
             this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
-        });
-
-        // Simulate typing indicator
-        let typingTimer;
-        document.getElementById('messageInput')?.addEventListener('input', function() {
-            const typingIndicator = document.getElementById('typingIndicator');
-            if (typingIndicator) {
-                clearTimeout(typingTimer);
-                // Simulate showing typing indicator for other user
-                typingTimer = setTimeout(() => {
-                    // Hide typing indicator after 3 seconds
-                }, 3000);
-            }
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
         // Auto-hide alerts
@@ -976,70 +710,10 @@ if ($messages_table_exists) {
                     setTimeout(() => alert.remove(), 500);
                 }
             });
-        }, 5000);
-
-        // Scroll to bottom on page load
-        window.addEventListener('load', function() {
-            scrollToBottom();
-        });
-
-        // Animate message bubbles
-        window.addEventListener('load', function() {
-            const messageBubbles = document.querySelectorAll('.message-bubble');
-            messageBubbles.forEach((bubble, index) => {
-                bubble.style.opacity = '0';
-                bubble.style.transform = 'translateY(20px)';
-                bubble.style.transition = 'all 0.4s ease';
-                
-                setTimeout(() => {
-                    bubble.style.opacity = '1';
-                    bubble.style.transform = 'translateY(0)';
-                }, index * 50);
-            });
-        });
-
-        // Handle form submission
-        document.querySelector('form')?.addEventListener('submit', function(e) {
-            const messageInput = document.getElementById('messageInput');
-            if (messageInput && messageInput.value.trim() === '') {
-                e.preventDefault();
-                alert('Please enter a message.');
-                messageInput.focus();
-                return false;
-            }
-        });
-
-        // Simulate real-time updates (demo)
-        setInterval(() => {
-            // Simulate new message indicator
-            const badge = document.querySelector('.position-absolute.badge');
-            if (badge && Math.random() > 0.95) {
-                const currentCount = parseInt(badge.textContent) || 0;
-                badge.textContent = currentCount + 1;
-                badge.style.animation = 'pulse 0.5s ease-in-out';
-            }
-        }, 5000);
-
-        // Handle enter key in textarea
-        document.getElementById('messageInput')?.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.closest('form').submit();
-            }
-        });
-
-        // Mark messages as read when viewing conversation
-        if (window.location.search.includes('user=')) {
-            // Simulate marking messages as read
-            setTimeout(() => {
-                const unreadBadges = document.querySelectorAll('.unread-badge');
-                unreadBadges.forEach(badge => {
-                    if (badge.closest('.conversation-item.active')) {
-                        badge.style.display = 'none';
-                    }
-                });
-            }, 1000);
-        }
+        }, 3000);
     </script>
+    
+    <!-- Real-time Messaging Script -->
+    <script src="../js/realtime-messaging.js"></script>
 </body>
 </html>
