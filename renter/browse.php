@@ -159,7 +159,14 @@ if (!$show_all) {
     $where_conditions[] = "(p.Prod_Status != 'Inactive' OR p.Prod_Status IS NULL)";
 }
 // Exclude user's own products (owners shouldn't see their own items when browsing to rent)
+// Exclude user's own products (owners shouldn't see their own items when browsing to rent)
 $where_conditions[] = "p.OwnerID != ?";
+$params[] = $user_id;
+// Exclude products that the user has already booked and booking is not completed or cancelled
+$where_conditions[] = "p.ProductID NOT IN (
+    SELECT b.ProductID FROM bookings b
+    WHERE b.RenterID = ? AND b.Book_Status NOT IN ('Completed', 'Cancelled')
+)";
 $params[] = $user_id;
 if (!empty($category_filter)) {
     $where_conditions[] = "p.CategoryID = ?";

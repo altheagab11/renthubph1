@@ -1,5 +1,13 @@
 <?php
 // api/messages.php - API endpoint for real-time message updates
+// Suppress error display to prevent HTML output in JSON responses
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
+// Buffer output to allow headers after potential early output
+ob_start();
+
 header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../config/database.php';
@@ -41,6 +49,9 @@ switch ($action) {
         echo json_encode(['error' => 'Invalid action']);
 }
 
+// Flush buffer at end
+ob_end_flush();
+
 function checkNewMessages($conn, $user_id, $conversation_id) {
     $last_check = $_GET['last_check'] ?? '1970-01-01 00:00:00';
     
@@ -48,7 +59,9 @@ function checkNewMessages($conn, $user_id, $conversation_id) {
     $new_messages = [];
     if ($conversation_id) {
         $stmt = $conn->prepare("
-            SELECT m.*, u.User_Name as sender_name
+            SELECT m.MessageID AS Msg_ID, m.ConversationID, m.SenderID, 
+                   m.Msg_Content, m.Msg_CreatedAt, m.Msg_IsRead,
+                   u.User_Name as Sender_Name
             FROM messages m
             JOIN user_accounts u ON m.SenderID = u.UserID
             WHERE m.ConversationID = ? AND m.Msg_CreatedAt > ?
@@ -110,7 +123,9 @@ function getMessages($conn, $conversation_id, $user_id) {
     }
     
     $stmt = $conn->prepare("
-        SELECT m.*, u.User_Name as sender_name
+        SELECT m.MessageID AS Msg_ID, m.ConversationID, m.SenderID, 
+               m.Msg_Content, m.Msg_CreatedAt, m.Msg_IsRead,
+               u.User_Name as Sender_Name
         FROM messages m
         JOIN user_accounts u ON m.SenderID = u.UserID
         WHERE m.ConversationID = ?
@@ -159,6 +174,21 @@ function sendMessage($conn, $user_id) {
     ");
     
     if ($stmt->execute([$conversation_id, $user_id, $message_content])) {
+        // Get the newly inserted message ID
+        $msg_id = $conn->lastInsertId();
+        
+        // Fetch the full new message (including sender_name)
+        $fetch_stmt = $conn->prepare("
+            SELECT m.MessageID AS Msg_ID, m.ConversationID, m.SenderID, 
+                   m.Msg_Content, m.Msg_CreatedAt, m.Msg_IsRead,
+                   u.User_Name as Sender_Name
+            FROM messages m
+            JOIN user_accounts u ON m.SenderID = u.UserID
+            WHERE m.MessageID = ?
+        ");
+        $fetch_stmt->execute([$msg_id]);
+        $new_message = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
+        
         // Update conversation last message time
         $conn->prepare("
             UPDATE conversations 
@@ -166,7 +196,7 @@ function sendMessage($conn, $user_id) {
             WHERE ConversationID = ?
         ")->execute([$conversation_id]);
         
-        echo json_encode(['success' => true, 'timestamp' => date('Y-m-d H:i:s')]);
+        echo json_encode(['success' => true, 'new_message' => $new_message]);
     } else {
         http_response_code(500);
         echo json_encode(['error' => 'Failed to send message']);
@@ -188,4 +218,3 @@ function markMessagesRead($conn, $conversation_id, $user_id) {
     
     echo json_encode(['success' => true]);
 }
-?>

@@ -73,31 +73,66 @@ function formatBookingNotes($notes_json) {
 if ($_POST) {
     if (isset($_POST['cancel_booking'])) {
         $booking_id = $_POST['booking_id'];
+        $reason = $_POST['cancel_reason'] ?? '';
         
-        // Check if booking can be cancelled (only pending bookings)
-        $query = "SELECT Book_Status FROM bookings WHERE BookingID = ? AND RenterID = ?";
+        // Check if booking can be cancelled
+        $query = "SELECT b.Book_Status, b.Book_Notes, p.Pay_Status 
+                  FROM bookings b 
+                  LEFT JOIN payments p ON b.BookingID = p.BookingID 
+                  WHERE b.BookingID = ? AND b.RenterID = ?";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $booking_id);
         $stmt->bindParam(2, $user_id);
         $stmt->execute();
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($booking && $booking['Book_Status'] == 'Pending') {
-            $query = "UPDATE bookings SET Book_Status = 'Cancelled', Book_UpdatedAt = NOW() WHERE BookingID = ? AND RenterID = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $booking_id);
-            $stmt->bindParam(2, $user_id);
-            
-            if ($stmt->execute()) {
-                $message = "Booking cancelled successfully!";
-                $message_type = "success";
+        if ($booking) {
+            $notes = json_decode($booking['Book_Notes'], true);
+            $payment_method = $notes['payment_method'] ?? 'Cash';
+            $payment_status = $booking['Pay_Status'] ?? null;
+
+            if ($booking['Book_Status'] == 'Pending') {
+                $query = "UPDATE bookings SET Book_Status = 'Cancelled', Book_UpdatedAt = NOW(), Book_CancelReason = ? WHERE BookingID = ? AND RenterID = ?";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $reason);
+                $stmt->bindParam(2, $booking_id);
+                $stmt->bindParam(3, $user_id);
+                
+                if ($stmt->execute()) {
+                    $message = "Booking cancelled successfully!";
+                    $message_type = "success";
+                } else {
+                    $message = "Failed to cancel booking. Please try again.";
+                    $message_type = "danger";
+                }
+            } elseif ($booking['Book_Status'] == 'Confirmed') {
+                $query = "UPDATE bookings SET Book_Status = 'Cancelled', Book_UpdatedAt = NOW(), Book_CancelReason = ? WHERE BookingID = ? AND RenterID = ?";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $reason);
+                $stmt->bindParam(2, $booking_id);
+                $stmt->bindParam(3, $user_id);
+                
+                if ($stmt->execute()) {
+                    if ($payment_status == 'Completed' && in_array(strtolower($payment_method), ['gcash', 'maya', 'bank transfer'])) {
+                        $refund_amount = $notes['total_amount'] ?? 0;
+                        $refund_option = $_POST['refund_option'] ?? 'full';
+                        $refund_amount = ($refund_option == 'partial') ? ($refund_amount * 0.5) : $refund_amount;
+                        $query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_CreatedAt) VALUES (?, ?, 'Pending', NOW())";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(1, $booking_id);
+                        $stmt->bindParam(2, $refund_amount);
+                        $stmt->execute();
+                    }
+                    $message = "Booking cancelled successfully! " . ($payment_status == 'Completed' && in_array(strtolower($payment_method), ['gcash', 'maya', 'bank transfer']) ? "Refund processing initiated." : "");
+                    $message_type = "success";
+                } else {
+                    $message = "Failed to cancel booking.";
+                    $message_type = "danger";
+                }
             } else {
-                $message = "Failed to cancel booking. Please try again.";
-                $message_type = "danger";
+                $message = "This booking cannot be cancelled.";
+                $message_type = "warning";
             }
-        } else {
-            $message = "This booking cannot be cancelled.";
-            $message_type = "warning";
         }
     }
     
@@ -904,19 +939,21 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                 <div class="d-flex flex-column gap-2 mt-3">
                                     <?php if($booking['Book_Status'] == 'Pending'): ?>
                                         <!-- Cancel Booking Button (for pending bookings) -->
-                                        <form method="POST" style="display: inline;">
-                                            <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
-                                            <button type="submit" name="cancel_booking" class="btn action-btn cancel btn-sm" 
-                                                    onclick="return confirm('Are you sure you want to cancel this booking?')">
-                                                <i class="fas fa-times me-1"></i>Cancel
-                                            </button>
-                                        </form>
+                                        <button type="button" class="btn action-btn cancel btn-sm" 
+                                                data-bs-toggle="modal" data-bs-target="#cancelModal-<?php echo $booking['BookingID']; ?>">
+                                            <i class="fas fa-times me-1"></i>Cancel
+                                        </button>
                                         <div class="text-info small mt-2">
                                             <i class="fas fa-clock me-1"></i>Waiting for owner approval
                                         </div>
                                     <?php endif; ?>
                                     
                                     <?php if($booking['Book_Status'] == 'Confirmed'): ?>
+                                        <!-- Cancel Booking Button (for confirmed bookings) -->
+                                        <button type="button" class="btn action-btn cancel btn-sm" 
+                                                data-bs-toggle="modal" data-bs-target="#cancelModal-<?php echo $booking['BookingID']; ?>">
+                                            <i class="fas fa-times me-1"></i>Cancel
+                                        </button>
                                         <!-- Payment options for confirmed bookings -->
                                         <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
                                         <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
@@ -952,6 +989,41 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     </a>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cancellation Modal for each booking -->
+                <div class="modal fade" id="cancelModal-<?php echo $booking['BookingID']; ?>" tabindex="-1" aria-labelledby="cancelModalLabel-<?php echo $booking['BookingID']; ?>" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="cancelModalLabel-<?php echo $booking['BookingID']; ?>">Cancel Booking</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <form method="POST">
+                                <div class="modal-body">
+                                    <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
+                                    <div class="mb-3">
+                                        <label for="cancel_reason_<?php echo $booking['BookingID']; ?>" class="form-label">Reason for Cancellation</label>
+                                        <textarea class="form-control" id="cancel_reason_<?php echo $booking['BookingID']; ?>" name="cancel_reason" rows="3" required></textarea>
+                                    </div>
+                                    <?php if ($booking['Book_Status'] == 'Confirmed' && $booking['Pay_Status'] == 'Completed' && in_array(strtolower($booking_notes['payment_method']), ['gcash', 'maya', 'bank transfer'])): ?>
+                                        <div class="mb-3">
+                                            <label class="form-label">Refund Option</label>
+                                            <select class="form-select" name="refund_option" required>
+                                                <option value="full">Full Refund</option>
+                                                <option value="partial">Partial Refund (50%)</option>
+                                                <option value="none">No Refund</option>
+                                            </select>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="submit" name="cancel_booking" class="btn btn-danger">Confirm Cancellation</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
