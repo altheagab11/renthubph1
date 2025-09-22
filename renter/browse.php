@@ -222,59 +222,60 @@ $count_stmt = $conn->prepare($count_query);
 $count_stmt->execute($params);
 $total_products = $count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
 $total_pages = ceil($total_products / $items_per_page);
-// Get products with main image and availability status
+// Get products with main image and availability status, and owner status
 $query = "SELECT p.*,
-                 COALESCE(c.Cat_Name, 'Uncategorized') as Cat_Name,
-                 COALESCE(u.User_Name, 'Unknown Owner') as Owner_Name,
-                 main_img.PI_ImagePath as MainImage,
-                 (SELECT COUNT(*) FROM favorites f WHERE f.ProductID = p.ProductID AND f.UserID = ?) as is_favorited,
-                 (SELECT COUNT(*) FROM product_images pi WHERE pi.ProductID = p.ProductID) as total_images,
-                 pa.PA_DateFrom,
-                 pa.PA_DateTo,
-                 pa.PA_IsAvailable,
-                 pa.PA_Reason,
-                 pa.PA_CreatedAt as AvailabilityLastUpdated,
-                 CASE
-                    WHEN pa.PA_IsAvailable = 1 AND CURDATE() BETWEEN pa.PA_DateFrom AND pa.PA_DateTo THEN 'Available'
-                    WHEN pa.PA_IsAvailable = 0 AND CURDATE() BETWEEN pa.PA_DateFrom AND pa.PA_DateTo THEN 'Unavailable'
-                    WHEN pa.PA_DateTo < CURDATE() THEN 'Expired'
-                    WHEN pa.PA_DateFrom > CURDATE() THEN 'Scheduled'
-                    ELSE 'No Schedule'
-                 END as AvailabilityStatus,
-                 pl.LocationID,
-                 pl.PL_PickupAvailable,
-                 pl.PL_DeliveryAvailable,
-                 pl.PL_DeliveryRadius,
-                 pl.PL_DeliveryFee,
-                 ua.UA_Street,
-                 ua.UA_Barangay,
-                 ua.UA_City,
-                 ua.UA_Province,
-                 ua.UA_ZipCode,
-                 ua.UA_Latitude,
-                 ua.UA_Longitude,
-                 ua.UA_AddressType,
-                 CONCAT_WS(', ',
-                    NULLIF(ua.UA_Street, ''),
-                    NULLIF(ua.UA_Barangay, ''),
-                    NULLIF(ua.UA_City, ''),
-                    NULLIF(ua.UA_Province, '')
-                 ) as FullAddress
-          FROM products p
-          LEFT JOIN categories c ON p.CategoryID = c.CategoryID
-          LEFT JOIN user_accounts u ON p.OwnerID = u.UserID
-          LEFT JOIN product_images main_img ON p.ProductID = main_img.ProductID AND main_img.PI_IsMain = 1
-          LEFT JOIN product_availability pa ON p.ProductID = pa.ProductID
-                AND pa.PA_CreatedAt = (
-                    SELECT MAX(pa2.PA_CreatedAt)
-                    FROM product_availability pa2
-                    WHERE pa2.ProductID = p.ProductID
-                )
-          LEFT JOIN product_locations pl ON p.ProductID = pl.ProductID
-          LEFT JOIN user_addresses ua ON pl.AddressID = ua.AddressID
-          $where_clause
-          ORDER BY $order_by
-          LIMIT $items_per_page OFFSET $offset";
+                      COALESCE(c.Cat_Name, 'Uncategorized') as Cat_Name,
+                      COALESCE(u.User_Name, 'Unknown Owner') as Owner_Name,
+                      u.User_Status as Owner_Status,
+                      main_img.PI_ImagePath as MainImage,
+                      (SELECT COUNT(*) FROM favorites f WHERE f.ProductID = p.ProductID AND f.UserID = ?) as is_favorited,
+                      (SELECT COUNT(*) FROM product_images pi WHERE pi.ProductID = p.ProductID) as total_images,
+                      pa.PA_DateFrom,
+                      pa.PA_DateTo,
+                      pa.PA_IsAvailable,
+                      pa.PA_Reason,
+                      pa.PA_CreatedAt as AvailabilityLastUpdated,
+                      CASE
+                          WHEN pa.PA_IsAvailable = 1 AND CURDATE() BETWEEN pa.PA_DateFrom AND pa.PA_DateTo THEN 'Available'
+                          WHEN pa.PA_IsAvailable = 0 AND CURDATE() BETWEEN pa.PA_DateFrom AND pa.PA_DateTo THEN 'Unavailable'
+                          WHEN pa.PA_DateTo < CURDATE() THEN 'Expired'
+                          WHEN pa.PA_DateFrom > CURDATE() THEN 'Scheduled'
+                          ELSE 'No Schedule'
+                      END as AvailabilityStatus,
+                      pl.LocationID,
+                      pl.PL_PickupAvailable,
+                      pl.PL_DeliveryAvailable,
+                      pl.PL_DeliveryRadius,
+                      pl.PL_DeliveryFee,
+                      ua.UA_Street,
+                      ua.UA_Barangay,
+                      ua.UA_City,
+                      ua.UA_Province,
+                      ua.UA_ZipCode,
+                      ua.UA_Latitude,
+                      ua.UA_Longitude,
+                      ua.UA_AddressType,
+                      CONCAT_WS(', ',
+                          NULLIF(ua.UA_Street, ''),
+                          NULLIF(ua.UA_Barangay, ''),
+                          NULLIF(ua.UA_City, ''),
+                          NULLIF(ua.UA_Province, '')
+                      ) as FullAddress
+             FROM products p
+             LEFT JOIN categories c ON p.CategoryID = c.CategoryID
+             LEFT JOIN user_accounts u ON p.OwnerID = u.UserID
+             LEFT JOIN product_images main_img ON p.ProductID = main_img.ProductID AND main_img.PI_IsMain = 1
+             LEFT JOIN product_availability pa ON p.ProductID = pa.ProductID
+                     AND pa.PA_CreatedAt = (
+                          SELECT MAX(pa2.PA_CreatedAt)
+                          FROM product_availability pa2
+                          WHERE pa2.ProductID = p.ProductID
+                     )
+             LEFT JOIN product_locations pl ON p.ProductID = pl.ProductID
+             LEFT JOIN user_addresses ua ON pl.AddressID = ua.AddressID
+             $where_clause
+             ORDER BY $order_by
+             LIMIT $items_per_page OFFSET $offset";
 $stmt = $conn->prepare($query);
 $stmt->execute(array_merge([$user_id], $params));
 $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1206,7 +1207,19 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                     </div>
                                     <?php endif; ?>
                                     <?php if($show_all): ?>
-                                    <div><i class="fas fa-info-circle"></i> Status: <?php echo htmlspecialchars($product['Prod_Status'] ?? 'N/A'); ?></div>
+                                    <div>
+                                        <i class="fas fa-info-circle"></i> Status: 
+                                        <?php
+                                            $final_status = $product['Prod_Status'];
+                                            if (isset($product['Owner_Status']) && strtolower($product['Owner_Status']) === 'inactive') {
+                                                $final_status = 'Inactive';
+                                            }
+                                            $badge_class = strtolower($final_status) === 'active' ? 'success' : 'secondary';
+                                        ?>
+                                        <span class="badge bg-<?php echo $badge_class; ?>">
+                                            <?php echo htmlspecialchars($final_status); ?>
+                                        </span>
+                                    </div>
                                     <div><i class="fas fa-check-circle"></i> Availability: <?php echo htmlspecialchars($product['Prod_Availability'] ?? 'N/A'); ?></div>
                                     <?php endif; ?>
                                 </div>
@@ -1383,8 +1396,17 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <label for="pickup_delivery" class="form-label">Pickup/Delivery <span class="text-danger">*</span></label>
                                 <select class="form-select" id="pickup_delivery" name="pickup_delivery" required>
                                     <option value="">Choose option...</option>
-                                    <option value="pickup">I'll pickup the item</option>
-                                    <option value="delivery">Request delivery</option>
+                                    <?php if (!empty($product) && isset($location)) { ?>
+                                        <?php if (!empty($location['PL_PickupAvailable'])) { ?>
+                                            <option value="pickup">I'll pickup the item</option>
+                                        <?php } ?>
+                                        <?php if (!empty($location['PL_DeliveryAvailable'])) { ?>
+                                            <option value="delivery">Request delivery</option>
+                                        <?php } ?>
+                                    <?php } else { ?>
+                                        <option value="pickup">I'll pickup the item</option>
+                                        <option value="delivery">Request delivery</option>
+                                    <?php } ?>
                                 </select>
                             </div>
                         </div>

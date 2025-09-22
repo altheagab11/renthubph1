@@ -12,6 +12,33 @@ $message = '';
 $message_type = '';
 
 // Handle user actions (unchanged from original)
+// Handle verify user
+if (isset($_POST['verify_user']) && !empty($_POST['user_id'])) {
+    $user_id = intval($_POST['user_id']);
+    $stmt = $conn->prepare("UPDATE user_accounts SET User_IsVerified = 1 WHERE UserID = ?");
+    $stmt->execute([$user_id]);
+    // Optionally add a success message or redirect
+}
+// Handle unverify user
+if (isset($_POST['unverify_user']) && !empty($_POST['user_id'])) {
+    $user_id = intval($_POST['user_id']);
+    $stmt = $conn->prepare("UPDATE user_accounts SET User_IsVerified = 0 WHERE UserID = ?");
+    $stmt->execute([$user_id]);
+    // Optionally add a success message or redirect
+}
+// Handle activate/deactivate user
+if (isset($_POST['update_user_status']) && !empty($_POST['user_id']) && isset($_POST['new_status'])) {
+    $user_id = intval($_POST['user_id']);
+    $new_status = $_POST['new_status'] === 'Active' ? 'Active' : 'Inactive';
+    $stmt = $conn->prepare("UPDATE user_accounts SET User_Status = ? WHERE UserID = ?");
+    $stmt->execute([$new_status, $user_id]);
+    // If user is deactivated, set all their products to inactive
+    if ($new_status === 'Inactive') {
+        $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
+        $prod_stmt->execute([$user_id]);
+    }
+    // Optionally add a success message or redirect
+}
 if ($_POST) {
     if (isset($_POST['update_user_status'])) {
         $user_id = $_POST['user_id'];
@@ -23,6 +50,11 @@ if ($_POST) {
         $stmt->bindParam(2, $user_id);
         
         if ($stmt->execute()) {
+            // If user is deactivated, set all their products to inactive
+            if ($new_status === 'Inactive') {
+                $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
+                $prod_stmt->execute([$user_id]);
+            }
             $message = "User status updated successfully!";
             $message_type = "success";
         } else {
@@ -190,9 +222,15 @@ function getRoleName($role_id) {
         }
         .stat-card {
             border-left: 4px solid;
-            transition: all 0.3s ease;
             border-radius: 0.5rem;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-height: 94px;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
         }
         .stat-card.users { border-left-color: #007bff; }
         .stat-card.active { border-left-color: #28a745; }
@@ -387,9 +425,9 @@ function getRoleName($role_id) {
             <?php endif; ?>
 
             <!-- Statistics Cards -->
-            <div class="row mb-4">
-                <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card users">
+            <div class="row mb-4 g-3 d-flex">
+                <div class="col-xl-3 col-md-6 d-flex">
+                    <div class="card stat-card users w-100">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
@@ -406,8 +444,8 @@ function getRoleName($role_id) {
                     </div>
                 </div>
 
-                <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card active">
+                <div class="col-xl-3 col-md-6 d-flex">
+                    <div class="card stat-card active w-100">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
@@ -424,8 +462,8 @@ function getRoleName($role_id) {
                     </div>
                 </div>
 
-                <div class="col-xl-9 col-md-6 mb-4">
-                    <div class="card stat-card new">
+                <div class="col-xl-3 col-md-6 d-flex">
+                    <div class="card stat-card new w-100">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
@@ -442,8 +480,8 @@ function getRoleName($role_id) {
                     </div>
                 </div>
 
-                <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card roles">
+                <div class="col-xl-3 col-md-6 d-flex">
+                    <div class="card stat-card roles w-100">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
@@ -534,7 +572,16 @@ function getRoleName($role_id) {
                                                     <ul class="dropdown-menu">
                                                         <li><a class="dropdown-item" href="#" onclick="viewUserDetails(<?php echo $user['UserID']; ?>)"><i class="fas fa-eye me-2"></i>View Details</a></li>
                                                         <li><a class="dropdown-item" href="#" onclick="editUser(<?php echo $user['UserID']; ?>)"><i class="fas fa-edit me-2"></i>Edit User</a></li>
-                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><input type="hidden" name="new_status" value="Inactive"><button type="submit" name="update_user_status" class="dropdown-item text-warning"><i class="fas fa-ban me-2"></i>Suspend</button></form></li>
+                                                        <?php if(!$user['User_IsVerified']): ?>
+                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><button type="submit" name="verify_user" class="dropdown-item text-success"><i class="fas fa-user-check me-2"></i>Verify</button></form></li>
+                                                        <?php else: ?>
+                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><button type="submit" name="unverify_user" class="dropdown-item text-warning"><i class="fas fa-user-times me-2"></i>Unverify</button></form></li>
+                                                        <?php endif; ?>
+                                                        <?php if($user['User_Status'] == 'Active'): ?>
+                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><input type="hidden" name="new_status" value="Inactive"><button type="submit" name="update_user_status" class="dropdown-item text-warning"><i class="fas fa-ban me-2"></i>Deactivate</button></form></li>
+                                                        <?php else: ?>
+                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><input type="hidden" name="new_status" value="Active"><button type="submit" name="update_user_status" class="dropdown-item text-success"><i class="fas fa-check-circle me-2"></i>Activate</button></form></li>
+                                                        <?php endif; ?>
                                                         <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><button type="submit" name="delete_user" class="dropdown-item text-danger" onclick="return confirm('Delete this user?')"><i class="fas fa-trash me-2"></i>Delete</button></form></li>
                                                     </ul>
                                                 </div>

@@ -162,14 +162,15 @@ try {
 $products = [];
 if ($products_table_exists) {
     try {
-        $base_query = "SELECT p.*, 
-                            u.User_Name as Owner_Name, u.User_Email as Owner_Email,
-                            " . ($categories_table_exists ? "c.Cat_Name as Category_Name," : "'Unknown' as Category_Name,") . "
-                            (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as total_bookings,
-                            (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID AND Book_Status = 'Active') as active_bookings,
-                            (SELECT SUM(Book_TotalAmount) FROM bookings WHERE ProductID = p.ProductID AND Book_Status IN ('Active', 'Completed')) as total_revenue
-                    FROM products p 
-                    LEFT JOIN user_accounts u ON p.OwnerID = u.UserID";
+    $base_query = "SELECT p.*, 
+                u.User_Name as Owner_Name, u.User_Email as Owner_Email,
+                " . ($categories_table_exists ? "c.Cat_Name as Category_Name," : "'Unknown' as Category_Name,") . "
+                (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as total_bookings,
+                (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID AND Book_Status = 'Active') as active_bookings,
+                (SELECT SUM(Book_TotalAmount) FROM bookings WHERE ProductID = p.ProductID AND Book_Status IN ('Active', 'Completed')) as total_revenue,
+                (SELECT PI_ImagePath FROM product_images WHERE ProductID = p.ProductID AND PI_IsMain = 1 LIMIT 1) as Main_Image
+            FROM products p 
+            LEFT JOIN user_accounts u ON p.OwnerID = u.UserID";
         
         if ($categories_table_exists) {
             $base_query .= " LEFT JOIN categories c ON p.CategoryID = c.CategoryID";
@@ -805,13 +806,22 @@ function formatCurrency($amount) {
                                     <div class="card-body">
                                         <div class="row align-items-center">
                                             <div class="col-md-2">
-                                                <?php if(!empty($product['Prod_Image'])): ?>
-                                                <img src="<?php echo htmlspecialchars($product['Prod_Image']); ?>" 
-                                                    alt="Product Image" class="product-image">
+                                                <?php 
+                                                    $imgPath = $product['Main_Image'] ?? '';
+                                                    if (!empty($imgPath)) {
+                                                        // Always use relative path from admin to uploads
+                                                        if (strpos($imgPath, 'uploads/products/') === 0) {
+                                                            $imgPath = '../' . $imgPath;
+                                                        }
+                                                    }
+                                                ?>
+                                                <?php if(!empty($imgPath) && file_exists(__DIR__ . '/../' . $product['Main_Image'])): ?>
+                                                    <img src="<?php echo htmlspecialchars($imgPath); ?>" 
+                                                        alt="Product Image" style="width: 130px; height: 130px; object-fit: cover; border-radius: 12px; background: #f8f9fa; display: block;" loading="lazy">
                                                 <?php else: ?>
-                                                <div class="product-image-placeholder">
-                                                    <i class="fas fa-image"></i>
-                                                </div>
+                                                    <div class="product-image-placeholder" style="width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 12px;">
+                                                        <i class="fas fa-image fa-4x text-muted"></i>
+                                                    </div>
                                                 <?php endif; ?>
                                             </div>
                                             

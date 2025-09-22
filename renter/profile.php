@@ -94,86 +94,38 @@ if ($_POST) {
         }
     }
     
-    if (isset($_POST['update_address']) && $address_table_exists) {
-        $address_line = trim($_POST['address_line'] ?? '');
-        $city = trim($_POST['city'] ?? '');
-        $province = $_POST['province'] ?? '';
-        $postal_code = trim($_POST['postal_code'] ?? '');
-        
-        if (!empty($address_line) && !empty($city) && !empty($province)) {
-            // Check if address exists
-            $query = "SELECT * FROM user_addresses WHERE UserID = ?";
-            if (in_array('UA_IsDefault', $address_columns)) {
-                $query .= " AND UA_IsDefault = 1";
-            }
-            $query .= " LIMIT 1";
-            
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $user_id);
-            $stmt->execute();
-            $existing_address = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            // Build dynamic query based on available columns
-            $address_fields = [];
-            $params = [];
-            
-            if (in_array('UA_AddressLine', $address_columns)) {
-                $address_fields[] = 'UA_AddressLine';
-                $params[] = $address_line;
-            }
-            if (in_array('UA_City', $address_columns)) {
-                $address_fields[] = 'UA_City';
-                $params[] = $city;
-            }
-            if (in_array('UA_Province', $address_columns)) {
-                $address_fields[] = 'UA_Province';
-                $params[] = $province;
-            }
-            if (in_array('UA_PostalCode', $address_columns)) {
-                $address_fields[] = 'UA_PostalCode';
-                $params[] = $postal_code;
-            }
-            
-            if ($existing_address) {
-                // Update existing address
-                $update_fields = array_map(function($field) { return $field . ' = ?'; }, $address_fields);
-                $params[] = $existing_address['AddressID'] ?? $user_id;
-                
-                $query = "UPDATE user_addresses SET " . implode(', ', $update_fields) . " WHERE ";
-                $query .= isset($existing_address['AddressID']) ? "AddressID = ?" : "UserID = ?";
-                
-                $stmt = $conn->prepare($query);
-            } else {
-                // Insert new address
-                $all_fields = ['UserID'];
-                $all_params = [$user_id];
-                
-                $all_fields = array_merge($all_fields, $address_fields);
-                $all_params = array_merge($all_params, $params);
-                
-                if (in_array('UA_IsDefault', $address_columns)) {
-                    $all_fields[] = 'UA_IsDefault';
-                    $all_params[] = 1;
-                }
-                
-                $placeholders = str_repeat('?,', count($all_fields));
-                $placeholders = rtrim($placeholders, ',');
-                
-                $query = "INSERT INTO user_addresses (" . implode(', ', $all_fields) . ") VALUES (" . $placeholders . ")";
-                $stmt = $conn->prepare($query);
-                $params = $all_params;
-            }
-            
-            if ($stmt->execute($params)) {
-                $message = "Address updated successfully!";
-                $message_type = "success";
-            } else {
-                $message = "Failed to update address. Please try again.";
-                $message_type = "danger";
-            }
+    if (isset($_POST['add_address']) && $address_table_exists) {
+        // Gather fields from POST
+        $fields = [
+            'UA_Street', 'UA_Barangay', 'UA_City', 'UA_Province', 'UA_ZipCode', 'UA_AddressType', 'UA_IsDefault'
+        ];
+        $address_data = [];
+        foreach ($fields as $field) {
+            $address_data[$field] = $_POST[$field] ?? null;
+        }
+        $address_data['UA_IsDefault'] = isset($_POST['UA_IsDefault']) ? 1 : 0;
+        // If setting as default, unset other defaults
+        if ($address_data['UA_IsDefault']) {
+            $stmt = $conn->prepare("UPDATE user_addresses SET UA_IsDefault = 0 WHERE UserID = ?");
+            $stmt->execute([$user_id]);
+        }
+        $columns = ['UserID'];
+        $placeholders = ['?'];
+        $values = [$user_id];
+        foreach ($fields as $field) {
+            if ($field !== 'UA_IsDefault' && $address_data[$field] === null) continue;
+            $columns[] = $field;
+            $placeholders[] = '?';
+            $values[] = $address_data[$field];
+        }
+        $sql = "INSERT INTO user_addresses (" . implode(',', $columns) . ") VALUES (" . implode(',', $placeholders) . ")";
+        $stmt = $conn->prepare($sql);
+        if ($stmt->execute($values)) {
+            $message = "Address added successfully!";
+            $message_type = "success";
         } else {
-            $message = "Please fill in all required address fields.";
-            $message_type = "warning";
+            $message = "Failed to add address. Please try again.";
+            $message_type = "danger";
         }
     }
     
@@ -225,7 +177,7 @@ if ($_POST) {
 $user_select_fields = ['u.UserID', 'u.User_Name', 'u.User_Email', 'u.User_CreatedAt'];
 
 // Add optional fields if they exist
-$optional_user_fields = ['User_Phone', 'User_Birthdate', 'User_Gender', 'User_Bio'];
+$optional_user_fields = ['User_Phone', 'User_Birthdate', 'User_Gender', 'User_Bio', 'User_Photo', 'User_IsVerified'];
 foreach($optional_user_fields as $field) {
     if (in_array($field, $user_columns)) {
         $user_select_fields[] = 'u.' . $field;
@@ -700,7 +652,11 @@ function getFieldValue($user_info, $field, $default = '') {
                 <div class="row align-items-center">
                     <div class="col-md-3 text-center">
                         <div class="profile-avatar">
-                            <?php echo strtoupper(substr($user_info['User_Name'], 0, 2)); ?>
+                            <?php if (!empty($user_info['User_Photo'])): ?>
+                                <img src="../uploads/users/<?php echo htmlspecialchars($user_info['User_Photo']); ?>" alt="Profile Photo" style="width:100px; height:100px; object-fit:cover; border-radius:50%; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                            <?php else: ?>
+                                <?php echo strtoupper(substr($user_info['User_Name'], 0, 2)); ?>
+                            <?php endif; ?>
                         </div>
                         <button class="btn btn-outline-light btn-sm" onclick="uploadPhoto()">
                             <i class="fas fa-camera me-2"></i>Change Photo
@@ -708,9 +664,15 @@ function getFieldValue($user_info, $field, $default = '') {
                     </div>
                     <div class="col-md-9" style="position: relative; z-index: 2;">
                         <h2 class="mb-2"><?php echo htmlspecialchars($user_info['User_Name']); ?>
-                            <span class="verification-badge">
-                                <i class="fas fa-check-circle me-1"></i>Verified
-                            </span>
+                            <?php if (isset($user_info['User_IsVerified']) && $user_info['User_IsVerified'] == 1): ?>
+                                <span class="verification-badge">
+                                    <i class="fas fa-check-circle me-1"></i>Verified
+                                </span>
+                            <?php else: ?>
+                                <span class="verification-badge bg-warning text-dark" style="font-size:1rem; padding:0.25em 0.75em; border-radius:1em;">
+                                    <i class="fas fa-hourglass-half me-1"></i>Waiting for admin to verify
+                                </span>
+                            <?php endif; ?>
                         </h2>
                         <p class="mb-2 opacity-90">
                             <i class="fas fa-envelope me-2"></i><?php echo htmlspecialchars($user_info['User_Email']); ?>
@@ -914,75 +876,97 @@ function getFieldValue($user_info, $field, $default = '') {
             <div id="addressContent" class="tab-content" style="display: none;">
                 <div class="profile-section">
                     <h5><i class="fas fa-map-marker-alt me-2"></i>Address Information</h5>
-                    
                     <div class="info-card">
                         <h6><i class="fas fa-info-circle me-2"></i>Location Details</h6>
                         <p class="mb-0 small">Your address helps owners determine delivery options and rental availability in your area.</p>
                     </div>
-                    
-                    <form method="POST">
-                        <?php if(in_array('UA_AddressLine', $address_columns)): ?>
-                        <div class="mb-3">
-                            <label for="address_line" class="form-label">
-                                Street Address <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" class="form-control" id="address_line" name="address_line" 
-                                   value="<?php echo htmlspecialchars(getFieldValue($user_info, 'UA_AddressLine')); ?>" 
-                                   placeholder="House/Unit number, Street name" required>
-                        </div>
-                        <?php endif; ?>
-                        
-                        <div class="row">
-                            <?php if(in_array('UA_City', $address_columns)): ?>
-                            <div class="col-md-6 mb-3">
-                                <label for="city" class="form-label">
-                                    City <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" class="form-control" id="city" name="city" 
-                                       value="<?php echo htmlspecialchars(getFieldValue($user_info, 'UA_City')); ?>" required>
+
+                    <!-- Show current addresses -->
+                    <div class="mb-4">
+                        <h6 class="mb-2"><i class="fas fa-list me-2"></i>Your Addresses</h6>
+                        <ul class="list-group">
+                        <?php
+                        $stmt = $conn->prepare("SELECT * FROM user_addresses WHERE UserID = ? ORDER BY UA_IsDefault DESC, UA_CreatedAt DESC");
+                        $stmt->execute([$user_id]);
+                        $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        if ($addresses) {
+                            foreach ($addresses as $address) {
+                                $parts = [];
+                                if (!empty($address['UA_Street'])) $parts[] = htmlspecialchars($address['UA_Street']);
+                                if (!empty($address['UA_Barangay'])) $parts[] = htmlspecialchars($address['UA_Barangay']);
+                                if (!empty($address['UA_City'])) $parts[] = htmlspecialchars($address['UA_City']);
+                                if (!empty($address['UA_Province'])) $parts[] = htmlspecialchars($address['UA_Province']);
+                                if (!empty($address['UA_ZipCode'])) $parts[] = htmlspecialchars($address['UA_ZipCode']);
+                                if (!empty($address['UA_AddressType'])) $parts[] = '('.htmlspecialchars($address['UA_AddressType']).')';
+                                $address_str = implode(', ', $parts);
+                                echo '<li class="list-group-item d-flex justify-content-between align-items-center">';
+                                echo $address_str;
+                                if (!empty($address['UA_IsDefault'])) {
+                                    echo ' <span class="badge bg-primary ms-2">Default</span>';
+                                }
+                                echo '</li>';
+                            }
+                        } else {
+                            echo '<li class="list-group-item">No addresses found.</li>';
+                        }
+                        ?>
+                        </ul>
+                    </div>
+
+                    <!-- Add new address form -->
+                    <button class="btn btn-outline-primary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#addAddressForm" aria-expanded="false" aria-controls="addAddressForm">
+                        <i class="fas fa-plus me-2"></i>Add New Address
+                    </button>
+                    <div class="collapse" id="addAddressForm">
+                        <form method="POST">
+                            <input type="hidden" name="add_address" value="1">
+                            <div class="mb-3">
+                                <label for="UA_Street" class="form-label">Street <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="UA_Street" name="UA_Street" required>
                             </div>
-                            <?php endif; ?>
-                            
-                            <?php if(in_array('UA_Province', $address_columns)): ?>
-                            <div class="col-md-6 mb-3">
-                                <label for="province" class="form-label">
-                                    Province <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-select" id="province" name="province" required>
-                                    <option value="">Select Province</option>
-                                    <option value="Metro Manila" <?php echo getFieldValue($user_info, 'UA_Province') == 'Metro Manila' ? 'selected' : ''; ?>>Metro Manila</option>
-                                    <option value="Cavite" <?php echo getFieldValue($user_info, 'UA_Province') == 'Cavite' ? 'selected' : ''; ?>>Cavite</option>
-                                    <option value="Laguna" <?php echo getFieldValue($user_info, 'UA_Province') == 'Laguna' ? 'selected' : ''; ?>>Laguna</option>
-                                    <option value="Batangas" <?php echo getFieldValue($user_info, 'UA_Province') == 'Batangas' ? 'selected' : ''; ?>>Batangas</option>
-                                    <option value="Rizal" <?php echo getFieldValue($user_info, 'UA_Province') == 'Rizal' ? 'selected' : ''; ?>>Rizal</option>
-                                    <option value="Bulacan" <?php echo getFieldValue($user_info, 'UA_Province') == 'Bulacan' ? 'selected' : ''; ?>>Bulacan</option>
-                                </select>
+                            <div class="mb-3">
+                                <label for="UA_Barangay" class="form-label">Barangay</label>
+                                <input type="text" class="form-control" id="UA_Barangay" name="UA_Barangay">
                             </div>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <?php if(in_array('UA_PostalCode', $address_columns)): ?>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="postal_code" class="form-label">
-                                    Postal Code
-                                </label>
-                                <input type="text" class="form-control" id="postal_code" name="postal_code" 
-                                       value="<?php echo htmlspecialchars(getFieldValue($user_info, 'UA_PostalCode')); ?>" 
-                                       placeholder="e.g. 1000">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="UA_City" class="form-label">City <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="UA_City" name="UA_City" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="UA_Province" class="form-label">Province <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="UA_Province" name="UA_Province" required>
+                                        <option value="">Select Province</option>
+                                        <option value="Metro Manila">Metro Manila</option>
+                                        <option value="Cavite">Cavite</option>
+                                        <option value="Laguna">Laguna</option>
+                                        <option value="Batangas">Batangas</option>
+                                        <option value="Rizal">Rizal</option>
+                                        <option value="Bulacan">Bulacan</option>
+                                    </select>
+                                </div>
                             </div>
-                        </div>
-                        <?php endif; ?>
-                        
-                        <div class="d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-secondary-custom" onclick="resetForm()">
-                                <i class="fas fa-undo me-2"></i>Reset
-                            </button>
-                            <button type="submit" name="update_address" class="btn btn-save">
-                                <i class="fas fa-save me-2"></i>Save Address
-                            </button>
-                        </div>
-                    </form>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="UA_ZipCode" class="form-label">Postal Code</label>
+                                    <input type="text" class="form-control" id="UA_ZipCode" name="UA_ZipCode">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="UA_AddressType" class="form-label">Address Type</label>
+                                    <input type="text" class="form-control" id="UA_AddressType" name="UA_AddressType" placeholder="e.g. Home, Work">
+                                </div>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" value="1" id="UA_IsDefault" name="UA_IsDefault">
+                                <label class="form-check-label" for="UA_IsDefault">Set as default address</label>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="submit" class="btn btn-save">
+                                    <i class="fas fa-save me-2"></i>Save Address
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
             <?php endif; ?>
