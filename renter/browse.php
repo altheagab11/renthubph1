@@ -1107,7 +1107,9 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                         </button>
                                         <button class="btn btn-sm book-btn <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>"
                                                 onclick="bookProduct(<?php echo $product['ProductID']; ?>)"
-                                                <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>>
+                                                data-pickup-available="<?php echo $product['PL_PickupAvailable'] ?? 1; ?>"
+                                                data-delivery-available="<?php echo $product['PL_DeliveryAvailable'] ?? 0; ?>"
+                                                <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?> >
                                             <i class="fas fa-calendar-plus"></i>
                                         </button>
                                     </td>
@@ -1231,7 +1233,9 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                     </div>
                                     <button class="btn book-btn btn-sm <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>"
                                             onclick="bookProduct(<?php echo $product['ProductID']; ?>)"
-                                            <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>>
+                                            data-pickup-available="<?php echo $product['PL_PickupAvailable'] ?? 1; ?>"
+                                            data-delivery-available="<?php echo $product['PL_DeliveryAvailable'] ?? 0; ?>"
+                                            <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?> >
                                         <?php echo $product['AvailabilityStatus'] == 'Available' ? 'Book' : 'N/A'; ?>
                                     </button>
                                 </div>
@@ -1762,7 +1766,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         function bookProduct(productId) {
             // Find product data from the page
             const productCard = document.querySelector(`[onclick="bookProduct(${productId})"]`).closest('.card, tr');
-            let productName, productPrice, priceType, ownerName, ownerId, securityDeposit, deliveryAvailable, deliveryFee;
+            let productName, productPrice, priceType, ownerName, ownerId, securityDeposit, deliveryAvailable, deliveryFee, pickupAvailable;
 
             if (productCard.classList.contains('card')) {
                 // Grid view
@@ -1774,6 +1778,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                 securityDeposit = parseFloat(productCard.dataset.securityDeposit || 0);
                 deliveryAvailable = parseInt(productCard.dataset.deliveryAvailable || 0);
                 deliveryFee = parseFloat(productCard.dataset.deliveryFee || 0);
+                pickupAvailable = productCard.getAttribute('data-pickup-available') !== null ? parseInt(productCard.getAttribute('data-pickup-available')) : 1;
             } else {
                 // Table view
                 const cells = productCard.querySelectorAll('td');
@@ -1785,6 +1790,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                 securityDeposit = parseFloat(productCard.dataset.securityDeposit || 0);
                 deliveryAvailable = parseInt(productCard.dataset.deliveryAvailable || 0);
                 deliveryFee = parseFloat(productCard.dataset.deliveryFee || 0);
+                pickupAvailable = productCard.getAttribute('data-pickup-available') !== null ? parseInt(productCard.getAttribute('data-pickup-available')) : 1;
             }
 
             // Store product data in sessionStorage to use after waiver agreement
@@ -1796,7 +1802,8 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                 ownerName,
                 securityDeposit,
                 deliveryAvailable,
-                deliveryFee
+                deliveryFee,
+                pickupAvailable
             }));
 
             // Show waiver modal
@@ -1841,6 +1848,16 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                     </div>
                 `;
+
+                // Dynamically update Pickup/Delivery dropdown
+                const pickupDeliverySelect = document.getElementById('pickup_delivery');
+                pickupDeliverySelect.innerHTML = '<option value="">Choose option...</option>';
+                if (productData.pickupAvailable == 1) {
+                    pickupDeliverySelect.innerHTML += '<option value="pickup">I\'ll pickup the item</option>';
+                }
+                if (productData.deliveryAvailable == 1) {
+                    pickupDeliverySelect.innerHTML += '<option value="delivery">Request delivery</option>';
+                }
 
                 // Set minimum date to today
                 setMinimumDateTime();
