@@ -7,7 +7,7 @@ $database = new Database();
 $conn = $database->getConnection();
 $user_id = $_SESSION['user_id'];
 // Get current user information
-$user_query = "SELECT User_Name, User_Email, User_Phone FROM user_accounts WHERE UserID = ?";
+$user_query = "SELECT User_Name, User_Email, User_Phone, User_IsVerified FROM user_accounts WHERE UserID = ?";
 $user_stmt = $conn->prepare($user_query);
 $user_stmt->execute([$user_id]);
 $current_user = $user_stmt->fetch(PDO::FETCH_ASSOC);
@@ -1428,15 +1428,15 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                             <div class="col-md-6">
                                 <label for="renter_name" class="form-label">Full Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="renter_name" name="renter_name" required
-                                       value="<?php echo htmlspecialchars($current_user['User_Name'] ?? ''); ?>">
+                    <input type="text" class="form-control" id="renter_name" name="renter_name" required
+                        value="<?php echo htmlspecialchars($current_user['User_Name'] ?? ''); ?>" readonly>
                                 <div class="form-text">Your full name for the booking</div>
                             </div>
                             <div class="col-md-6">
                                 <label for="renter_phone" class="form-label">Phone Number <span class="text-danger">*</span></label>
-                                <input type="tel" class="form-control" id="renter_phone" name="renter_phone" required
-                                       pattern="[0-9]{11}" placeholder="09XXXXXXXXX"
-                                       value="<?php echo htmlspecialchars($current_user['User_Phone'] ?? ''); ?>">
+                    <input type="tel" class="form-control" id="renter_phone" name="renter_phone" required
+                        pattern="\+?[0-9]{10,15}" placeholder="+639XXXXXXXXX"
+                        value="<?php echo htmlspecialchars($current_user['User_Phone'] ?? ''); ?>" readonly>
                                 <div class="form-text">11-digit mobile number</div>
                             </div>
                         </div>
@@ -1444,8 +1444,8 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <label for="renter_email" class="form-label">Email Address <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" id="renter_email" name="renter_email" required
-                                       value="<?php echo htmlspecialchars($current_user['User_Email'] ?? ''); ?>">
+                    <input type="email" class="form-control" id="renter_email" name="renter_email" required
+                        value="<?php echo htmlspecialchars($current_user['User_Email'] ?? ''); ?>" readonly>
                                 <div class="form-text">For booking confirmations</div>
                             </div>
                             <div class="col-md-6">
@@ -1580,6 +1580,11 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && $current_user['User_IsVerified'] == 1 ? 'true' : 'false'; ?>;
+</script>
+
     <script>
         // Auto-pause carousel on hover
         document.addEventListener('DOMContentLoaded', function() {
@@ -1764,6 +1769,23 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Modified bookProduct function to show waiver modal first
         function bookProduct(productId) {
+
+            if (typeof window.renterIsVerified !== 'undefined' && window.renterIsVerified === false) {
+                // Show a modal if you have one, or use alert as fallback
+                if (document.getElementById('notVerifiedModal')) {
+                    var notVerifiedModal = new bootstrap.Modal(document.getElementById('notVerifiedModal'));
+                    notVerifiedModal.show();
+                } else {
+                    alert('Your account is not yet verified. You cannot book until your account is verified by the admin.');
+                }
+                return;
+            }
+
+            if (typeof window.renterHasAddress !== 'undefined' && window.renterHasAddress === false) {
+    var noAddressModal = new bootstrap.Modal(document.getElementById('noAddressModal'));
+    noAddressModal.show();
+    return;
+}
             // Find product data from the page
             const productCard = document.querySelector(`[onclick="bookProduct(${productId})"]`).closest('.card, tr');
             let productName, productPrice, priceType, ownerName, ownerId, securityDeposit, deliveryAvailable, deliveryFee, pickupAvailable;
@@ -2024,5 +2046,27 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
             });
         });
     </script>
+
+<!-- Modal for no address -->
+<div class="modal fade" id="noAddressModal" tabindex="-1" aria-labelledby="noAddressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="noAddressModalLabel">No Address Found</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>You need to add an address to your profile before you can book a product.</p>
+        <a href="../renter/profile.php" class="btn btn-primary">Go to Profile & Add Address</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.renterHasAddress = <?php echo !empty($user_addresses) ? 'true' : 'false'; ?>;
+window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && $current_user['User_IsVerified'] == 1 ? 'true' : 'false'; ?>;
+</script>
+
 </body>
 </html>

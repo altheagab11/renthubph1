@@ -921,8 +921,8 @@ function getFieldValue($user_info, $field, $default = '') {
                         <form method="POST">
                             <input type="hidden" name="add_address" value="1">
                             <div class="mb-3">
-                                <label for="UA_Street" class="form-label">Street <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="UA_Street" name="UA_Street" required>
+                                <label for="UA_Street" class="form-label">Street Address <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="UA_Street" name="UA_Street" required placeholder="House/Unit No., Street Name">
                             </div>
                             <div class="mb-3">
                                 <label for="UA_Barangay" class="form-label">Barangay</label>

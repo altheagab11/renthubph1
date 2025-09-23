@@ -127,7 +127,17 @@ $query = "SELECT b.*, p.Prod_Name, p.Prod_RentalPrice, p.Prod_PriceType,
 
 $stmt = $conn->prepare($query);
 $stmt->execute($params);
+
 $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$active_bookings = [];
+$history_bookings = [];
+foreach ($bookings as $b) {
+    if (in_array($b['Book_Status'], ['Pending', 'Confirmed', 'In Progress'])) {
+        $active_bookings[] = $b;
+    } else {
+        $history_bookings[] = $b;
+    }
+}
 
 // Get statistics
 $stats = [];
@@ -643,128 +653,206 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                 </form>
             </div>
 
-            <!-- Bookings List -->
-            <?php if(empty($bookings)): ?>
+            <!-- Active Bookings List -->
+            <h4 class="mb-3"><i class="fas fa-calendar-check text-primary me-2"></i>Active Bookings</h4>
+            <?php if(empty($active_bookings)): ?>
                 <div class="empty-state">
                     <i class="fas fa-calendar-times"></i>
-                    <h4 class="text-muted">No bookings found</h4>
+                    <h4 class="text-muted">No active bookings found</h4>
                     <p class="text-muted">Booking requests for your products will appear here.</p>
                     <a href="products.php" class="btn btn-success btn-lg" style="border-radius: 25px;">
                         <i class="fas fa-box me-2"></i>Manage Products
                     </a>
                 </div>
             <?php else: ?>
-                <?php foreach($bookings as $booking): ?>
-                <div class="booking-card card">
-                    <div class="booking-status">
-                        <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
-                            <?php echo htmlspecialchars($booking['Book_Status']); ?>
-                        </span>
-                    </div>
-                    
-                    <div class="card-body p-4">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                     class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <h5 class="mb-2"><?php echo htmlspecialchars($booking['Prod_Name']); ?></h5>
-                                <p class="text-muted mb-2">Booking #<?php echo $booking['BookingID']; ?></p>
-                                
-                                <div class="renter-info">
-                                    <h6 class="mb-2">
-                                        <i class="fas fa-user me-2"></i>Renter Information
-                                    </h6>
-                                    <p class="mb-1"><strong><?php echo htmlspecialchars($booking['Renter_Name']); ?></strong></p>
-                                    <p class="mb-1 small">
-                                        <i class="fas fa-envelope me-1"></i><?php echo htmlspecialchars($booking['Renter_Email']); ?>
-                                    </p>
-                                    <?php if($booking['Renter_Phone']): ?>
-                                    <p class="mb-0 small">
-                                        <i class="fas fa-phone me-1"></i><?php echo htmlspecialchars($booking['Renter_Phone']); ?>
-                                    </p>
-                                    <?php endif; ?>
+                <?php foreach($active_bookings as $booking): ?>
+                    <?php /* ...existing booking card code... */ ?>
+                    <div class="booking-card card">
+                        <div class="booking-status">
+                            <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
+                                <?php echo htmlspecialchars($booking['Book_Status']); ?>
+                            </span>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
+                                         class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;" 
+                                         alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
                                 </div>
-                                
-                                <div class="booking-timeline">
-                                    <div class="timeline-item">
-                                        <strong>Start:</strong> <?php echo date('M j, Y g:i A', strtotime($booking['Book_StartDate'])); ?>
-                                    </div>
-                                    <div class="timeline-item">
-                                        <strong>End:</strong> <?php echo date('M j, Y g:i A', strtotime($booking['Book_EndDate'])); ?>
-                                    </div>
-                                    <div class="timeline-item">
-                                        <strong>Pickup:</strong> <?php echo htmlspecialchars($booking['Book_PickupType']); ?>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-3">
-                                <div class="text-end">
-                                    <h4 class="text-success mb-2">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
-                                    <?php if($booking['Book_SecurityDeposit'] > 0): ?>
-                                    <p class="text-muted small mb-1">Security: ₱<?php echo number_format($booking['Book_SecurityDeposit'], 2); ?></p>
-                                    <?php endif; ?>
-                                    <?php if($booking['Book_DeliveryFee'] > 0): ?>
-                                    <p class="text-muted small mb-2">Delivery: ₱<?php echo number_format($booking['Book_DeliveryFee'], 2); ?></p>
-                                    <?php endif; ?>
-                                    
-                                    <div class="d-flex flex-column gap-2">
-                                        <?php if($booking['Book_Status'] == 'Pending'): ?>
-                                            <button class="btn action-btn accept" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                                    data-action="accept" data-booking-id="<?php echo $booking['BookingID']; ?>" 
-                                                    data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                                <i class="fas fa-check me-2"></i>Accept
-                                            </button>
-                                            <button class="btn action-btn reject" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                                    data-action="reject" data-booking-id="<?php echo $booking['BookingID']; ?>" 
-                                                    data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                                <i class="fas fa-times me-2"></i>Reject
-                                            </button>
-                                        <?php elseif($booking['Book_Status'] == 'Confirmed'): ?>
-                                            <button class="btn action-btn start" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                                    data-action="start" data-booking-id="<?php echo $booking['BookingID']; ?>" 
-                                                    data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                                <i class="fas fa-play me-2"></i>Start Rental
-                                            </button>
-                                        <?php elseif($booking['Book_Status'] == 'In Progress'): ?>
-                                            <button class="btn action-btn complete" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                                    data-action="complete" data-booking-id="<?php echo $booking['BookingID']; ?>" 
-                                                    data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                                <i class="fas fa-check-circle me-2"></i>Complete
-                                            </button>
+                                <div class="col-md-6">
+                                    <h5 class="mb-2"><?php echo htmlspecialchars($booking['Prod_Name']); ?></h5>
+                                    <p class="text-muted mb-2">Booking #<?php echo $booking['BookingID']; ?></p>
+                                    <div class="renter-info">
+                                        <h6 class="mb-2">
+                                            <i class="fas fa-user me-2"></i>Renter Information
+                                        </h6>
+                                        <p class="mb-1"><strong><?php echo htmlspecialchars($booking['Renter_Name']); ?></strong></p>
+                                        <p class="mb-1 small">
+                                            <i class="fas fa-envelope me-1"></i><?php echo htmlspecialchars($booking['Renter_Email']); ?>
+                                        </p>
+                                        <?php if($booking['Renter_Phone']): ?>
+                                        <p class="mb-0 small">
+                                            <i class="fas fa-phone me-1"></i><?php echo htmlspecialchars($booking['Renter_Phone']); ?>
+                                        </p>
                                         <?php endif; ?>
-                                        
-                                        <button class="btn action-btn message">
-                                            <i class="fas fa-comment me-2"></i>Message
-                                        </button>
+                                    </div>
+                                    <div class="booking-timeline">
+                                        <div class="timeline-item">
+                                            <strong>Start:</strong> <?php echo date('M j, Y g:i A', strtotime($booking['Book_StartDate'])); ?>
+                                        </div>
+                                        <div class="timeline-item">
+                                            <strong>End:</strong> <?php echo date('M j, Y g:i A', strtotime($booking['Book_EndDate'])); ?>
+                                        </div>
+                                        <div class="timeline-item">
+                                            <strong>Pickup:</strong> <?php echo htmlspecialchars($booking['Book_PickupType']); ?>
+                                        </div>
                                     </div>
                                 </div>
-                                
-                                <div class="text-end mt-3">
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar me-1"></i>
-                                        Requested <?php echo date('M j, Y', strtotime($booking['Book_CreatedAt'])); ?>
-                                    </small>
+                                <div class="col-md-3">
+                                    <div class="text-end">
+                                        <h4 class="text-success mb-2">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
+                                        <?php if($booking['Book_SecurityDeposit'] > 0): ?>
+                                        <p class="text-muted small mb-1">Security: ₱<?php echo number_format($booking['Book_SecurityDeposit'], 2); ?></p>
+                                        <?php endif; ?>
+                                        <?php if($booking['Book_DeliveryFee'] > 0): ?>
+                                        <p class="text-muted small mb-2">Delivery: ₱<?php echo number_format($booking['Book_DeliveryFee'], 2); ?></p>
+                                        <?php endif; ?>
+                                        <div class="d-flex flex-column gap-2">
+                                            <?php if($booking['Book_Status'] == 'Pending'): ?>
+                                                <button class="btn action-btn accept" data-bs-toggle="modal" data-bs-target="#actionModal" 
+                                                        data-action="accept" data-booking-id="<?php echo $booking['BookingID']; ?>" 
+                                                        data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                                    <i class="fas fa-check me-2"></i>Accept
+                                                </button>
+                                                <button class="btn action-btn reject" data-bs-toggle="modal" data-bs-target="#actionModal" 
+                                                        data-action="reject" data-booking-id="<?php echo $booking['BookingID']; ?>" 
+                                                        data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                                    <i class="fas fa-times me-2"></i>Reject
+                                                </button>
+                                            <?php elseif($booking['Book_Status'] == 'Confirmed'): ?>
+                                                <button class="btn action-btn start" data-bs-toggle="modal" data-bs-target="#actionModal" 
+                                                        data-action="start" data-booking-id="<?php echo $booking['BookingID']; ?>" 
+                                                        data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                                    <i class="fas fa-play me-2"></i>Start Rental
+                                                </button>
+                                            <?php elseif($booking['Book_Status'] == 'In Progress'): ?>
+                                                <button class="btn action-btn complete" data-bs-toggle="modal" data-bs-target="#actionModal" 
+                                                        data-action="complete" data-booking-id="<?php echo $booking['BookingID']; ?>" 
+                                                        data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                                    <i class="fas fa-check-circle me-2"></i>Complete
+                                                </button>
+                                            <?php endif; ?>
+                                            <button class="btn action-btn message">
+                                                <i class="fas fa-comment me-2"></i>Message
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="text-end mt-3">
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            Requested <?php echo date('M j, Y', strtotime($booking['Book_CreatedAt'])); ?>
+                                        </small>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <?php if($booking['Book_Notes']): ?>
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="alert alert-info" style="border-radius: 15px;">
-                                    <h6><i class="fas fa-sticky-note me-2"></i>Renter Notes:</h6>
-                                    <p class="mb-0"><?php echo nl2br(htmlspecialchars($booking['Book_Notes'])); ?></p>
+                            <?php if($booking['Book_Notes']): ?>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <div class="alert alert-info" style="border-radius: 15px;">
+                                        <h6><i class="fas fa-sticky-note me-2"></i>Renter Notes:</h6>
+                                        <p class="mb-0"><?php echo nl2br(htmlspecialchars($booking['Book_Notes'])); ?></p>
+                                    </div>
                                 </div>
                             </div>
+                            <?php endif; ?>
                         </div>
-                        <?php endif; ?>
                     </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+
+            <!-- Booking History List -->
+            <h4 class="mb-3 mt-5"><i class="fas fa-history text-secondary me-2"></i>Booking History</h4>
+            <?php if(empty($history_bookings)): ?>
+                <div class="empty-state">
+                    <i class="fas fa-calendar-minus"></i>
+                    <h4 class="text-muted">No booking history found</h4>
+                    <p class="text-muted">Completed, cancelled, or past bookings will appear here.</p>
                 </div>
+            <?php else: ?>
+                <?php foreach($history_bookings as $booking): ?>
+                    <div class="booking-card card bg-light">
+                        <div class="booking-status">
+                            <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
+                                <?php echo htmlspecialchars($booking['Book_Status']); ?>
+                            </span>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
+                                         class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;" 
+                                         alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                </div>
+                                <div class="col-md-6">
+                                    <h5 class="mb-2"><?php echo htmlspecialchars($booking['Prod_Name']); ?></h5>
+                                    <p class="text-muted mb-2">Booking #<?php echo $booking['BookingID']; ?></p>
+                                    <div class="renter-info">
+                                        <h6 class="mb-2">
+                                            <i class="fas fa-user me-2"></i>Renter Information
+                                        </h6>
+                                        <p class="mb-1"><strong><?php echo htmlspecialchars($booking['Renter_Name']); ?></strong></p>
+                                        <p class="mb-1 small">
+                                            <i class="fas fa-envelope me-1"></i><?php echo htmlspecialchars($booking['Renter_Email']); ?>
+                                        </p>
+                                        <?php if($booking['Renter_Phone']): ?>
+                                        <p class="mb-0 small">
+                                            <i class="fas fa-phone me-1"></i><?php echo htmlspecialchars($booking['Renter_Phone']); ?>
+                                        </p>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="booking-timeline">
+                                        <div class="timeline-item">
+                                            <strong>Start:</strong> <?php echo date('M j, Y g:i A', strtotime($booking['Book_StartDate'])); ?>
+                                        </div>
+                                        <div class="timeline-item">
+                                            <strong>End:</strong> <?php echo date('M j, Y g:i A', strtotime($booking['Book_EndDate'])); ?>
+                                        </div>
+                                        <div class="timeline-item">
+                                            <strong>Pickup:</strong> <?php echo htmlspecialchars($booking['Book_PickupType']); ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-end">
+                                        <h4 class="text-success mb-2">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
+                                        <?php if($booking['Book_SecurityDeposit'] > 0): ?>
+                                        <p class="text-muted small mb-1">Security: ₱<?php echo number_format($booking['Book_SecurityDeposit'], 2); ?></p>
+                                        <?php endif; ?>
+                                        <?php if($booking['Book_DeliveryFee'] > 0): ?>
+                                        <p class="text-muted small mb-2">Delivery: ₱<?php echo number_format($booking['Book_DeliveryFee'], 2); ?></p>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="text-end mt-3">
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            Requested <?php echo date('M j, Y', strtotime($booking['Book_CreatedAt'])); ?>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php if($booking['Book_Notes']): ?>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <div class="alert alert-info" style="border-radius: 15px;">
+                                        <h6><i class="fas fa-sticky-note me-2"></i>Renter Notes:</h6>
+                                        <p class="mb-0"><?php echo nl2br(htmlspecialchars($booking['Book_Notes'])); ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>
