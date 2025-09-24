@@ -165,11 +165,7 @@ $stats['most_expensive'] = $most_expensive;
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -216,10 +212,10 @@ $stats['most_expensive'] = $most_expensive;
             transition: none !important;
         }
         
-        .stat-card.total { background: var(--accent-gradient); color: white; }
-        .stat-card.value { background: var(--primary-gradient); color: white; }
-        .stat-card.average { background: var(--info-gradient); color: white; }
-        .stat-card.expensive { background: var(--warning-gradient); color: white; }
+        .stat-card.total { background: var(--secondary-gradient); color: white; }
+        .stat-card.value { background: var(--secondary-gradient); color: white; }
+        .stat-card.average { background: var(--secondary-gradient); color: white; }
+        .stat-card.expensive { background: var(--secondary-gradient); color: white; }
         
         .favorite-card {
             border: none;
@@ -240,7 +236,7 @@ $stats['most_expensive'] = $most_expensive;
             position: absolute;
             top: 15px;
             right: 15px;
-            background: var(--accent-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 50%;
             width: 40px;
@@ -287,7 +283,7 @@ $stats['most_expensive'] = $most_expensive;
         }
         
         .price-tag {
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 15px;
             padding: 0.5rem 1rem;
@@ -311,9 +307,9 @@ $stats['most_expensive'] = $most_expensive;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        .action-btn.remove { background: var(--accent-gradient); color: white; }
-        .action-btn.book { background: var(--primary-gradient); color: white; }
-        .action-btn.share { background: var(--info-gradient); color: white; }
+        .action-btn.remove { background: var(--secondary-gradient); color: white; }
+        .action-btn.book { background: var(--secondary-gradient); color: white; }
+        .action-btn.share { background: var(--secondary-gradient); color: white; }
         
         .navbar {
             border-bottom: 1px solid #e9ecef;

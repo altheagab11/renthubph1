@@ -915,7 +915,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 </div>
                                 <div class="col-md-1">
                                     <label class="form-label">&nbsp;</label>
-                                    <button type="submit" class="btn btn-primary w-100">
+                                    <button type="submit" class="btn w-100" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                                         <i class="fas fa-search"></i>
                                     </button>
                                 </div>

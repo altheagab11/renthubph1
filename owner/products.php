@@ -182,10 +182,6 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -234,9 +230,9 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         }
         
         .stat-card.total { background: var(--primary-gradient); color: white; }
-        .stat-card.available { background: var(--secondary-gradient); color: white; }
-        .stat-card.featured { background: var(--warning-gradient); color: white; }
-        .stat-card.bookings { background: var(--info-gradient); color: white; }
+        .stat-card.available { background: var(--primary-gradient); color: white; }
+        .stat-card.featured { background: var(--primary-gradient); color: white; }
+        .stat-card.bookings { background: var(--primary-gradient); color: white; }
         
         .product-card {
             border: none;
@@ -553,7 +549,7 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 
                 <div class="navbar-nav ms-auto d-flex flex-row">
                     <div class="nav-item me-3">
-                        <a href="add-product.php" class="btn btn-success" style="border-radius: 25px;">
+                        <a href="add-product.php" class="btn" style="background: var(--primary-gradient); color: white; border-radius: 25px;">
                             <i class="fas fa-plus me-2"></i>Add Product
                         </a>
                     </div>
@@ -723,7 +719,7 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     </div>
                     
                     <div class="col-md-2 mb-3">
-                        <button type="submit" class="btn btn-primary w-100" style="border-radius: 15px;">
+                        <button type="submit" class="btn w-100" style="background: var(--primary-gradient); color: white; border-radius: 15px;">
                             <i class="fas fa-search me-2"></i>Filter
                         </button>
                     </div>
@@ -736,7 +732,7 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     <i class="fas fa-box-open"></i>
                     <h4 class="text-muted">No products found</h4>
                     <p class="text-muted">Start by adding your first product to begin earning!</p>
-                    <a href="add-product.php" class="btn btn-success btn-lg" style="border-radius: 25px;">
+                    <a href="add-product.php" class="btn btn-success btn-lg" style="background: var(--primary-gradient); color: white; border-radius: 25px;">
                         <i class="fas fa-plus me-2"></i>Add Your First Product
                     </a>
                 </div>

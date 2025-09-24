@@ -351,14 +351,14 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if($auth->isLoggedIn()): ?>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle fw-semibold" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="fas fa-user-circle me-1"></i><?php echo $_SESSION['user_name']; ?>
+                                <i class="fas fa-user-circle me-1"></i><?php echo htmlspecialchars($_SESSION['user_name'] ?? 'User'); ?>
                             </a>
                             <ul class="dropdown-menu">
-                                <?php if($_SESSION['user_role'] == 1): ?>
+                                <?php if(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 1): ?>
                                     <li><a class="dropdown-item" href="admin/dashboard.php"><i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard</a></li>
-                                <?php elseif($_SESSION['user_role'] == 2): ?>
+                                <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 2): ?>
                                     <li><a class="dropdown-item" href="renter/dashboard.php"><i class="fas fa-user me-2"></i>My Dashboard</a></li>
-                                <?php elseif($_SESSION['user_role'] == 3): ?>
+                                <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 3): ?>
                                     <li><a class="dropdown-item" href="owner/dashboard.php"><i class="fas fa-store me-2"></i>Owner Dashboard</a></li>
                                     <li><a class="dropdown-item" href="renter/dashboard.php"><i class="fas fa-user me-2"></i>Renter Dashboard</a></li>
                                 <?php endif; ?>
@@ -431,15 +431,15 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="col-lg-3 col-md-6 mb-4">
                         <div class="category-card h-100 text-center animate-on-scroll" style="animation-delay: <?php echo $index * 0.1; ?>s;">
                             <div class="card-body">
-                                <div class="category-icon" style="background: linear-gradient(135deg, <?php echo $category['Parent_Color']; ?> 0%, <?php echo $category['Parent_Color']; ?>aa 100%);">
-                                    <i class="<?php echo $category['Parent_Icon']; ?>"></i>
+                                <div class="category-icon" style="background: linear-gradient(135deg, <?php echo ($category['Parent_Color'] ?? '#007bff'); ?> 0%, <?php echo ($category['Parent_Color'] ?? '#007bff'); ?>aa 100%);">
+                                    <i class="<?php echo ($category['Parent_Icon'] ?? 'fas fa-folder'); ?>"></i>
                                 </div>
-                                <h5 class="card-title fw-bold"><?php echo htmlspecialchars($category['Parent_Name']); ?></h5>
-                                <p class="card-text text-muted"><?php echo htmlspecialchars(substr($category['Parent_Description'], 0, 80)); ?><?php echo strlen($category['Parent_Description']) > 80 ? '...' : ''; ?></p>
+                                <h5 class="card-title fw-bold"><?php echo htmlspecialchars($category['Parent_Name'] ?? 'Unknown Category'); ?></h5>
+                                <p class="card-text text-muted"><?php echo htmlspecialchars(substr($category['Parent_Description'] ?? '', 0, 80)); ?><?php echo strlen($category['Parent_Description'] ?? '') > 80 ? '...' : ''; ?></p>
                                 <div class="mb-3">
-                                    <span class="badge bg-light text-dark"><?php echo $category['category_count']; ?> categories</span>
+                                    <span class="badge bg-light text-dark"><?php echo (int)($category['category_count'] ?? 0); ?> categories</span>
                                 </div>
-                                <a href="browse.php?parent_category=<?php echo $category['ParentCategoryID']; ?>" class="btn btn-outline-primary">
+                                <a href="browse.php?parent_category=<?php echo ($category['ParentCategoryID'] ?? 0); ?>" class="btn btn-outline-primary">
                                     <i class="fas fa-arrow-right me-2"></i>Explore
                                 </a>
                             </div>
@@ -465,11 +465,11 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="col-lg-3 col-md-6 mb-3">
                     <div class="card border-0 shadow-sm h-100 animate-on-scroll" style="animation-delay: <?php echo $index * 0.1 + 0.8; ?>s;">
                         <div class="card-body text-center">
-                            <i class="<?php echo $category['Parent_Icon']; ?> fa-2x mb-3" style="color: <?php echo $category['Parent_Color']; ?>;"></i>
-                            <h6 class="fw-bold"><?php echo htmlspecialchars($category['Cat_Name']); ?></h6>
-                            <small class="text-muted">under <?php echo htmlspecialchars($category['Parent_Name']); ?></small>
+                            <i class="<?php echo ($category['Parent_Icon'] ?? 'fas fa-folder'); ?> fa-2x mb-3" style="color: <?php echo ($category['Parent_Color'] ?? '#007bff'); ?>;"></i>
+                            <h6 class="fw-bold"><?php echo htmlspecialchars($category['Cat_Name'] ?? 'Unknown Subcategory'); ?></h6>
+                            <small class="text-muted">under <?php echo htmlspecialchars($category['Parent_Name'] ?? 'Unknown Parent'); ?></small>
                             <br>
-                            <a href="browse.php?category=<?php echo $category['CategoryID']; ?>" class="btn btn-sm btn-outline-primary mt-2">Browse</a>
+                            <a href="browse.php?category=<?php echo ($category['CategoryID'] ?? 0); ?>" class="btn btn-sm btn-outline-primary mt-2">Browse</a>
                         </div>
                     </div>
                 </div>
@@ -489,29 +489,29 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="col-lg-3 col-md-6 mb-4">
                         <div class="product-card h-100 animate-on-scroll" style="animation-delay: <?php echo $index * 0.1; ?>s;">
                             <div class="position-relative overflow-hidden" style="height: 220px;">
-                                <img src="<?php echo $product['PI_ImagePath'] ? htmlspecialchars($product['PI_ImagePath']) : 'assets/images/no-image.jpg'; ?>" 
+                                <img src="<?php echo ($product['PI_ImagePath'] ?? null) ? htmlspecialchars($product['PI_ImagePath']) : 'assets/images/no-image.jpg'; ?>" 
                                      class="card-img-top w-100 h-100" style="object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($product['Prod_Name']); ?>">
+                                     alt="<?php echo htmlspecialchars($product['Prod_Name'] ?? 'Unknown Product'); ?>">
                                 <div class="position-absolute top-0 end-0 m-3">
                                     <span class="badge bg-success">Available</span>
                                 </div>
                             </div>
                             <div class="card-body">
-                                <h6 class="card-title fw-bold"><?php echo htmlspecialchars(substr($product['Prod_Name'], 0, 40)); ?><?php echo strlen($product['Prod_Name']) > 40 ? '...' : ''; ?></h6>
+                                <h6 class="card-title fw-bold"><?php echo htmlspecialchars(substr($product['Prod_Name'] ?? '', 0, 40)); ?><?php echo strlen($product['Prod_Name'] ?? '') > 40 ? '...' : ''; ?></h6>
                                 <p class="text-muted small mb-2">
-                                    <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($product['Cat_Name']); ?>
+                                    <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($product['Cat_Name'] ?? 'Uncategorized'); ?>
                                 </p>
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <span class="price-badge">
-                                        ₱<?php echo number_format($product['Prod_RentalPrice'], 2); ?> 
-                                        <small>/<?php echo htmlspecialchars($product['Prod_PriceType']); ?></small>
+                                        ₱<?php echo number_format($product['Prod_RentalPrice'] ?? 0, 2); ?> 
+                                        <small>/<?php echo htmlspecialchars($product['Prod_PriceType'] ?? 'Day'); ?></small>
                                     </span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center">
                                     <span class="owner-badge">
-                                        <i class="fas fa-user me-1"></i><?php echo htmlspecialchars(substr($product['User_Name'], 0, 12)); ?>
+                                        <i class="fas fa-user me-1"></i><?php echo htmlspecialchars(substr($product['User_Name'] ?? 'Unknown Owner', 0, 12)); ?>
                                     </span>
-                                    <a href="product.php?id=<?php echo $product['ProductID']; ?>" class="btn btn-primary btn-sm">
+                                    <a href="product.php?id=<?php echo ($product['ProductID'] ?? 0); ?>" class="btn btn-primary btn-sm">
                                         <i class="fas fa-eye me-1"></i>View
                                     </a>
                                 </div>
@@ -568,7 +568,7 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <i class="fas fa-user-plus me-2"></i>Sign Up as Renter
                     </a>
                 <?php else: ?>
-                    <?php if($_SESSION['user_role'] == 2): ?>
+                    <?php if(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 2): ?>
                         <a href="owner/upgrade.php" class="btn btn-warning btn-lg">
                             <i class="fas fa-arrow-up me-2"></i>Upgrade to Owner Account
                         </a>

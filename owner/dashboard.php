@@ -80,9 +80,6 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             --sidebar-width: 250px;
         }
         
@@ -131,12 +128,12 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
         
         .stat-card.products { background: var(--primary-gradient); color: white; }
-        .stat-card.bookings { background: var(--secondary-gradient); color: white; }
-        .stat-card.earnings { background: var(--accent-gradient); color: white; }
-        .stat-card.month { background: var(--info-gradient); color: white; }
+        .stat-card.bookings { background: var(--primary-gradient); color: white; }
+        .stat-card.earnings { background: var(--primary-gradient); color: white; }
+        .stat-card.month { background: var(--primary-gradient); color: white; }
         
         .subscription-card {
-            background: var(--secondary-gradient);
+            background: var(--primary-gradient);
             color: white;
             border: none;
             border-radius: 15px;
@@ -163,12 +160,12 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             color: white;
         }
         
-        .status-badge.pending { background: #ffc107; }
-        .status-badge.confirmed { background: #198754; }
-        .status-badge.in-progress { background: #0d6efd; }
-        .status-badge.completed { background: #6c757d; }
-        .status-badge.cancelled { background: #dc3545; }
-        
+        .status-badge.pending { background: var(--primary-gradient); }
+        .status-badge.confirmed { background: var(--primary-gradient); }
+        .status-badge.in-progress { background: var(--primary-gradient); }
+        .status-badge.completed { background: var(--primary-gradient); }
+        .status-badge.cancelled { background: var(--primary-gradient); }
+
         .quick-action-btn {
             border-radius: 15px;
             padding: 1rem;
@@ -483,25 +480,25 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </h5>
                             <div class="row">
                                 <div class="col-lg-3 col-md-6 mb-3">
-                                    <a href="add-product.php" class="btn btn-success w-100 quick-action-btn">
+                                    <a href="add-product.php" class="btn w-100 quick-action-btn" style="background: var(--primary-gradient); color: white;">
                                         <i class="fas fa-plus fa-2x mb-2"></i><br>
                                         <span>Add Product</span>
                                     </a>
                                 </div>
                                 <div class="col-lg-3 col-md-6 mb-3">
-                                    <a href="bookings.php" class="btn btn-primary w-100 quick-action-btn">
+                                    <a href="bookings.php" class="btn w-100 quick-action-btn" style="background: var(--primary-gradient); color: white;">
                                         <i class="fas fa-calendar-check fa-2x mb-2"></i><br>
                                         <span>View Bookings</span>
                                     </a>
                                 </div>
                                 <div class="col-lg-3 col-md-6 mb-3">
-                                    <a href="earnings.php" class="btn btn-warning w-100 quick-action-btn">
+                                    <a href="earnings.php" class="btn w-100 quick-action-btn" style="background: var(--primary-gradient); color: white;">
                                         <i class="fas fa-chart-line fa-2x mb-2"></i><br>
                                         <span>Earnings Report</span>
                                     </a>
                                 </div>
                                 <div class="col-lg-3 col-md-6 mb-3">
-                                    <a href="messages.php" class="btn btn-info w-100 quick-action-btn">
+                                    <a href="messages.php" class="btn w-100 quick-action-btn" style="background: var(--primary-gradient); color: white;">
                                         <i class="fas fa-comments fa-2x mb-2"></i><br>
                                         <span>Messages</span>
                                     </a>
@@ -520,7 +517,7 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <h5 class="card-title mb-0">
                                 <i class="fas fa-clock text-primary me-2"></i>Recent Booking Requests
                             </h5>
-                            <a href="bookings.php" class="btn btn-outline-primary btn-sm" style="border-radius: 20px;">View All</a>
+                            <a href="bookings.php" class="btn btn-sm" style="background: var(--primary-gradient); color: white; border-radius: 20px;">View All</a>
                         </div>
                         <div class="card-body">
                             <?php if(empty($recent_bookings)): ?>
@@ -528,7 +525,7 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <i class="fas fa-calendar-times fa-4x text-muted mb-3"></i>
                                     <h6 class="text-muted">No booking requests yet</h6>
                                     <p class="text-muted">Start by adding products to your inventory!</p>
-                                    <a href="add-product.php" class="btn btn-success" style="border-radius: 25px;">
+                                    <a href="add-product.php" class="btn" style="background: var(--primary-gradient); color: white; border-radius: 25px;">
                                         <i class="fas fa-plus"></i> Add Product
                                     </a>
                                 </div>

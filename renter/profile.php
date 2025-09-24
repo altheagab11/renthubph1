@@ -265,11 +265,7 @@ function getFieldValue($user_info, $field, $default = '') {
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -330,7 +326,7 @@ function getFieldValue($user_info, $field, $default = '') {
             width: 120px;
             height: 120px;
             border-radius: 50%;
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -350,13 +346,13 @@ function getFieldValue($user_info, $field, $default = '') {
             overflow: hidden;
             margin-bottom: 1.5rem;
         }
-        
-        
-        .stat-card.bookings { background: var(--primary-gradient); color: white; }
-        .stat-card.spent { background: var(--warning-gradient); color: white; }
-        .stat-card.reviews { background: var(--accent-gradient); color: white; }
-        .stat-card.member { background: var(--info-gradient); color: white; }
-        
+
+
+        .stat-card.bookings { background: var(--secondary-gradient); color: white; }
+        .stat-card.spent { background: var(--secondary-gradient); color: white; }
+        .stat-card.reviews { background: var(--secondary-gradient); color: white; }
+        .stat-card.member { background: var(--secondary-gradient); color: white; }
+
         .profile-section {
             background: white;
             border-radius: 20px;
@@ -391,7 +387,7 @@ function getFieldValue($user_info, $field, $default = '') {
         }
         
         .btn-save {
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             border: none;
             border-radius: 25px;
             padding: 0.75rem 2rem;
@@ -454,7 +450,7 @@ function getFieldValue($user_info, $field, $default = '') {
         }
         
         .verification-badge {
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 20px;
             padding: 0.5rem 1rem;
@@ -473,7 +469,7 @@ function getFieldValue($user_info, $field, $default = '') {
         }
         
         .demo-notice {
-            background: var(--warning-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 20px;
             padding: 2rem;
@@ -669,8 +665,8 @@ function getFieldValue($user_info, $field, $default = '') {
                                     <i class="fas fa-check-circle me-1"></i>Verified
                                 </span>
                             <?php else: ?>
-                                <span class="verification-badge bg-warning text-dark" style="font-size:1rem; padding:0.25em 0.75em; border-radius:1em;">
-                                    <i class="fas fa-hourglass-half me-1"></i>Waiting for admin to verify
+                                <span class="verification-badge text-white" style="background: #0ecb00ff; font-size:1rem; padding:0.25em 0.75em; border-radius:1em;">
+                                    <i class="fas fa-hourglass-half me-1" style="color: #FFFFFF;"></i>Waiting for admin to verify
                                 </span>
                             <?php endif; ?>
                         </h2>

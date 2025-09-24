@@ -143,10 +143,6 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -195,8 +191,8 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         }
         
         .stat-card.conversations { background: var(--primary-gradient); color: white; }
-        .stat-card.unread { background: var(--accent-gradient); color: white; }
-        .stat-card.response { background: var(--info-gradient); color: white; }
+        .stat-card.unread { background: var(--primary-gradient); color: white; }
+        .stat-card.response { background: var(--primary-gradient); color: white; }
         
         .messages-container {
             display: flex;
@@ -670,7 +666,7 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     </div>
                     
                     <div class="col-md-3 mb-3">
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn w-100" style="background: var(--primary-gradient); color: white; border-radius: 15px;">
                             <i class="fas fa-search me-2"></i>Filter
                         </button>
                     </div>

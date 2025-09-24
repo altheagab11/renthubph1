@@ -151,11 +151,7 @@ if ($payments_table_exists) {
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -198,12 +194,12 @@ if ($payments_table_exists) {
             overflow: hidden;
             margin-bottom: 1.5rem;
         }
-        
-        
-        .stat-card.total { background: var(--primary-gradient); color: white; }
-        .stat-card.amount { background: var(--warning-gradient); color: white; }
-        .stat-card.successful { background: var(--info-gradient); color: white; }
-        .stat-card.pending { background: var(--accent-gradient); color: white; }
+
+
+        .stat-card.total { background: var(--secondary-gradient); color: white; }
+        .stat-card.amount { background: var(--secondary-gradient); color: white; }
+        .stat-card.successful { background: var(--secondary-gradient); color: white; }
+        .stat-card.pending { background: var(--secondary-gradient); color: white; }
         
         .payment-card {
             border: none;
@@ -285,9 +281,9 @@ if ($payments_table_exists) {
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        .action-btn.download { background: var(--primary-gradient); color: white; }
-        .action-btn.view { background: var(--info-gradient); color: white; }
-        .action-btn.refund { background: var(--accent-gradient); color: white; }
+        .action-btn.download { background: var(--secondary-gradient); color: white; }
+        .action-btn.view { background: var(--secondary-gradient); color: white; }
+        .action-btn.refund { background: var(--secondary-gradient); color: white; }
         
         .navbar {
             border-bottom: 1px solid #e9ecef;
@@ -358,7 +354,7 @@ if ($payments_table_exists) {
         }
         
         .amount-display {
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 15px;
             padding: 1rem;
@@ -367,7 +363,7 @@ if ($payments_table_exists) {
         }
         
         .demo-notice {
-            background: var(--warning-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 20px;
             padding: 2rem;
@@ -656,7 +652,7 @@ if ($payments_table_exists) {
 
             <!-- Quick Stats -->
             <div class="quick-stats">
-                <h5 class="text-primary mb-3">
+                <h5 class="text-dark mb-3">
                     <i class="fas fa-chart-line me-2"></i>Payment Overview
                 </h5>
                 <div class="row">

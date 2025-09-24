@@ -1,18 +1,4 @@
-// --- Flagged bookings in session (demo only) ---
-session_start();
-if (!isset($_SESSION['flagged_bookings'])) {
-    $_SESSION['flagged_bookings'] = [];
-}
-if (isset($_POST['flag_booking_id'])) {
-    $bid = $_POST['flag_booking_id'];
-    if (isset($_SESSION['flagged_bookings'][$bid])) {
-        unset($_SESSION['flagged_bookings'][$bid]);
-    } else {
-        $_SESSION['flagged_bookings'][$bid] = true;
-    }
-    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
-    exit;
-}
+
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../config/database.php';

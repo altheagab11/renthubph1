@@ -92,11 +92,7 @@ if ($active_conversation_id) {
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -145,10 +141,10 @@ if ($active_conversation_id) {
             box-shadow: 0 20px 40px rgba(0,0,0,0.15);
         }
         
-        .stat-card.total { background: var(--info-gradient); color: white; }
-        .stat-card.unread { background: var(--accent-gradient); color: white; }
-        .stat-card.conversations { background: var(--primary-gradient); color: white; }
-        .stat-card.response { background: var(--warning-gradient); color: white; }
+        .stat-card.total { background: var(--secondary-gradient); color: white; }
+        .stat-card.unread { background: var(--secondary-gradient); color: white; }
+        .stat-card.conversations { background: var(--secondary-gradient); color: white; }
+        .stat-card.response { background: var(--secondary-gradient); color: white; }
         
         .messages-container {
             background: white;
@@ -185,7 +181,7 @@ if ($active_conversation_id) {
         }
         
         .conversation-item.active {
-            background: var(--info-gradient);
+            background: var(--secondary-gradient);
             color: white;
         }
         
@@ -230,7 +226,7 @@ if ($active_conversation_id) {
         }
         
         .chat-header {
-            background: var(--info-gradient);
+            background: var(--secondary-gradient);
             color: white;
             padding: 1rem;
             border-bottom: 1px solid #e9ecef;
@@ -265,7 +261,7 @@ if ($active_conversation_id) {
         }
         
         .message-bubble.sent .message-content {
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-bottom-right-radius: 5px;
         }
@@ -316,7 +312,7 @@ if ($active_conversation_id) {
         }
         
         .btn-send {
-            background: var(--primary-gradient);
+            background: var(--secondary-gradient);
             border: none;
             border-radius: 50%;
             width: 45px;
@@ -548,7 +544,7 @@ if ($active_conversation_id) {
                     <!-- Conversations Sidebar -->
                     <div class="col-md-4 conversations-sidebar">
                         <div class="p-3 border-bottom">
-                            <h6 class="mb-0 text-primary">
+                            <h6 class="mb-0 text-dark">
                                 <i class="fas fa-users me-2"></i>Conversations (<?php echo count($conversations); ?>)
                                 <?php if($stats['unread_conversations'] > 0): ?>
                                     <span class="badge bg-danger ms-2"><?php echo $stats['unread_conversations']; ?></span>

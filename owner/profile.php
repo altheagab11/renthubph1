@@ -387,7 +387,7 @@ $stats['member_since'] = date('F Y', strtotime($user_profile['User_CreatedAt']))
         }
         
         .verification-badge {
-            background: #28a745;
+            background: #194bffff;
             color: white;
             border-radius: 20px;
             padding: 0.25rem 0.75rem;
@@ -729,7 +729,7 @@ $stats['member_since'] = date('F Y', strtotime($user_profile['User_CreatedAt']))
                         </div>
                         
                         <div class="d-flex justify-content-end">
-                            <button type="submit" name="change_password" class="btn btn-danger-custom">
+                            <button type="submit" name="change_password" class="btn" style="background: var(--primary-gradient); color: white; border-radius: 25px; padding: 0.75rem 2rem; font-weight: 600;">
                                 <i class="fas fa-key me-2"></i>Change Password
                             </button>
                         </div>

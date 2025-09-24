@@ -155,10 +155,6 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -207,9 +203,9 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
         
         .stat-card.total { background: var(--primary-gradient); color: white; }
-        .stat-card.rating { background: var(--warning-gradient); color: white; }
-        .stat-card.pending { background: var(--accent-gradient); color: white; }
-        .stat-card.response { background: var(--info-gradient); color: white; }
+        .stat-card.rating { background: var(--primary-gradient); color: white; }
+        .stat-card.pending { background: var(--primary-gradient); color: white; }
+        .stat-card.response { background: var(--primary-gradient); color: white; }
         
         .review-card {
             border: none;
@@ -724,7 +720,7 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </div>
                     
                     <div class="col-md-3 mb-3">
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn w-100" style="background: var(--primary-gradient); color: white; border-radius: 15px;">
                             <i class="fas fa-search me-2"></i>Filter
                         </button>
                     </div>
@@ -737,7 +733,7 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <i class="fas fa-star-half-alt"></i>
                     <h4 class="text-muted">No reviews yet</h4>
                     <p class="text-muted">Customer reviews will appear here after completed bookings.</p>
-                    <a href="products.php" class="btn btn-success btn-lg" style="border-radius: 25px;">
+                    <a href="products.php" class="btn btn-lg" style="background: var(--primary-gradient); color: white; border-radius: 25px;">
                         <i class="fas fa-box me-2"></i>Manage Products
                     </a>
                 </div>

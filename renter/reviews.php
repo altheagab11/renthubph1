@@ -224,11 +224,7 @@ if ($reviews_table_exists) {
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -271,12 +267,12 @@ if ($reviews_table_exists) {
             overflow: hidden;
             margin-bottom: 1.5rem;
         }
-        
-        
-        .stat-card.total { background: var(--warning-gradient); color: white; }
-        .stat-card.average { background: var(--primary-gradient); color: white; }
-        .stat-card.pending { background: var(--info-gradient); color: white; }
-        .stat-card.five-star { background: var(--accent-gradient); color: white; }
+
+
+        .stat-card.total { background: var(--secondary-gradient); color: white; }
+        .stat-card.average { background: var(--secondary-gradient); color: white; }
+        .stat-card.pending { background: var(--secondary-gradient); color: white; }
+        .stat-card.five-star { background: var(--secondary-gradient); color: white; }
         
         .review-card {
             border: none;
@@ -369,9 +365,9 @@ if ($reviews_table_exists) {
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        .action-btn.edit { background: var(--info-gradient); color: white; }
-        .action-btn.delete { background: var(--accent-gradient); color: white; }
-        .action-btn.submit { background: var(--primary-gradient); color: white; }
+        .action-btn.edit { background: var(--secondary-gradient); color: white; }
+        .action-btn.delete { background: var(--secondary-gradient); color: white; }
+        .action-btn.submit { background: var(--secondary-gradient); color: white; }
         
         .navbar {
             border-bottom: 1px solid #e9ecef;
@@ -431,7 +427,7 @@ if ($reviews_table_exists) {
         }
         
         .pending-badge {
-            background: var(--info-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 20px;
             padding: 0.5rem 1rem;
@@ -443,7 +439,7 @@ if ($reviews_table_exists) {
         }
         
         .demo-notice {
-            background: var(--warning-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 20px;
             padding: 2rem;
@@ -452,7 +448,7 @@ if ($reviews_table_exists) {
         }
         
         .review-tips {
-            background: var(--info-gradient);
+            background: var(--secondary-gradient);
             color: white;
             border-radius: 20px;
             padding: 2rem;

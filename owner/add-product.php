@@ -467,7 +467,7 @@ try {
         }
         
         .progress-step.active .step-number {
-            background: var(--warning-gradient);
+            background: var(--primary-gradient);
         }
         
         .input-group-text {

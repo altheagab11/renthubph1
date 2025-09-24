@@ -342,11 +342,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         }
 
         :root {
-            --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -390,9 +386,9 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             margin-bottom: 1.5rem;
         }
         
-        .stat-card.total { background: var(--primary-gradient); color: white; }
-        .stat-card.active { background: var(--warning-gradient); color: white; }
-        .stat-card.spent { background: var(--info-gradient); color: white; }
+        .stat-card.total { background: var(--secondary-gradient); color: white; }
+        .stat-card.active { background: var(--secondary-gradient); color: white; }
+        .stat-card.spent { background: var(--secondary-gradient); color: white; }
         .stat-card.completed { background: var(--secondary-gradient); color: white; }
         
         .booking-card {

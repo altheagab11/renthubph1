@@ -239,7 +239,7 @@ try {
         }
         
         .settings-header {
-            background: var(--info-gradient);
+            background: var(--primary-gradient);
             color: white;
             border-radius: 20px;
             padding: 2rem;
@@ -333,7 +333,7 @@ try {
         }
         
         .btn-reset {
-            background: var(--secondary-gradient);
+            background: var(--primary-gradient);
             border: none;
             border-radius: 25px;
             padding: 0.75rem 2rem;

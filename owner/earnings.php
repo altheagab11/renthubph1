@@ -173,10 +173,6 @@ if ($previous_month_earnings > 0) {
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -226,9 +222,9 @@ if ($previous_month_earnings > 0) {
         }
         
         .stat-card.earnings { background: var(--primary-gradient); color: white; }
-        .stat-card.bookings { background: var(--secondary-gradient); color: white; }
-        .stat-card.average { background: var(--info-gradient); color: white; }
-        .stat-card.commission { background: var(--accent-gradient); color: white; }
+        .stat-card.bookings { background: var(--primary-gradient); color: white; }
+        .stat-card.average { background: var(--primary-gradient); color: white; }
+        .stat-card.commission { background: var(--primary-gradient); color: white; }
         
         .chart-container {
             position: relative;
@@ -493,7 +489,7 @@ if ($previous_month_earnings > 0) {
                 
                 <div class="navbar-nav ms-auto d-flex flex-row">
                     <div class="nav-item me-3">
-                        <button class="btn btn-success" onclick="window.print()" style="border-radius: 25px;">
+                        <button class="btn" onclick="window.print()" style="background: var(--primary-gradient); color: white; border-radius: 25px;">
                             <i class="fas fa-download me-2"></i>Export Report
                         </button>
                     </div>
@@ -537,12 +533,12 @@ if ($previous_month_earnings > 0) {
                             <i class="fas fa-calendar me-2"></i>Time Period
                         </label>
                         <div class="d-flex flex-wrap">
-                            <button type="button" class="btn period-btn <?php echo $period == 'today' ? 'active' : 'btn-outline-primary'; ?>" onclick="setPeriod('today')">Today</button>
-                            <button type="button" class="btn period-btn <?php echo $period == 'this_week' ? 'active' : 'btn-outline-primary'; ?>" onclick="setPeriod('this_week')">This Week</button>
-                            <button type="button" class="btn period-btn <?php echo $period == 'this_month' ? 'active' : 'btn-outline-primary'; ?>" onclick="setPeriod('this_month')">This Month</button>
-                            <button type="button" class="btn period-btn <?php echo $period == 'last_month' ? 'active' : 'btn-outline-primary'; ?>" onclick="setPeriod('last_month')">Last Month</button>
-                            <button type="button" class="btn period-btn <?php echo $period == 'this_year' ? 'active' : 'btn-outline-primary'; ?>" onclick="setPeriod('this_year')">This Year</button>
-                            <button type="button" class="btn period-btn <?php echo $period == 'custom' ? 'active' : 'btn-outline-primary'; ?>" onclick="setPeriod('custom')">Custom</button>
+                            <button type="button" class="btn period-btn <?php echo $period == 'today' ? 'active' : 'var(--primary-gradient)'; ?>" onclick="setPeriod('today')">Today</button>
+                            <button type="button" class="btn period-btn <?php echo $period == 'this_week' ? 'active' : 'var(--primary-gradient)'; ?>" onclick="setPeriod('this_week')">This Week</button>
+                            <button type="button" class="btn period-btn <?php echo $period == 'this_month' ? 'active' : 'var(--primary-gradient)'; ?>" onclick="setPeriod('this_month')">This Month</button>
+                            <button type="button" class="btn period-btn <?php echo $period == 'last_month' ? 'active' : 'var(--primary-gradient)'; ?>" onclick="setPeriod('last_month')">Last Month</button>
+                            <button type="button" class="btn period-btn <?php echo $period == 'this_year' ? 'active' : 'var(--primary-gradient)'; ?>" onclick="setPeriod('this_year')">This Year</button>
+                            <button type="button" class="btn period-btn <?php echo $period == 'custom' ? 'active' : 'var(--primary-gradient)'; ?>" onclick="setPeriod('custom')">Custom</button>
                         </div>
                     </div>
                     

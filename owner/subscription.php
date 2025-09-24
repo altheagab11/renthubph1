@@ -376,10 +376,6 @@ function getPlanType($plan_name) {
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -428,10 +424,10 @@ function getPlanType($plan_name) {
             box-shadow: 0 20px 40px rgba(0,0,0,0.15);
         }
         
-        .stat-card.remaining { background: var(--warning-gradient); color: white; }
-        .stat-card.spent { background: var(--info-gradient); color: white; }
+        .stat-card.remaining { background: var(--primary-gradient); color: white; }
+        .stat-card.spent { background: var(--primary-gradient); color: white; }
         .stat-card.products { background: var(--primary-gradient); color: white; }
-        .stat-card.subscriptions { background: var(--accent-gradient); color: white; }
+        .stat-card.subscriptions { background: var(--primary-gradient); color: white; }
         
         .subscription-header {
             background: var(--primary-gradient);
@@ -874,7 +870,7 @@ function getPlanType($plan_name) {
                     </div>
                     <div class="col-md-4 text-end" style="position: relative; z-index: 2;">
                         <?php if(!$current_subscription && !empty($available_plans)): ?>
-                            <button class="btn btn-light btn-lg" onclick="scrollToPlans()">
+                            <button class="btn btn-warning btn-lg" onclick="scrollToPlans()">
                                 <i class="fas fa-crown me-2"></i>Choose Plan
                             </button>
                         <?php endif; ?>

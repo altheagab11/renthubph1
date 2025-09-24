@@ -182,10 +182,6 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            --secondary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             --sidebar-width: 250px;
         }
         
@@ -234,9 +230,9 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
         }
         
         .stat-card.total { background: var(--primary-gradient); color: white; }
-        .stat-card.pending { background: var(--warning-gradient); color: white; }
-        .stat-card.active { background: var(--secondary-gradient); color: white; }
-        .stat-card.revenue { background: var(--info-gradient); color: white; }
+        .stat-card.pending { background: var(--primary-gradient); color: white; }
+        .stat-card.active { background: var(--primary-gradient); color: white; }
+        .stat-card.revenue { background: var(--primary-gradient); color: white; }
         
         .booking-card {
             border: none;
@@ -646,7 +642,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                     </div>
                     
                     <div class="col-md-2 mb-3">
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn" style="background: var(--primary-gradient); color: white;">
                             <i class="fas fa-search me-2"></i>Filter
                         </button>
                     </div>
@@ -656,7 +652,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
 
             <!-- Active Bookings List -->
             <div class="card shadow mb-5" style="border-radius: 25px;">
-                <div class="card-header bg-primary text-white" style="border-radius: 25px 25px 0 0;">
+                <div class="card-header text-white" style="background: var(--primary-gradient); color: white; border-radius: 25px 25px 0 0;">
                     <h4 class="mb-0"><i class="fas fa-calendar-check me-2"></i>Active Bookings</h4>
                 </div>
                 <div class="card-body" style="background: #f8f9fa; border-radius: 0 0 25px 25px;">
@@ -665,7 +661,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                             <i class="fas fa-calendar-times"></i>
                             <h4 class="text-muted">No active bookings found</h4>
                             <p class="text-muted">Booking requests for your products will appear here.</p>
-                            <a href="products.php" class="btn btn-success btn-lg" style="border-radius: 25px;">
+                            <a href="products.php" class="btn btn-lg" style="background: var(--primary-gradient); color: white; border-radius: 25px;">
                                 <i class="fas fa-box me-2"></i>Manage Products
                             </a>
                         </div>

@@ -126,9 +126,9 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     /* .stat-card:hover removed: no movement on hover */
         .stat-card.bookings { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .stat-card.total { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
-        .stat-card.spent { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; }
-        .stat-card.favorites { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; }
+        .stat-card.total { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .stat-card.spent { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .stat-card.favorites { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         
         .booking-card {
             border: none;
@@ -350,19 +350,19 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     </a>
                                 </div>
                                 <div class="col-md-3 col-6 mb-3">
-                                    <a href="bookings.php" class="btn btn-success w-100">
+                                    <a href="bookings.php" class="btn btn-primary w-100">
                                         <i class="fas fa-calendar-check"></i><br>
                                         <small>My Bookings</small>
                                     </a>
                                 </div>
                                 <div class="col-md-3 col-6 mb-3">
-                                    <a href="favorites.php" class="btn btn-danger w-100">
+                                    <a href="favorites.php" class="btn btn-primary w-100">
                                         <i class="fas fa-heart"></i><br>
                                         <small>Favorites</small>
                                     </a>
                                 </div>
                                 <div class="col-md-3 col-6 mb-3">
-                                    <a href="messages.php" class="btn btn-info w-100">
+                                    <a href="messages.php" class="btn btn-primary w-100">
                                         <i class="fas fa-comments"></i><br>
                                         <small>Messages</small>
                                     </a>
