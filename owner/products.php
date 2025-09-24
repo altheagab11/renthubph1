@@ -410,7 +410,56 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         .product-card .carousel-indicators button.active {
             background-color: rgba(255,255,255,0.9);
         }
-        
+
+        /* Product Actions Row - Horizontal Button Row */
+        .product-actions-row {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: stretch;
+            gap: 0.5rem;
+            width: 100%;
+        }
+        .product-actions-row .action-col {
+            flex: 1 1 0;
+            display: flex;
+            align-items: stretch;
+        }
+        .product-actions-row .btn {
+            width: 100%;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 40px;
+            min-height: 40px;
+            max-height: 40px;
+            padding: 0;
+        }
+        .product-actions-row .btn i {
+            font-size: 1.25rem;
+            margin: 0;
+            line-height: 1;
+        }
+        .product-actions-row .action-col {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 48px;
+            max-width: 48px;
+            width: 48px;
+            flex: 0 0 48px;
+        }
+        .product-actions-row .btn {
+            width: 48px;
+            min-width: 48px;
+            max-width: 48px;
+            height: 40px;
+            min-height: 40px;
+            max-height: 40px;
+            padding: 0;
+        }
+
         /* Image Gallery Modal */
         #imageGalleryModal .carousel-item img {
             border-radius: 10px;
@@ -862,95 +911,65 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     </div>
                                 </div>
                                 
-                                <p class="card-text small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                <p class="card-text small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                                     <?php echo htmlspecialchars($product['Prod_Description']); ?>
                                 </p>
                                 
                                 <div class="d-flex justify-content-between align-items-center mt-3">
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar me-1"></i><?php echo date('M j, Y', strtotime($product['Prod_CreatedAt'])); ?>
-                                    </small>
-                                    <div class="btn-group" role="group">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" style="border-radius: 15px;">
-                                            <i class="fas fa-cog"></i>
-                                        </button>
-                                        <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="edit-product.php?id=<?php echo $product['ProductID']; ?>">
-                                                <i class="fas fa-edit me-2"></i>Edit
-                                            </a></li>
-                                            <li><a class="dropdown-item" href="../product.php?id=<?php echo $product['ProductID']; ?>" target="_blank">
-                                                <i class="fas fa-eye me-2"></i>View
-                                            </a></li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <!-- Address Details -->
-                                            <?php if($product['UA_Street'] || $product['UA_City']): ?>
-                                            <li><h6 class="dropdown-header">
-                                                <i class="fas fa-map-marker-alt me-1"></i>Address Details
-                                            </h6></li>
-                                            <li><span class="dropdown-item-text small">
-                                                <?php if($product['UA_Street']): ?>
-                                                    <strong>Street:</strong> <?php echo htmlspecialchars($product['UA_Street']); ?><br>
-                                                <?php endif; ?>
-                                                <?php if($product['UA_Barangay']): ?>
-                                                    <strong>Barangay:</strong> <?php echo htmlspecialchars($product['UA_Barangay']); ?><br>
-                                                <?php endif; ?>
-                                                <?php if($product['UA_City']): ?>
-                                                    <strong>City:</strong> <?php echo htmlspecialchars($product['UA_City']); ?><br>
-                                                <?php endif; ?>
-                                                <?php if($product['UA_Province']): ?>
-                                                    <strong>Province:</strong> <?php echo htmlspecialchars($product['UA_Province']); ?>
-                                                <?php endif; ?>
-                                            </span></li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <!-- Delivery Info -->
-                                            <li><h6 class="dropdown-header">
-                                                <i class="fas fa-truck me-1"></i>Delivery Options
-                                            </h6></li>
-                                            <li><span class="dropdown-item-text small">
-                                                <strong>Pickup:</strong> <?php echo $product['PL_PickupAvailable'] ? 'Available' : 'Not Available'; ?><br>
-                                                <strong>Delivery:</strong> <?php echo $product['PL_DeliveryAvailable'] ? 'Available' : 'Not Available'; ?>
-                                                <?php if($product['PL_DeliveryAvailable'] && $product['PL_DeliveryRadius']): ?>
-                                                    (<?php echo $product['PL_DeliveryRadius']; ?>km radius)
-                                                <?php endif; ?>
-                                                <?php if($product['PL_DeliveryAvailable'] && $product['PL_DeliveryFee']): ?>
-                                                    <br><strong>Delivery Fee:</strong> ₱<?php echo number_format($product['PL_DeliveryFee'], 2); ?>
-                                                <?php endif; ?>
-                                            </span></li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <?php endif; ?>
+                                    <div class="product-actions-row w-100">
+                                        <!-- Edit Button -->
+                                        <div class="action-col">
+                                            <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="openEditProductModal(<?php echo htmlspecialchars(json_encode($product), ENT_QUOTES, 'UTF-8'); ?>)" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </div>
+                                        <!-- View Button -->
+                                        <div class="action-col">
+                                            <a href="../product.php?id=<?php echo $product['ProductID']; ?>" target="_blank" class="btn btn-outline-secondary btn-sm w-100" title="View">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </div>
+                                        <!-- Toggle Availability Button (or placeholder) -->
+                                        <div class="action-col">
                                             <?php if($product['Prod_Status'] == 'Active'): ?>
-                                                <li>
-                                                    <form method="POST" class="d-inline">
-                                                        <input type="hidden" name="action" value="toggle_availability">
-                                                        <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                        <input type="hidden" name="current_status" value="<?php echo $product['Prod_Availability']; ?>">
-                                                        <button type="submit" class="dropdown-item">
-                                                            <i class="fas fa-<?php echo $product['Prod_Availability'] ? 'eye-slash' : 'eye'; ?> me-2"></i>
-                                                            <?php echo $product['Prod_Availability'] ? 'Make Unavailable' : 'Make Available'; ?>
-                                                        </button>
-                                                    </form>
-                                                </li>
-                                                <?php if(!$product['Prod_IsFeatured'] || $product['Prod_FeaturedUntil'] <= date('Y-m-d H:i:s')): ?>
-                                                <li>
-                                                    <form method="POST" class="d-inline">
-                                                        <input type="hidden" name="action" value="feature_product">
-                                                        <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                        <button type="submit" class="dropdown-item">
-                                                            <i class="fas fa-star me-2"></i>Feature Product
-                                                        </button>
-                                                    </form>
-                                                </li>
-                                                <?php endif; ?>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li>
-                                                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteModal" 
-                                                            data-product-id="<?php echo $product['ProductID']; ?>" 
-                                                            data-product-name="<?php echo htmlspecialchars($product['Prod_Name']); ?>">
-                                                        <i class="fas fa-trash me-2"></i>Delete
+                                                <form method="POST" class="m-0">
+                                                    <input type="hidden" name="action" value="toggle_availability">
+                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                    <input type="hidden" name="current_status" value="<?php echo $product['Prod_Availability']; ?>">
+                                                    <button type="submit" class="btn btn-outline-warning btn-sm w-100" title="<?php echo $product['Prod_Availability'] ? 'Make Unavailable' : 'Make Available'; ?>">
+                                                        <i class="fas fa-<?php echo $product['Prod_Availability'] ? 'eye-slash' : 'eye'; ?>"></i>
                                                     </button>
-                                                </li>
+                                                </form>
+                                            <?php else: ?>
+                                                <span class="d-block" style="visibility:hidden;">&nbsp;</span>
                                             <?php endif; ?>
-                                        </ul>
+                                        </div>
+                                        <!-- Feature Button (or placeholder) -->
+                                        <div class="action-col">
+                                            <?php if($product['Prod_Status'] == 'Active'): ?>
+                                                <form method="POST" class="m-0">
+                                                    <input type="hidden" name="action" value="feature_product">
+                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                    <button type="submit" class="btn btn-outline-success btn-sm w-100" title="Feature">
+                                                        <i class="fas fa-star"></i>
+                                                    </button>
+                                                </form>
+                                            <?php else: ?>
+                                                <span class="d-block" style="visibility:hidden;">&nbsp;</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <!-- Delete Button (or placeholder) -->
+                                        <div class="action-col">
+                                            <?php if($product['Prod_Status'] == 'Active'): ?>
+                                                <button class="btn btn-outline-danger btn-sm w-100" data-bs-toggle="modal" data-bs-target="#deleteModal" 
+                                                        data-product-id="<?php echo $product['ProductID']; ?>" 
+                                                        data-product-name="<?php echo htmlspecialchars($product['Prod_Name']); ?>" title="Delete">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="d-block" style="visibility:hidden;">&nbsp;</span>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
