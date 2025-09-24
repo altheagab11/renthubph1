@@ -36,7 +36,7 @@ if ($_POST) {
             case 'delete_product':
                 $product_id = $_POST['product_id'];
                 
-                $query = "UPDATE products SET Prod_Status = 'Inactive' WHERE ProductID = ? AND OwnerID = ?";
+                $query = "UPDATE products SET Prod_Status = 'Deleted' WHERE ProductID = ? AND OwnerID = ?";
                 $stmt = $conn->prepare($query);
                 $stmt->bindParam(1, $product_id);
                 $stmt->bindParam(2, $user_id);
