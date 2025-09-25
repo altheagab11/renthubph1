@@ -156,7 +156,7 @@ if ($_POST) {
             $existing_payment = $payment_check_stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$existing_payment) {
-                // Create payment record as Pending
+                // Create payment record as Completed and activate booking in one step
                 $notes = json_decode($booking_data['Book_Notes'], true);
                 $payment_method = $notes['payment_method'] ?? 'Cash';
 
@@ -166,8 +166,8 @@ if ($_POST) {
                 $random = mt_rand(1000, 9999);
                 $pay_transaction_id = "TXN{$now}-USER{$user_id}-{$random}";
 
-                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt) 
-                                  VALUES (?, ?, 'Rental Payment', ?, 'Pending', ?, NOW())";
+                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt, Pay_ProcessedAt) 
+                                  VALUES (?, ?, 'Rental Payment', ?, 'Completed', ?, NOW(), NOW())";
                 $create_payment_stmt = $conn->prepare($create_payment);
                 $create_payment_stmt->execute([
                     $booking_id,
@@ -175,8 +175,15 @@ if ($_POST) {
                     $payment_method,
                     $pay_transaction_id
                 ]);
-                $message = "Payment is now pending. Please complete your payment.";
-                $message_type = "info";
+
+                // Update booking status to Active (rental is now active)
+                $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
+                                 WHERE BookingID = ? AND RenterID = ?";
+                $booking_stmt = $conn->prepare($booking_query);
+                $booking_stmt->execute([$booking_id, $user_id]);
+
+                $message = "Payment confirmed successfully! Your rental is now active.";
+                $message_type = "success";
             } elseif ($existing_payment['Pay_Status'] === 'Pending') {
                 // If payment is already pending, mark as completed now
                 $payment_query = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
@@ -944,24 +951,24 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         </div>
                                     <?php endif; ?>
                                     
-                                    <?php if($booking['Book_Status'] == 'Confirmed'): ?>
-                                        <!-- Cancel Booking Button (for confirmed bookings) -->
+                                    <?php if($booking['Book_Status'] == 'Confirmed' || $booking['Book_Status'] == 'Active'): ?>
+                                        <!-- Cancel Booking Button (for confirmed/active bookings) -->
                                         <button type="button" class="btn action-btn cancel btn-sm" 
                                                 data-bs-toggle="modal" data-bs-target="#cancelModal-<?php echo $booking['BookingID']; ?>">
                                             <i class="fas fa-times me-1"></i>Cancel
                                         </button>
-                                        <!-- Payment options for confirmed bookings -->
+                                        <!-- Payment options for confirmed/active bookings -->
                                         <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
-                                        <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
-                                            <i class="fas fa-credit-card me-1"></i>Confirm Payment
-                                        </button>
-                                        <div class="text-warning small mt-2">
-                                            <i class="fas fa-exclamation-triangle me-1"></i>Please make payment to activate rental
-                                        </div>
+                                            <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
+                                                <i class="fas fa-credit-card me-1"></i>Confirm Payment
+                                            </button>
+                                            <div class="text-warning small mt-2">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>Please make payment to activate rental
+                                            </div>
                                         <?php elseif($booking['Pay_Status'] == 'Completed'): ?>
-                                        <div class="text-success small">
-                                            <i class="fas fa-check-circle me-1"></i>Payment Confirmed
-                                        </div>
+                                            <div class="text-success small">
+                                                <i class="fas fa-check-circle me-1"></i>Payment Confirmed
+                                            </div>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                     

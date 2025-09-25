@@ -132,7 +132,8 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $active_bookings = [];
 $history_bookings = [];
 foreach ($bookings as $b) {
-    if (in_array($b['Book_Status'], ['Pending', 'Confirmed', 'In Progress'])) {
+    // Only move to history if status is 'Completed' or 'Cancelled'
+    if (in_array($b['Book_Status'], ['Pending', 'Confirmed', 'In Progress', 'Active'])) {
         $active_bookings[] = $b;
     } else {
         $history_bookings[] = $b;
@@ -666,8 +667,20 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                             </a>
                         </div>
                     <?php else: ?>
-                        <?php foreach($active_bookings as $booking): ?>
-                            <?php /* ...existing booking card code... */ ?>
+                        <?php 
+                        foreach($active_bookings as $booking): 
+                            // Check payment status for confirmed bookings
+                            $payment_completed = false;
+                            if ($booking['Book_Status'] == 'Confirmed' || $booking['Book_Status'] == 'Active') {
+                                $pay_stmt = $conn->prepare("SELECT Pay_Status FROM payments WHERE BookingID = ? ORDER BY PaymentID DESC LIMIT 1");
+                                $pay_stmt->bindParam(1, $booking['BookingID']);
+                                $pay_stmt->execute();
+                                $pay = $pay_stmt->fetch(PDO::FETCH_ASSOC);
+                                if ($pay && $pay['Pay_Status'] === 'Completed') {
+                                    $payment_completed = true;
+                                }
+                            }
+                        ?>
                             <div class="booking-card card mb-4">
                                 <div class="booking-status">
                                     <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
@@ -736,12 +749,19 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                                                 data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
                                                             <i class="fas fa-times me-2"></i>Reject
                                                         </button>
-                                                    <?php elseif($booking['Book_Status'] == 'Confirmed'): ?>
-                                                        <button class="btn action-btn start" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                                                data-action="start" data-booking-id="<?php echo $booking['BookingID']; ?>" 
-                                                                data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                                            <i class="fas fa-play me-2"></i>Start Rental
-                                                        </button>
+                                                    <?php elseif($booking['Book_Status'] == 'Confirmed' || $booking['Book_Status'] == 'Active'): ?>
+                                                        <?php if ($payment_completed): ?>
+                                                            <button class="btn action-btn start" data-bs-toggle="modal" data-bs-target="#actionModal" 
+                                                                    data-action="start" data-booking-id="<?php echo $booking['BookingID']; ?>" 
+                                                                    data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                                                <i class="fas fa-play me-2"></i>Start Rental
+                                                            </button>
+                                                        <?php else: ?>
+                                                            <button class="btn action-btn start" disabled style="opacity:0.7;cursor:not-allowed;">
+                                                                <i class="fas fa-play me-2"></i>Start Rental
+                                                            </button>
+                                                            <div class="text-danger small mt-1">Waiting for renter payment</div>
+                                                        <?php endif; ?>
                                                     <?php elseif($booking['Book_Status'] == 'In Progress'): ?>
                                                         <button class="btn action-btn complete" data-bs-toggle="modal" data-bs-target="#actionModal" 
                                                                 data-action="complete" data-booking-id="<?php echo $booking['BookingID']; ?>" 
