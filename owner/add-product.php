@@ -1025,7 +1025,6 @@ try {
                                                    value="<?php echo isset($_POST['location_barangay']) ? htmlspecialchars($_POST['location_barangay']) : ''; ?>">
                                         </div>
                                     </div>
-                                    
                                     <div class="row mb-3">
                                         <div class="col-md-4">
                                             <label for="location_city" class="form-label">City</label>
@@ -1046,6 +1045,43 @@ try {
                                                    value="<?php echo isset($_POST['location_zipcode']) ? htmlspecialchars($_POST['location_zipcode']) : ''; ?>">
                                         </div>
                                     </div>
+                                    <div class="mb-2">
+                                        <button type="button" class="btn btn-outline-success btn-sm" id="fetch-owner-address">
+                                            <i class="fas fa-map-marker-alt me-1"></i> Use My Default Address
+                                        </button>
+                                    </div>
+<script>
+function fillOwnerAddressIfEmpty(data) {
+    if (!document.getElementById('location_street').value) document.getElementById('location_street').value = data.UA_Street || '';
+    if (!document.getElementById('location_barangay').value) document.getElementById('location_barangay').value = data.UA_Barangay || '';
+    if (!document.getElementById('location_city').value) document.getElementById('location_city').value = data.UA_City || '';
+    if (!document.getElementById('location_province').value) document.getElementById('location_province').value = data.UA_Province || '';
+    if (!document.getElementById('location_zipcode').value) document.getElementById('location_zipcode').value = data.UA_ZipCode || '';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-fill on page load
+    fetch('../api/get-owner-address.php')
+        .then(response => response.json())
+        .then(data => {
+            if (data) {
+                fillOwnerAddressIfEmpty(data);
+            }
+        });
+    // Button click (manual fetch)
+    document.getElementById('fetch-owner-address').addEventListener('click', function() {
+        fetch('../api/get-owner-address.php')
+            .then(response => response.json())
+            .then(data => {
+                if (data) {
+                    fillOwnerAddressIfEmpty(data);
+                } else {
+                    alert('No address found. Please add your address in your profile.');
+                }
+            })
+            .catch(() => alert('Failed to fetch address. Please try again.'));
+    });
+});
+</script>
                                 </div>
 
                                 <!-- Form Actions -->

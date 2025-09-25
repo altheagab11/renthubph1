@@ -677,9 +677,14 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                 <div class="card-body p-4">
                                     <div class="row">
                                         <div class="col-md-3">
-                                            <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                                 class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;" 
-                                                 alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                            <img
+                                                src="<?php 
+                                                    $imgPath = $booking['PI_ImagePath'] ? '../' . ltrim($booking['PI_ImagePath'], '/') : '../assets/images/no-image.jpg';
+                                                    echo htmlspecialchars($imgPath); 
+                                                ?>"
+                                                class="img-fluid rounded" style="width: 240px; height: 240px; object-fit: cover; aspect-ratio: 1 / 1;"
+                                                alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>"
+                                                onerror="this.onerror=null;this.src='../assets/images/no-image.jpg';">
                                         </div>
                                         <div class="col-md-6">
                                             <h5 class="mb-2"><?php echo htmlspecialchars($booking['Prod_Name']); ?></h5>

@@ -208,7 +208,8 @@ switch ($sort_by) {
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $items_per_page = $view_mode == 'table' ? 20 : 12;
 $offset = ($page - 1) * $items_per_page;
-// Build WHERE clause string
+// Always hide deleted/inactive products from renters
+$where_conditions[] = "p.Prod_Status = 'Active'";
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(' AND ', $where_conditions) : "";
 // Count total products for pagination
 $count_query = "SELECT COUNT(DISTINCT p.ProductID) as total
@@ -280,6 +281,8 @@ $stmt = $conn->prepare($query);
 $stmt->execute(array_merge([$user_id], $params));
 $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Get all images for each product (for gallery view)
+// DEBUG: Output fetched products for troubleshooting
+// DEBUG: Output all filters applied for troubleshooting
 $product_images = [];
 if (!empty($products)) {
     $product_ids = array_column($products, 'ProductID');

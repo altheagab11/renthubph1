@@ -536,7 +536,7 @@ function getPlanType($plan_name) {
         }
 
         .btn-cancel {
-            background: var(--accent-gradient);
+            background: linear-gradient(90deg, #dc3545 0%, #b52a37 100%); /* Red gradient */
             border: none;
             border-radius: 25px;
             padding: 0.75rem 2rem;
@@ -546,13 +546,14 @@ function getPlanType($plan_name) {
         }
         
         .btn-cancel:hover {
+            background: linear-gradient(90deg, #b52a37 0%, #dc3545 100%); /* Reverse gradient on hover */
             transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(240, 147, 251, 0.4);
-            color: white;
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.4);
+            color: #fff;
         }
 
         .btn-pay-now {
-            background: var(--warning-gradient);
+            background: linear-gradient(90deg, #28a745 0%, #218838 100%); /* Green gradient */
             border: none;
             border-radius: 25px;
             padding: 0.75rem 2rem;
@@ -562,9 +563,10 @@ function getPlanType($plan_name) {
         }
         
         .btn-pay-now:hover {
+            background: linear-gradient(90deg, #218838 0%, #28a745 100%); /* Reverse gradient on hover */
             transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(246, 211, 101, 0.4);
-            color: white;
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.4);
+            color: #fff;
         }
         
         .feature-list {
@@ -832,7 +834,7 @@ function getPlanType($plan_name) {
 
             <!-- Pending Payments Alert -->
             <?php if(!empty($pending_payments)): ?>
-            <div class="payment-alert">
+            <div class="payment-alert" style="background: #ffe066; color: #212529; font-weight: bold;">
                 <h5 class="mb-3">
                     <i class="fas fa-exclamation-triangle me-2"></i>Payment Required
                 </h5>
