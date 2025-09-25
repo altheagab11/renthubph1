@@ -117,11 +117,13 @@ $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'b.Book_C
 // Get bookings
 $query = "SELECT b.*, p.Prod_Name, p.Prod_RentalPrice, p.Prod_PriceType, 
           pi.PI_ImagePath, u.User_Name as Renter_Name, u.User_Phone as Renter_Phone,
-          u.User_Email as Renter_Email
+          u.User_Email as Renter_Email,
+          CONCAT_WS(', ', ua.UA_Street, ua.UA_Barangay, ua.UA_City, ua.UA_Province, ua.UA_ZipCode) AS Renter_Address
           FROM bookings b
           JOIN products p ON b.ProductID = p.ProductID
           LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
           JOIN user_accounts u ON b.RenterID = u.UserID
+          LEFT JOIN user_addresses ua ON ua.UserID = u.UserID AND ua.UA_IsDefault = 1
           WHERE " . implode(' AND ', $conditions) . "
           ORDER BY " . $order_by;
 
@@ -270,7 +272,8 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
         .status-badge.in-progress { background: #0d6efd; }
         .status-badge.completed { background: #6c757d; }
         .status-badge.cancelled { background: #dc3545; }
-        .status-badge.disputed { background: #fd7e14; }
+    .status-badge.active { background: #0d47a1; color: #fff; }
+    .status-badge.disputed { background: #fd7e14; }
         
         .search-filters {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -667,27 +670,29 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                             </a>
                         </div>
                     <?php else: ?>
-                        <?php 
-                        foreach($active_bookings as $booking): 
-                            // Check payment status for confirmed bookings
-                            $payment_completed = false;
-                            if ($booking['Book_Status'] == 'Confirmed' || $booking['Book_Status'] == 'Active') {
-                                $pay_stmt = $conn->prepare("SELECT Pay_Status FROM payments WHERE BookingID = ? ORDER BY PaymentID DESC LIMIT 1");
-                                $pay_stmt->bindParam(1, $booking['BookingID']);
-                                $pay_stmt->execute();
-                                $pay = $pay_stmt->fetch(PDO::FETCH_ASSOC);
-                                if ($pay && $pay['Pay_Status'] === 'Completed') {
-                                    $payment_completed = true;
-                                }
-                            }
-                        ?>
-                            <div class="booking-card card mb-4">
-                                <div class="booking-status">
-                                    <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
-                                        <?php echo htmlspecialchars($booking['Book_Status']); ?>
-                                    </span>
-                                </div>
-                                <div class="card-body p-4">
+                        <?php foreach($active_bookings as $booking): ?>
+    <?php 
+    $payment_completed = false;
+    // Check payment status for this booking
+    $pay_stmt = $conn->prepare("SELECT Pay_Status FROM payments WHERE BookingID = ? ORDER BY PaymentID DESC LIMIT 1");
+    $pay_stmt->execute([$booking['BookingID']]);
+    $pay = $pay_stmt->fetch(PDO::FETCH_ASSOC);
+    if ($pay && $pay['Pay_Status'] === 'Completed') {
+        $payment_completed = true;
+    }
+    $notes = json_decode($booking['Book_Notes'], true); 
+    ?>
+    <div class="booking-card card mb-4">
+        <div class="row">
+            <div class="col-12 d-flex justify-content-end align-items-center" style="min-height: 40px; padding-right: 24px;">
+                <div class="booking-status" style="position:static;top:auto;right:auto;">
+                    <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
+                        <?php echo htmlspecialchars($booking['Book_Status']); ?>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-4">
                                     <div class="row">
                                         <div class="col-md-3">
                                             <img
@@ -725,6 +730,27 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                                 </div>
                                                 <div class="timeline-item">
                                                     <strong>Pickup:</strong> <?php echo htmlspecialchars($booking['Book_PickupType']); ?>
+                                                </div>
+                                            </div>
+                                            <!-- Booking Details Card -->
+                                            <div class="mt-4">
+                                                <div class="p-3" style="background: #eaf8fa; border-radius: 15px;">
+                                                    <strong>Contact Information:</strong><br>
+                                                    Name: <?php echo htmlspecialchars($booking['Renter_Name']); ?><br>
+                                                    Phone: <?php echo htmlspecialchars($booking['Renter_Phone']); ?><br>
+                                                    Email: <?php echo htmlspecialchars($booking['Renter_Email']); ?><br>
+                                                    <br>
+                                                    <strong>Address:</strong><br>
+                                                    <?php echo htmlspecialchars($booking['Renter_Address']); ?><br>
+                                                    <br>
+                                                    <strong>Service:</strong><br>
+                                                    <?php echo htmlspecialchars($booking['Book_PickupType']); ?><br>
+                                                    <br>
+                                                    <strong>Payment Method:</strong><br>
+                                                    <?php echo isset($notes['payment_method']) ? htmlspecialchars($notes['payment_method']) : ''; ?><br>
+                                                    <br>
+                                                    <strong>Special Instructions:</strong><br>
+                                                    <?php echo isset($notes['special_instructions']) ? htmlspecialchars($notes['special_instructions']) : ''; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -783,14 +809,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                         </div>
                                     </div>
                                     <?php if($booking['Book_Notes']): ?>
-                                    <div class="row mt-3">
-                                        <div class="col-12">
-                                            <div class="alert alert-info" style="border-radius: 15px;">
-                                                <h6><i class="fas fa-sticky-note me-2"></i>Renter Notes:</h6>
-                                                <p class="mb-0"><?php echo nl2br(htmlspecialchars($booking['Book_Notes'])); ?></p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <!-- Renter Notes removed -->
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -822,11 +841,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                 </div>
                                 <div class="card-body p-4">
                                     <div class="row">
-                                        <div class="col-md-3">
-                                            <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                                 class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;" 
-                                                 alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                        </div>
+                                        <!-- Image container removed for booking history -->
                                         <div class="col-md-6">
                                             <h5 class="mb-2"><?php echo htmlspecialchars($booking['Prod_Name']); ?></h5>
                                             <p class="text-muted mb-2">Booking #<?php echo $booking['BookingID']; ?></p>
@@ -874,16 +889,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                             </div>
                                         </div>
                                     </div>
-                                    <?php if($booking['Book_Notes']): ?>
-                                    <div class="row mt-3">
-                                        <div class="col-12">
-                                            <div class="alert alert-info" style="border-radius: 15px;">
-                                                <h6><i class="fas fa-sticky-note me-2"></i>Renter Notes:</h6>
-                                                <p class="mb-0"><?php echo nl2br(htmlspecialchars($booking['Book_Notes'])); ?></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <?php endif; ?>
+                                    <!-- Renter Notes removed (second instance) -->
                                 </div>
                             </div>
                         <?php endforeach; ?>

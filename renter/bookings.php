@@ -845,7 +845,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 <?php $booking_notes = formatBookingNotes($booking['Book_Notes']); ?>
                 <div class="booking-card card" data-payment-method="<?php echo htmlspecialchars($booking_notes['payment_method']); ?>">
                     <div class="booking-status">
-                        <?php if($booking['PaymentID']): ?>
+                        <?php if($booking['Book_Status'] !== 'Completed' && $booking['PaymentID']): ?>
                         <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
                             Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
                         </span>

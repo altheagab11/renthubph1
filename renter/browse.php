@@ -231,6 +231,8 @@ $query = "SELECT p.*,
                       main_img.PI_ImagePath as MainImage,
                       (SELECT COUNT(*) FROM favorites f WHERE f.ProductID = p.ProductID AND f.UserID = ?) as is_favorited,
                       (SELECT COUNT(*) FROM product_images pi WHERE pi.ProductID = p.ProductID) as total_images,
+                      (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as booking_count,
+                      (SELECT AVG(Rev_Rating) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as avg_rating,
                       pa.PA_DateFrom,
                       pa.PA_DateTo,
                       pa.PA_IsAvailable,
@@ -1211,6 +1213,10 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <?php endif; ?>
                                     </div>
                                     <?php endif; ?>
+                                    <div class="mb-1">
+                                        <span class="text-warning"><i class="fas fa-star"></i> <?php echo $product['avg_rating'] ? number_format($product['avg_rating'], 1) : 'N/A'; ?></span>
+                                        <span class="text-muted ms-2"><?php echo $product['booking_count']; ?> bookings</span>
+                                    </div>
                                     <?php if($show_all): ?>
                                     <div>
                                         <i class="fas fa-info-circle"></i> Status: 
