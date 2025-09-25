@@ -864,9 +864,13 @@ if ($reviews_table_exists) {
                         <div class="card-body p-4">
                             <div class="row">
                                 <div class="col-md-3">
-                                    <img src="<?php echo $review['PI_ImagePath'] ? htmlspecialchars($review['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                         class="img-fluid rounded" style="height: 150px; width: 100%; object-fit: cover;" 
-                                         alt="<?php echo htmlspecialchars($review['Prod_Name']); ?>">
+                             <img src="<?php 
+                                $imgPath = $review['PI_ImagePath'] ? '../' . ltrim($review['PI_ImagePath'], '/') : '../assets/images/no-image.jpg';
+                                echo htmlspecialchars($imgPath);
+                             ?>" 
+                                         class="img-fluid rounded" style="width: 240px; height: 240px; object-fit: cover; aspect-ratio: 1 / 1;" 
+                                 alt="<?php echo htmlspecialchars($review['Prod_Name']); ?>"
+                                 onerror="this.onerror=null;this.src='../assets/images/no-image.jpg';">
                                 </div>
                                 
                                 <div class="col-md-9">

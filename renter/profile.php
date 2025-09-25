@@ -44,6 +44,50 @@ try {
 
 // Handle profile updates
 if ($_POST) {
+    // Handle profile photo upload
+    if (isset($_POST['change_photo']) && isset($_FILES['profile_photo']) && $_FILES['profile_photo']['error'] === UPLOAD_ERR_OK) {
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+        $max_size = 2 * 1024 * 1024; // 2MB
+        $file = $_FILES['profile_photo'];
+        if (!in_array($file['type'], $allowed_types)) {
+            $message = "Invalid file type. Only JPG, PNG, and GIF are allowed.";
+            $message_type = "danger";
+        } elseif ($file['size'] > $max_size) {
+            $message = "File is too large. Maximum size is 2MB.";
+            $message_type = "danger";
+        } else {
+            $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $new_filename = 'user_' . $user_id . '_' . time() . '.' . $ext;
+            $upload_dir = realpath(__DIR__ . '/../uploads/users');
+            if (!$upload_dir) {
+                $upload_dir = __DIR__ . '/../uploads/users';
+            }
+            $target_path = $upload_dir . DIRECTORY_SEPARATOR . $new_filename;
+            if (move_uploaded_file($file['tmp_name'], $target_path)) {
+                // Remove old photo if exists and not empty
+                if (!empty($user_info['User_Photo']) && file_exists($upload_dir . DIRECTORY_SEPARATOR . $user_info['User_Photo'])) {
+                    @unlink($upload_dir . DIRECTORY_SEPARATOR . $user_info['User_Photo']);
+                }
+                // Update database
+                $query = "UPDATE user_accounts SET User_Photo = ? WHERE UserID = ?";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $new_filename);
+                $stmt->bindParam(2, $user_id);
+                if ($stmt->execute()) {
+                    $message = "Profile photo updated successfully!";
+                    $message_type = "success";
+                    // Update $user_info for immediate UI feedback
+                    $user_info['User_Photo'] = $new_filename;
+                } else {
+                    $message = "Failed to update profile photo. Please try again.";
+                    $message_type = "danger";
+                }
+            } else {
+                $message = "Failed to upload file. Please try again.";
+                $message_type = "danger";
+            }
+        }
+    }
     if (isset($_POST['update_profile'])) {
         $user_name = trim($_POST['user_name'] ?? '');
         $user_email = trim($_POST['user_email'] ?? '');
@@ -647,16 +691,20 @@ function getFieldValue($user_info, $field, $default = '') {
             <div class="profile-header">
                 <div class="row align-items-center">
                     <div class="col-md-3 text-center">
-                        <div class="profile-avatar">
-                            <?php if (!empty($user_info['User_Photo'])): ?>
-                                <img src="../uploads/users/<?php echo htmlspecialchars($user_info['User_Photo']); ?>" alt="Profile Photo" style="width:100px; height:100px; object-fit:cover; border-radius:50%; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-                            <?php else: ?>
-                                <?php echo strtoupper(substr($user_info['User_Name'], 0, 2)); ?>
-                            <?php endif; ?>
-                        </div>
-                        <button class="btn btn-outline-light btn-sm" onclick="uploadPhoto()">
-                            <i class="fas fa-camera me-2"></i>Change Photo
-                        </button>
+                        <form method="POST" enctype="multipart/form-data" id="photoUploadForm">
+                            <div class="profile-avatar mx-auto" id="profileAvatar">
+                                <?php if (!empty($user_info['User_Photo'])): ?>
+                                    <img src="../uploads/users/<?php echo htmlspecialchars($user_info['User_Photo']); ?>" alt="Profile Photo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                <?php else: ?>
+                                    <?php echo strtoupper(substr($user_info['User_Name'], 0, 2)); ?>
+                                <?php endif; ?>
+                            </div>
+                            <input type="file" name="profile_photo" id="profilePhotoInput" accept="image/*" style="display: none;" onchange="document.getElementById('photoUploadForm').submit();">
+                            <button type="button" class="btn btn-outline-light btn-sm" style="border-radius: 20px;" onclick="document.getElementById('profilePhotoInput').click();">
+                                <i class="fas fa-camera me-2"></i>Change Photo
+                            </button>
+                            <input type="hidden" name="change_photo" value="1">
+                        </form>
                     </div>
                     <div class="col-md-9" style="position: relative; z-index: 2;">
                         <h2 class="mb-2"><?php echo htmlspecialchars($user_info['User_Name']); ?>
