@@ -17,7 +17,8 @@ if ($_POST) {
     if (isset($_POST['action'])) {
         $booking_id = $_POST['booking_id'];
         $action = $_POST['action'];
-        $reason = isset($_POST['reason']) ? $_POST['reason'] : '';
+    $reason = isset($_POST['reason']) ? $_POST['reason'] : '';
+    $isDamaged = isset($_POST['isDamaged']) && $_POST['isDamaged'] == '1' ? 1 : 0;
         
         // Get current booking status
         $query = "SELECT Book_Status FROM bookings WHERE BookingID = ? AND OwnerID = ?";
@@ -47,13 +48,21 @@ if ($_POST) {
             }
             
             if ($new_status) {
-                // Update booking status
-                $query = "UPDATE bookings SET Book_Status = ?, Book_UpdatedAt = NOW() WHERE BookingID = ? AND OwnerID = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $new_status);
-                $stmt->bindParam(2, $booking_id);
-                $stmt->bindParam(3, $user_id);
-                
+                // Update booking status and damaged flag
+                if ($action === 'complete') {
+                    $query = "UPDATE bookings SET Book_Status = ?, Book_UpdatedAt = NOW(), Book_Damaged = ? WHERE BookingID = ? AND OwnerID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindParam(1, $new_status);
+                    $stmt->bindParam(2, $isDamaged, PDO::PARAM_INT);
+                    $stmt->bindParam(3, $booking_id);
+                    $stmt->bindParam(4, $user_id);
+                } else {
+                    $query = "UPDATE bookings SET Book_Status = ?, Book_UpdatedAt = NOW() WHERE BookingID = ? AND OwnerID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindParam(1, $new_status);
+                    $stmt->bindParam(2, $booking_id);
+                    $stmt->bindParam(3, $user_id);
+                }
                 if ($stmt->execute()) {
                     // Log status change
                     $query = "INSERT INTO booking_status_history (BookingID, BSH_OldStatus, BSH_NewStatus, BSH_ChangedBy, BSH_ChangeReason) VALUES (?, ?, ?, ?, ?)";
@@ -64,7 +73,6 @@ if ($_POST) {
                     $stmt->bindParam(4, $user_id);
                     $stmt->bindParam(5, $reason);
                     $stmt->execute();
-                    
                     $message = "Booking status updated successfully!";
                     $message_type = "success";
                 } else {
@@ -166,8 +174,10 @@ $stmt->bindParam(1, $user_id);
 $stmt->execute();
 $stats['active_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Total revenue
-$query = "SELECT SUM(b.Book_TotalAmount) as total FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE p.OwnerID = ? AND b.Book_Status = 'Completed'";
+// Total revenue: add security deposit only if damaged
+$query = "SELECT SUM(b.Book_TotalAmount + IFNULL(CASE WHEN b.Book_Damaged = 1 THEN b.Book_SecurityDeposit ELSE 0 END,0)) as total
+          FROM bookings b JOIN products p ON b.ProductID = p.ProductID
+          WHERE p.OwnerID = ? AND b.Book_Status = 'Completed'";
 $stmt = $conn->prepare($query);
 $stmt->bindParam(1, $user_id);
 $stmt->execute();
@@ -923,6 +933,14 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                             <label for="reason" class="form-label">Reason (Optional)</label>
                             <textarea class="form-control" id="reason" name="reason" rows="3" placeholder="Provide a reason for this action..."></textarea>
                         </div>
+                        <div class="mb-3" id="damageSection" style="display: none;">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="isDamaged" name="isDamaged">
+                                <label class="form-check-label" for="isDamaged">
+                                    Product was damaged (forfeit security deposit)
+                                </label>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer border-0">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -963,6 +981,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                         modalConfirmBtn.className = 'btn btn-success';
                         modalConfirmBtn.innerHTML = '<i class="fas fa-check me-2"></i>Accept Booking';
                         reasonSection.style.display = 'none';
+                        damageSection.style.display = 'none';
                         break;
                     case 'reject':
                         modalTitle.innerHTML = '<i class="fas fa-times-circle text-danger me-2"></i>Reject Booking';
@@ -970,6 +989,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                         modalConfirmBtn.className = 'btn btn-danger';
                         modalConfirmBtn.innerHTML = '<i class="fas fa-times me-2"></i>Reject Booking';
                         reasonSection.style.display = 'block';
+                        damageSection.style.display = 'none';
                         break;
                     case 'start':
                         modalTitle.innerHTML = '<i class="fas fa-play-circle text-primary me-2"></i>Start Rental';
@@ -977,6 +997,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                         modalConfirmBtn.className = 'btn btn-primary';
                         modalConfirmBtn.innerHTML = '<i class="fas fa-play me-2"></i>Start Rental';
                         reasonSection.style.display = 'none';
+                        damageSection.style.display = 'none';
                         break;
                     case 'complete':
                         modalTitle.innerHTML = '<i class="fas fa-check-circle text-secondary me-2"></i>Complete Rental';
@@ -984,6 +1005,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                         modalConfirmBtn.className = 'btn btn-secondary';
                         modalConfirmBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Complete Rental';
                         reasonSection.style.display = 'none';
+                        damageSection.style.display = 'block';
                         break;
                 }
             });

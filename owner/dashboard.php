@@ -534,15 +534,7 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <div class="booking-card card mb-3">
                                     <div class="card-body">
                                         <div class="row align-items-center">
-                                            <div class="col-md-2">
-                                                <img src="<?php echo $booking['PI_ImagePath'] ? htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                                     class="img-fluid rounded" style="height: 60px; width: 60px; object-fit: cover;" 
-                                                     alt="<?php echo htmlspecialchars($booking['Prod_Name']); ?>"
-                                                     src="<?php echo $booking['PI_ImagePath'] ? '../' . htmlspecialchars($booking['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>">
-                                                <small class="text-muted d-block mt-1" style="font-size:10px;word-break:break-all;">
-                                                    <?php echo $booking['PI_ImagePath']; ?>
-                                                </small>
-                                            </div>
+                                            <!-- Image removed as requested -->
                                             <div class="col-md-4">
                                                 <h6 class="mb-1"><?php echo htmlspecialchars($booking['Prod_Name']); ?></h6>
                                                 <p class="text-muted small mb-0">
