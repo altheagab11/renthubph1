@@ -885,12 +885,7 @@ function formatCurrency($amount) {
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <input type="hidden" name="new_status" value="Active">
-                                                            <button type="submit" name="update_product_status" class="btn btn-outline-success btn-sm" title="Approve"><i class="fas fa-check"></i></button>
-                                                        </form>
-                                                        <form method="POST" style="display:inline;">
-                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                            <input type="hidden" name="new_status" value="Suspended">
-                                                            <button type="submit" name="update_product_status" class="btn btn-outline-danger btn-sm" title="Reject"><i class="fas fa-ban"></i></button>
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-success btn-sm" title="Activate"><i class="fas fa-play"></i></button>
                                                         </form>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
@@ -902,22 +897,6 @@ function formatCurrency($amount) {
                                                             <input type="hidden" name="new_status" value="Suspended">
                                                             <button type="submit" name="update_product_status" class="btn btn-outline-warning btn-sm" title="Suspend"><i class="fas fa-exclamation-triangle"></i></button>
                                                         </form>
-                                                        <form method="POST" style="display:inline;">
-                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                            <input type="hidden" name="new_status" value="Active">
-                                                            <button type="submit" name="update_product_status" class="btn btn-outline-success btn-sm" title="Activate"><i class="fas fa-play"></i></button>
-                                                        </form>
-                                                        <form method="POST" style="display:inline;">
-                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                            <?php if($product['Prod_IsFeatured']): ?>
-                                                                <button type="submit" name="feature_product" class="btn btn-outline-info btn-sm" title="Remove Featured"><i class="fas fa-star-half-alt"></i></button>
-                                                            <?php else: ?>
-                                                                <input type="hidden" name="is_featured" value="1">
-                                                                <button type="submit" name="feature_product" class="btn btn-outline-warning btn-sm" title="Make Featured"><i class="fas fa-star"></i></button>
-                                                            <?php endif; ?>
-                                                        </form>
-                                                        <button class="btn btn-outline-primary btn-sm" title="View Details" onclick="viewProductDetails(<?php echo $product['ProductID']; ?>)"><i class="fas fa-eye"></i></button>
-                                                        <button class="btn btn-outline-secondary btn-sm" title="Edit Product" onclick="editProduct(<?php echo $product['ProductID']; ?>)"><i class="fas fa-edit"></i></button>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <button type="submit" name="delete_product" class="btn btn-outline-danger btn-sm" title="Delete Product" onclick="return confirm('Are you sure you want to delete this product? This action cannot be undone.')"><i class="fas fa-trash"></i></button>

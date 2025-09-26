@@ -651,10 +651,27 @@ function getRoleName($role_id) {
                             <h5 class="card-title mb-0">Recent Activities</h5>
                         </div>
                         <div class="card-body">
-                            <div class="text-center py-3">
-                                <i class="fas fa-clock fa-2x text-muted mb-2"></i>
-                                <p class="text-muted mb-0 small">No recent activities</p>
-                            </div>
+                            <?php
+                            // Fetch the 5 most recent users (excluding admins)
+                            $recentUsersStmt = $conn->prepare("SELECT User_Name, User_CreatedAt FROM user_accounts WHERE User_Role != 1 ORDER BY User_CreatedAt DESC LIMIT 5");
+                            $recentUsersStmt->execute();
+                            $recentUsers = $recentUsersStmt->fetchAll(PDO::FETCH_ASSOC);
+                            ?>
+                            <?php if (count($recentUsers) > 0): ?>
+                                <ul class="list-group list-group-flush">
+                                    <?php foreach ($recentUsers as $recentUser): ?>
+                                        <li class="list-group-item d-flex align-items-center justify-content-between px-0">
+                                            <span><i class="fas fa-user me-2 text-primary"></i><?php echo htmlspecialchars($recentUser['User_Name']); ?></span>
+                                            <span class="text-muted small"><?php echo date('M j, Y', strtotime($recentUser['User_CreatedAt'])); ?></span>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php else: ?>
+                                <div class="text-center py-3">
+                                    <i class="fas fa-clock fa-2x text-muted mb-2"></i>
+                                    <p class="text-muted mb-0 small">No recent activities</p>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="card mt-4">
