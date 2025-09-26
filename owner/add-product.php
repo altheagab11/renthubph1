@@ -59,18 +59,18 @@ if ($subscription) {
         $can_add_product = true;
     }
 } else {
-    // No active subscription - check if they have a free plan allowance
-    $max_listings = 5; // Default free plan limit
-    if ($current_products < $max_listings) {
-        $can_add_product = true;
-    }
+    // No active subscription - block product addition
+    $can_add_product = false;
+    $max_listings = 0;
 }
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['prod_name'])) {
-    
     // Check if user can still add products before processing
-    if (!$can_add_product) {
+    if (!$subscription) {
+        $message = "❌ You cannot add a product because you do not have an active subscription. Please subscribe to a plan first.";
+        $message_type = "danger";
+    } else if (!$can_add_product) {
         $message = "❌ You have reached your maximum listing limit of $max_listings products. Please upgrade your subscription to add more products.";
         $message_type = "danger";
     } else {
@@ -777,10 +777,9 @@ try {
                     <?php if (!$can_add_product): ?>
                     <div class="alert alert-warning" style="border-radius: 15px;">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Listing Limit Reached!</strong><br>
-                        You have reached your maximum listing limit of <strong><?php echo $max_listings; ?> products</strong>. 
-                        Current listings: <strong><?php echo $current_products; ?></strong><br>
-                        <small>Please upgrade your subscription to add more products or remove existing listings to make room for new ones.</small>
+                        <strong>Subscription Required!</strong><br>
+                        You need to avail a subscription before you can list items/products.<br>
+                        <small>Please subscribe to a plan to start listing your products.</small>
                     </div>
                     <?php endif; ?>
                     
@@ -1090,9 +1089,17 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <i class="fas fa-arrow-left me-2"></i>View Products
                                     </a>
                                     <div>
-                                        <button type="submit" name="submit_product" class="btn btn-submit" <?php echo !$can_add_product ? 'disabled' : ''; ?>>
+                                        <button type="submit" name="submit_product" class="btn btn-submit" <?php echo !$can_add_product ? 'disabled' : ''; ?> >
                                             <i class="fas fa-plus me-2"></i>
-                                            <?php echo $can_add_product ? 'Add Product' : 'Limit Reached'; ?>
+                                            <?php
+                                                if ($can_add_product) {
+                                                    echo 'Add Product';
+                                                } else if (!$subscription) {
+                                                    echo 'Subscription Required';
+                                                } else {
+                                                    echo 'Limit Reached';
+                                                }
+                                            ?>
                                         </button>
                                     </div>
                                 </div>

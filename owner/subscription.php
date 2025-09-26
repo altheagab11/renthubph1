@@ -14,6 +14,18 @@ $message_type = '';
 
 // Handle plan selection and subscription creation with payment
 if ($_POST) {
+    // Check owner verification status
+    $query = "SELECT User_IsVerified FROM user_accounts WHERE UserID = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(1, $user_id);
+    $stmt->execute();
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    $is_verified = ($user && isset($user['User_IsVerified']) && $user['User_IsVerified'] == 1);
+
+    if (isset($_POST['select_plan']) && !$is_verified) {
+        $message = "Your account is not yet verified by the admin. You cannot avail a subscription plan until you are verified.";
+        $message_type = "danger";
+    } else
     if (isset($_POST['select_plan'])) {
         $plan_id = $_POST['plan_id'];
         

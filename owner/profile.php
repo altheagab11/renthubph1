@@ -639,10 +639,22 @@ $stats['member_since'] = date('F Y', strtotime($user_profile['User_CreatedAt']))
                     </div>
                     <div class="col-md-6">
                         <h2 class="mb-2"><?php echo htmlspecialchars($user_profile['User_Name']); ?>
-                            <span class="verification-badge">
-                                <i class="fas fa-check-circle me-1"></i>Verified
-                            </span>
+                            <?php if (isset($user_profile['User_IsVerified']) && $user_profile['User_IsVerified'] == 1): ?>
+                                <span class="verification-badge">
+                                    <i class="fas fa-check-circle me-1"></i>Verified
+                                </span>
+                            <?php else: ?>
+                                <span class="verification-badge bg-warning text-dark" style="border-radius: 8px; padding: 2px 8px; font-size: 1rem;">
+                                    <i class="fas fa-hourglass-half me-1"></i>Waiting for Admin Verification
+                                </span>
+                            <?php endif; ?>
                         </h2>
+                        <?php if (isset($user_profile['User_IsVerified']) && $user_profile['User_IsVerified'] == 0): ?>
+                        <div class="alert alert-warning mt-2" style="border-radius: 10px;">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Your account is not yet verified. Please wait for the admin to verify your account before you can access all features.
+                        </div>
+                        <?php endif; ?>
                         <p class="mb-3 opacity-90"><?php echo htmlspecialchars($user_profile['User_Email']); ?></p>
                         <div class="d-flex flex-wrap gap-3">
                             <div>
