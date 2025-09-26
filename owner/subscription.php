@@ -733,8 +733,13 @@ function getPlanType($plan_name) {
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="add-product.php">
+                        <i class="fas fa-plus me-2"></i> Add New Product
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="bookings.php">
-                        <i class="fas fa-calendar-check me-2"></i> Bookings
+                        <i class="fas fa-calendar-check me-2"></i> Booking Requests
                     </a>
                 </li>
                 <li class="nav-item">
@@ -743,23 +748,19 @@ function getPlanType($plan_name) {
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="reviews.php">
-                        <i class="fas fa-star me-2"></i> Reviews
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="messages.php">
                         <i class="fas fa-comments me-2"></i> Messages
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link active" href="subscription.php">
-                        <i class="fas fa-crown me-2"></i> My Subscription
+                    <a class="nav-link" href="reviews.php">
+                        <i class="fas fa-star me-2"></i> Reviews
                     </a>
                 </li>
+                
                 <li class="nav-item">
-                    <a class="nav-link" href="payments.php">
-                        <i class="fas fa-credit-card me-2"></i> Payment History
+                    <a class="nav-link active" href="subscription.php">
+                        <i class="fas fa-crown me-2"></i> Subscription
                     </a>
                 </li>
                 <li class="nav-item">
@@ -773,11 +774,6 @@ function getPlanType($plan_name) {
                 <li class="nav-item">
                     <a class="nav-link" href="../renter/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
                         <i class="fas fa-search me-2"></i> Switch to Renter
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="../browse.php">
-                        <i class="fas fa-eye me-2"></i> Browse Products
                     </a>
                 </li>
                 <li class="nav-item">
@@ -1062,7 +1058,7 @@ function getPlanType($plan_name) {
                             </div>
                             
                             <div class="d-grid gap-2">
-                                <button class="btn btn-select-plan" onclick="renewSubscription()">
+                                <button class="btn btn-select-plan" onclick="renewSubscription()" <?php if(strtotime($current_subscription['Sub_EndDate']) > time()) echo 'disabled'; ?>>
                                     <i class="fas fa-redo me-2"></i>Renew Subscription
                                 </button>
                                 
