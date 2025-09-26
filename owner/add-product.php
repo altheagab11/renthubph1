@@ -47,6 +47,17 @@ try {
     $current_products = 0;
 }
 
+// Get current featured product count
+$current_featured = 0;
+try {
+    $query = "SELECT COUNT(*) as total FROM products WHERE OwnerID = ? AND Prod_Status = 'Active' AND Prod_IsFeatured = 1 AND Prod_FeaturedUntil > NOW()";
+    $stmt = $conn->prepare($query);
+    $stmt->execute([$user_id]);
+    $current_featured = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+} catch (PDOException $e) {
+    $current_featured = 0;
+}
+
 // Check if user can add more products based on subscription
 $can_add_product = false;
 $max_listings = 0;
@@ -58,15 +69,30 @@ if ($subscription) {
     if ($max_listings == -1 || $current_products < $max_listings) {
         $can_add_product = true;
     }
-} else {
-    // No active subscription - block product addition
-    $can_add_product = false;
-    $max_listings = 0;
+} else { 
+    // No active subscription - block product addition 
+    $can_add_product = false; 
+    $max_listings = 0; 
+} 
+
+// Always fetch default address for prefill if not posting the form 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { 
+    $default_address = null; 
+    $stmt = $conn->prepare("SELECT * FROM user_addresses WHERE UserID = ? AND UA_IsDefault = 1 ORDER BY AddressID DESC LIMIT 1"); 
+    $stmt->execute([$user_id]); 
+    $default_address = $stmt->fetch(PDO::FETCH_ASSOC); 
+    if (!$default_address) { 
+        // If no default, get latest 
+        $stmt = $conn->prepare("SELECT * FROM user_addresses WHERE UserID = ? ORDER BY AddressID DESC LIMIT 1"); 
+        $stmt->execute([$user_id]); 
+        $default_address = $stmt->fetch(PDO::FETCH_ASSOC); 
+    } 
 }
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['prod_name'])) {
     // Check if user can still add products before processing
+    // 1. Subscription check
     if (!$subscription) {
         $message = "❌ You cannot add a product because you do not have an active subscription. Please subscribe to a plan first.";
         $message_type = "danger";
@@ -74,6 +100,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['prod_name'])) {
         $message = "❌ You have reached your maximum listing limit of $max_listings products. Please upgrade your subscription to add more products.";
         $message_type = "danger";
     } else {
+        // 2. Address existence check
+        $address_check_query = "SELECT AddressID FROM user_addresses WHERE UserID = ? LIMIT 1";
+        $stmt = $conn->prepare($address_check_query);
+        $stmt->execute([$user_id]);
+        $has_address = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$has_address) {
+            $message = "❌ You cannot add a product because you do not have any address saved. Please add your address in your profile first.";
+            $message_type = "danger";
+        } else {
     try {
         // Start transaction
         $conn->beginTransaction();
@@ -312,6 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['prod_name'])) {
         $message_type = "danger";
         error_log("General Error: " . $e->getMessage());
     }
+        } // Close the address check else
     } // Close the else statement
 }
 
@@ -747,27 +783,34 @@ try {
             <?php endif; ?>
 
             <!-- Progress Indicator -->
-            <div class="progress-indicator">
-                <div class="progress-step active">
-                    <div class="step-number">1</div>
-                    <div>
-                        <strong>Product Details</strong>
-                        <div class="text-muted small">Fill in your product information</div>
-                    </div>
-                </div>
-                <div class="progress-step">
-                    <div class="step-number">2</div>
-                    <div>
-                        <strong>Database Tables</strong>
-                        <div class="text-muted small">Save to products, product_locations, product_availability</div>
-                    </div>
-                </div>
-                <div class="progress-step">
-                    <div class="step-number">3</div>
-                    <div>
-                        <strong>Success</strong>
-                        <div class="text-muted small">Product successfully added</div>
-                    </div>
+            <div class="alert alert-info mb-4" style="border-radius: 15px;">
+                <h5 class="mb-2"><i class="fas fa-info-circle me-2"></i>How to Add a Product</h5>
+                <ol class="mb-0 ps-3">
+                    <li>Fill out all required product details and upload clear photos.</li>
+                    <li>Set the location using your saved address or select another from your list.</li>
+                    <li>Review your information before submitting.</li>
+                    <li>Click <b>Add Product</b> to publish your listing.</li>
+                </ol>
+                <div class="mt-2 text-muted small">Need help? Contact support or check the FAQ section for more tips.</div>
+            </div>
+
+            <!-- Listing/Featured Usage Indicator (moved here) -->
+            <div class="alert alert-info d-flex align-items-center mb-4" style="border-radius: 15px;">
+                <i class="fas fa-chart-bar fa-lg me-3 text-primary"></i>
+                <div>
+                    <strong>Listing Usage:</strong>
+                    <?php
+                    if ($subscription) {
+                        $max_listings = (int)$subscription['Plan_MaxListings'];
+                        $max_featured = (int)$subscription['Plan_FeaturedListings'];
+                        echo "<span class='ms-2'>" . ($max_listings == -1 ? "<b>Unlimited</b>" : "<b>{$current_products}</b> / <b>{$max_listings}</b>") . " listings";
+                        echo "</span>";
+                        echo "<span class='ms-4'><strong>Featured:</strong> ";
+                        echo ($max_featured == -1 ? "<b>Unlimited</b>" : "<b>{$current_featured}</b> / <b>{$max_featured}</b>") . "</span>";
+                    } else {
+                        echo "No active subscription. Listing and featured limits not available.";
+                    }
+                    ?>
                 </div>
             </div>
 
@@ -1015,13 +1058,13 @@ try {
                                             <label for="location_street" class="form-label">Street Address</label>
                                             <input type="text" class="form-control" id="location_street" name="location_street" 
                                                    placeholder="Street, Building, House No." 
-                                                   value="<?php echo isset($_POST['location_street']) ? htmlspecialchars($_POST['location_street']) : ''; ?>">
+                                                   value="<?php echo isset($_POST['location_street']) ? htmlspecialchars($_POST['location_street']) : (isset($default_address['UA_Street']) ? htmlspecialchars($default_address['UA_Street']) : ''); ?>" readonly>
                                         </div>
                                         <div class="col-md-6">
                                             <label for="location_barangay" class="form-label">Barangay</label>
                                             <input type="text" class="form-control" id="location_barangay" name="location_barangay" 
                                                    placeholder="Barangay" 
-                                                   value="<?php echo isset($_POST['location_barangay']) ? htmlspecialchars($_POST['location_barangay']) : ''; ?>">
+                                                   value="<?php echo isset($_POST['location_barangay']) ? htmlspecialchars($_POST['location_barangay']) : (isset($default_address['UA_Barangay']) ? htmlspecialchars($default_address['UA_Barangay']) : ''); ?>" readonly>
                                         </div>
                                     </div>
                                     <div class="row mb-3">
@@ -1029,55 +1072,85 @@ try {
                                             <label for="location_city" class="form-label">City</label>
                                             <input type="text" class="form-control" id="location_city" name="location_city" 
                                                    placeholder="City" 
-                                                   value="<?php echo isset($_POST['location_city']) ? htmlspecialchars($_POST['location_city']) : ''; ?>">
+                                                   value="<?php echo isset($_POST['location_city']) ? htmlspecialchars($_POST['location_city']) : (isset($default_address['UA_City']) ? htmlspecialchars($default_address['UA_City']) : ''); ?>" readonly>
                                         </div>
                                         <div class="col-md-4">
                                             <label for="location_province" class="form-label">Province</label>
                                             <input type="text" class="form-control" id="location_province" name="location_province" 
                                                    placeholder="Province" 
-                                                   value="<?php echo isset($_POST['location_province']) ? htmlspecialchars($_POST['location_province']) : ''; ?>">
+                                                   value="<?php echo isset($_POST['location_province']) ? htmlspecialchars($_POST['location_province']) : (isset($default_address['UA_Province']) ? htmlspecialchars($default_address['UA_Province']) : ''); ?>" readonly>
                                         </div>
                                         <div class="col-md-4">
                                             <label for="location_zipcode" class="form-label">Zip Code</label>
                                             <input type="text" class="form-control" id="location_zipcode" name="location_zipcode" 
                                                    placeholder="Zip Code" 
-                                                   value="<?php echo isset($_POST['location_zipcode']) ? htmlspecialchars($_POST['location_zipcode']) : ''; ?>">
+                                                   value="<?php echo isset($_POST['location_zipcode']) ? htmlspecialchars($_POST['location_zipcode']) : (isset($default_address['UA_ZipCode']) ? htmlspecialchars($default_address['UA_ZipCode']) : ''); ?>" readonly>
                                         </div>
                                     </div>
                                     <div class="mb-2">
-                                        <button type="button" class="btn btn-outline-success btn-sm" id="fetch-owner-address">
-                                            <i class="fas fa-map-marker-alt me-1"></i> Use My Default Address
-                                        </button>
+                                                                                <button type="button" class="btn btn-outline-success btn-sm" id="fetch-owner-address" data-bs-toggle="modal" data-bs-target="#addressModal">
+                                                                                        <i class="fas fa-map-marker-alt me-1"></i> Select From My Saved Addresses
+                                                                                </button>
+
+                                                                                <!-- Modal for selecting address -->
+                                                                                <div class="modal fade" id="addressModal" tabindex="-1" aria-labelledby="addressModalLabel" aria-hidden="true">
+                                                                                    <div class="modal-dialog modal-dialog-centered">
+                                                                                        <div class="modal-content">
+                                                                                            <div class="modal-header">
+                                                                                                <h5 class="modal-title" id="addressModalLabel">Select From My Saved Addresses</h5>
+                                                                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                                            </div>
+                                                                                            <div class="modal-body">
+                                                                                                <ul class="list-group">
+                                                                                                <?php
+                                                                                                $stmt = $conn->prepare("SELECT * FROM user_addresses WHERE UserID = ? ORDER BY UA_IsDefault DESC, AddressID DESC");
+                                                                                                $stmt->execute([$user_id]);
+                                                                                                $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                                                                                if ($addresses) {
+                                                                                                        foreach ($addresses as $address) {
+                                                                                                                $parts = [];
+                                                                                                                if (!empty($address['UA_Street'])) $parts[] = htmlspecialchars($address['UA_Street']);
+                                                                                                                if (!empty($address['UA_Barangay'])) $parts[] = htmlspecialchars($address['UA_Barangay']);
+                                                                                                                if (!empty($address['UA_City'])) $parts[] = htmlspecialchars($address['UA_City']);
+                                                                                                                if (!empty($address['UA_Province'])) $parts[] = htmlspecialchars($address['UA_Province']);
+                                                                                                                if (!empty($address['UA_ZipCode'])) $parts[] = htmlspecialchars($address['UA_ZipCode']);
+                                                                                                                $address_str = implode(', ', $parts);
+                                                                                                                echo '<li class="list-group-item list-group-item-action address-select-item" style="cursor:pointer;" data-address="' .
+                                                                                                                        htmlspecialchars(json_encode([
+                                                                                                                                'street' => $address['UA_Street'],
+                                                                                                                                'barangay' => $address['UA_Barangay'],
+                                                                                                                                'city' => $address['UA_City'],
+                                                                                                                                'province' => $address['UA_Province'],
+                                                                                                                                'zipcode' => $address['UA_ZipCode']
+                                                                                                                        ])) . '">' . $address_str;
+                                                                                                                if (!empty($address['UA_IsDefault'])) {
+                                                                                                                        echo ' <span class="badge bg-primary ms-2">Default</span>';
+                                                                                                                }
+                                                                                                                echo '</li>';
+                                                                                                        }
+                                                                                                } else {
+                                                                                                        echo '<li class="list-group-item">No addresses found.</li>';
+                                                                                                }
+                                                                                                ?>
+                                                                                                </ul>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
                                     </div>
 <script>
-function fillOwnerAddressIfEmpty(data) {
-    if (!document.getElementById('location_street').value) document.getElementById('location_street').value = data.UA_Street || '';
-    if (!document.getElementById('location_barangay').value) document.getElementById('location_barangay').value = data.UA_Barangay || '';
-    if (!document.getElementById('location_city').value) document.getElementById('location_city').value = data.UA_City || '';
-    if (!document.getElementById('location_province').value) document.getElementById('location_province').value = data.UA_Province || '';
-    if (!document.getElementById('location_zipcode').value) document.getElementById('location_zipcode').value = data.UA_ZipCode || '';
-}
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-fill on page load
-    fetch('../api/get-owner-address.php')
-        .then(response => response.json())
-        .then(data => {
-            if (data) {
-                fillOwnerAddressIfEmpty(data);
-            }
+    document.querySelectorAll('.address-select-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+            var data = JSON.parse(this.getAttribute('data-address'));
+            document.getElementById('location_street').value = data.street || '';
+            document.getElementById('location_barangay').value = data.barangay || '';
+            document.getElementById('location_city').value = data.city || '';
+            document.getElementById('location_province').value = data.province || '';
+            document.getElementById('location_zipcode').value = data.zipcode || '';
+            var modal = bootstrap.Modal.getInstance(document.getElementById('addressModal'));
+            if (modal) modal.hide();
         });
-    // Button click (manual fetch)
-    document.getElementById('fetch-owner-address').addEventListener('click', function() {
-        fetch('../api/get-owner-address.php')
-            .then(response => response.json())
-            .then(data => {
-                if (data) {
-                    fillOwnerAddressIfEmpty(data);
-                } else {
-                    alert('No address found. Please add your address in your profile.');
-                }
-            })
-            .catch(() => alert('Failed to fetch address. Please try again.'));
     });
 });
 </script>
@@ -1089,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <i class="fas fa-arrow-left me-2"></i>View Products
                                     </a>
                                     <div>
-                                        <button type="submit" name="submit_product" class="btn btn-submit" <?php echo !$can_add_product ? 'disabled' : ''; ?> >
+                                        <button type="submit" id="submit_product_btn" name="submit_product" class="btn btn-submit" style="display:none;" <?php echo !$can_add_product ? 'disabled' : ''; ?> >
                                             <i class="fas fa-plus me-2"></i>
                                             <?php
                                                 if ($can_add_product) {
@@ -1101,6 +1174,37 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 }
                                             ?>
                                         </button>
+                                        <div id="address-warning" class="alert alert-warning mt-2 mb-0 w-100 text-center" style="display:none; max-width:400px;"></div>
+    <script>
+    // Address check on page load (show/hide Add Product button based on address)
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch('../api/get-owner-address.php')
+            .then(response => response.json())
+            .then(data => {
+                const btn = document.getElementById('submit_product_btn');
+                const warning = document.getElementById('address-warning');
+                if (!data || Object.keys(data).length === 0) {
+                    if (btn) btn.style.display = 'none';
+                    if (warning) {
+                        warning.style.display = 'block';
+                        warning.innerHTML = '<b>Address Required!</b> You cannot add a product because you do not have any address saved. Please add your address in your profile first.';
+                    }
+                } else {
+                    if (btn && <?php echo $can_add_product ? 'true' : 'false'; ?>) btn.style.display = 'inline-block';
+                    if (warning) warning.style.display = 'none';
+                }
+            })
+            .catch(() => {
+                const warning = document.getElementById('address-warning');
+                if (warning) {
+                    warning.style.display = 'block';
+                    warning.innerHTML = 'Could not verify address. Please refresh or check your profile.';
+                }
+                const btn = document.getElementById('submit_product_btn');
+                if (btn) btn.style.display = 'none';
+            });
+    });
+    </script>
                                     </div>
                                 </div>
                             </div>
@@ -1110,34 +1214,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                                 <div class="col-lg-4">
 
-                    <!-- Database Tables Info -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-transparent border-0">
-                            <h6 class="card-title mb-0">
-                                <i class="fas fa-database text-info me-2"></i>Database Tables
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="list-group list-group-flush">
-                                <div class="list-group-item border-0 px-0">
-                                    <i class="fas fa-table text-primary me-2"></i>
-                                    <small><strong>products</strong> - Main product data</small>
-                                </div>
-                                <div class="list-group-item border-0 px-0">
-                                    <i class="fas fa-map-marker-alt text-success me-2"></i>
-                                    <small><strong>product_locations</strong> - Delivery options</small>
-                                </div>
-                                <div class="list-group-item border-0 px-0">
-                                    <i class="fas fa-calendar text-warning me-2"></i>
-                                    <small><strong>product_availability</strong> - Availability dates</small>
-                                </div>
-                                <div class="list-group-item border-0 px-0">
-                                    <i class="fas fa-home text-info me-2"></i>
-                                    <small><strong>user_addresses</strong> - Default address</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- Tips Card -->
                     <div class="card mb-4">

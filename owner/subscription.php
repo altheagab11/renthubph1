@@ -53,7 +53,7 @@ if ($_POST) {
                     $start_date = date('Y-m-d');
                     $end_date = date('Y-m-d', strtotime('+' . $plan['Plan_Duration'] . ' days'));
                     $sub_status = 'Pending';
-                    $sub_autorenew = 0;
+                    $sub_autorenew = isset($_POST['auto_renew']) && $_POST['auto_renew'] == '1' ? 1 : 0;
                     $sub_payment_method = 'Pending';
                     
                     $query = "INSERT INTO user_subscriptions (UserID, PlanID, Sub_StartDate, Sub_EndDate, Sub_Status, Sub_AutoRenew, Sub_PaymentMethod, Sub_CreatedAt, Sub_UpdatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
@@ -1070,9 +1070,15 @@ function getPlanType($plan_name) {
                             </div>
                             
                             <div class="d-grid gap-2">
-                                <button class="btn btn-select-plan" onclick="renewSubscription()" <?php if(strtotime($current_subscription['Sub_EndDate']) > time()) echo 'disabled'; ?>>
-                                    <i class="fas fa-redo me-2"></i>Renew Subscription
-                                </button>
+                                <?php if (!empty($current_subscription) && isset($current_subscription['Sub_AutoRenew']) && $current_subscription['Sub_AutoRenew']): ?>
+                                    <span class="badge bg-success w-100 py-3" style="font-size:1.1rem; border-radius: 25px; background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%); color: #fff;">
+                                        <i class="fas fa-sync-alt me-2"></i>Auto-Renew Enabled
+                                    </span>
+                                <?php else: ?>
+                                    <button class="btn btn-select-plan" onclick="renewSubscription()" <?php if(strtotime($current_subscription['Sub_EndDate']) > time()) echo 'disabled'; ?> >
+                                        <i class="fas fa-redo me-2"></i>Renew Subscription
+                                    </button>
+                                <?php endif; ?>
                                 
                                 <form method="POST" style="display: inline;">
                                     <input type="hidden" name="subscription_id" value="<?php echo $current_subscription['SubscriptionID']; ?>">
@@ -1153,6 +1159,12 @@ function getPlanType($plan_name) {
                                 <?php else: ?>
                                     <form method="POST" style="display: inline;">
                                         <input type="hidden" name="plan_id" value="<?php echo $plan['PlanID']; ?>">
+                                        <div class="form-check mb-2 text-start">
+                                            <input class="form-check-input" type="checkbox" name="auto_renew" id="autoRenew_<?php echo $plan['PlanID']; ?>" value="1">
+                                            <label class="form-check-label" for="autoRenew_<?php echo $plan['PlanID']; ?>">
+                                                Enable Auto-Renew for this subscription
+                                            </label>
+                                        </div>
                                         <button type="submit" name="select_plan" class="btn btn-select-plan w-100"
                                                 onclick="return confirm('Subscribe to <?php echo htmlspecialchars($plan['Plan_Name']); ?> for ₱<?php echo number_format($plan['Plan_Price'], 0); ?>? You will need to complete payment to activate.')">
                                             <i class="fas fa-crown me-2"></i>

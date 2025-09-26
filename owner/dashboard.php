@@ -386,27 +386,7 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <?php else: ?>
             <div class="card subscription-card mb-4">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h5 class="mb-1">
-                                <i class="fas fa-crown"></i> <?php echo htmlspecialchars($subscription['Plan_Name']); ?> Plan
-                            </h5>
-                            <p class="mb-0 opacity-75">
-                                Active until <?php echo date('M j, Y', strtotime($subscription['Sub_EndDate'])); ?> •
-                                <?php echo $stats['total_products']; ?>/<?php echo $subscription['Plan_MaxListings']; ?> listings used
-                                <?php if(isset($subscription['Plan_FeaturedListings'])): ?>
-                                    • <?php echo $featured_used; ?>/<?php echo $subscription['Plan_FeaturedListings']; ?> featured used
-                                <?php endif; ?>
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <a href="subscription.php" class="btn btn-light" style="border-radius: 25px;">
-                                <i class="fas fa-cog"></i> Manage
-                            </a>
-                        </div>
-                    </div>
-                </div>
+                <!-- Subscription card moved to add-product.php -->
             </div>
             <?php endif; ?>
 

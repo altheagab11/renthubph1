@@ -127,11 +127,13 @@ if ($_POST) {
     }
     
     if (isset($_POST['update_address'])) {
-        $street = trim($_POST['street']);
-        $city = trim($_POST['city']);
-        $province = trim($_POST['province']);
-        $postal_code = trim($_POST['postal_code']);
-        $is_default = isset($_POST['is_default']) ? 1 : 0;
+    $street = trim($_POST['street']);
+    $barangay = trim($_POST['barangay']);
+    $city = trim($_POST['city']);
+    $province = trim($_POST['province']);
+    $postal_code = trim($_POST['postal_code']);
+    $address_type = isset($_POST['address_type']) ? trim($_POST['address_type']) : null;
+    $is_default = isset($_POST['is_default']) ? 1 : 0;
         
         if ($is_default) {
             // Remove default from other addresses
@@ -141,35 +143,17 @@ if ($_POST) {
             $stmt->execute();
         }
         
-        // Check if address exists
-        $query = "SELECT AddressID FROM user_addresses WHERE UserID = ? LIMIT 1";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $user_id);
-        $stmt->execute();
-        $existing_address = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($existing_address) {
-            // Update existing address
-            $query = "UPDATE user_addresses SET UA_Street = ?, UA_City = ?, UA_Province = ?, UA_PostalCode = ?, UA_IsDefault = ? WHERE UserID = ? AND AddressID = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $street);
-            $stmt->bindParam(2, $city);
-            $stmt->bindParam(3, $province);
-            $stmt->bindParam(4, $postal_code);
-            $stmt->bindParam(5, $is_default);
-            $stmt->bindParam(6, $user_id);
-            $stmt->bindParam(7, $existing_address['AddressID']);
-        } else {
-            // Insert new address
-            $query = "INSERT INTO user_addresses (UserID, UA_Street, UA_City, UA_Province, UA_PostalCode, UA_IsDefault) VALUES (?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $user_id);
-            $stmt->bindParam(2, $street);
-            $stmt->bindParam(3, $city);
-            $stmt->bindParam(4, $province);
-            $stmt->bindParam(5, $postal_code);
-            $stmt->bindParam(6, $is_default);
-        }
+        // Always insert new address (allow multiple addresses per user)
+    $query = "INSERT INTO user_addresses (UserID, UA_Street, UA_Barangay, UA_City, UA_Province, UA_ZipCode, UA_AddressType, UA_IsDefault) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(1, $user_id);
+    $stmt->bindParam(2, $street);
+    $stmt->bindParam(3, $barangay);
+    $stmt->bindParam(4, $city);
+    $stmt->bindParam(5, $province);
+    $stmt->bindParam(6, $postal_code);
+    $stmt->bindParam(7, $address_type);
+    $stmt->bindParam(8, $is_default);
         
         if ($stmt->execute()) {
             $message = "Address updated successfully!";
@@ -821,79 +805,105 @@ $stats['member_since'] = date('F Y', strtotime($user_profile['User_CreatedAt']))
             <div id="addressContent" class="tab-content" style="display: none;">
                 <div class="form-section">
                     <h5><i class="fas fa-map-marker-alt me-2"></i>Address Information</h5>
-                    
-                    <?php if($user_address): ?>
-                    <div class="address-card mb-3">
-                        <h6 class="mb-2">
-                            <i class="fas fa-home me-2"></i>Current Address
-                            <?php if($user_address['UA_IsDefault']): ?>
-                                <span class="verification-badge ms-2">Default</span>
-                            <?php endif; ?>
-                        </h6>
-                        <p class="mb-0">
-                            <?php echo htmlspecialchars($user_address['UA_Street']); ?><br>
-                            <?php echo htmlspecialchars($user_address['UA_City'] . ', ' . $user_address['UA_Province'] . ' ' . $user_address['UA_PostalCode']); ?>
-                        </p>
+                    <div class="alert alert-info mb-3" style="border-radius: 10px;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <b>Location Details</b><br>
+                        Your address helps owners determine delivery options and rental availability in your area.
                     </div>
-                    <?php endif; ?>
-                    
-                    <form method="POST">
+                    <div class="mb-2">
+                        <h6 class="mb-2"><i class="fas fa-list me-2"></i>Your Addresses</h6>
+                    </div>
+                    <ul class="list-group mb-4">
+                    <?php
+                    $stmt = $conn->prepare("SELECT * FROM user_addresses WHERE UserID = ? ORDER BY UA_IsDefault DESC, UA_CreatedAt DESC");
+                    $stmt->execute([$user_id]);
+                    $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    if ($addresses) {
+                        foreach ($addresses as $address) {
+                            $parts = [];
+                            if (!empty($address['UA_Street'])) $parts[] = htmlspecialchars($address['UA_Street']);
+                            if (!empty($address['UA_Barangay'])) $parts[] = htmlspecialchars($address['UA_Barangay']);
+                            if (!empty($address['UA_City'])) $parts[] = htmlspecialchars($address['UA_City']);
+                            if (!empty($address['UA_Province'])) $parts[] = htmlspecialchars($address['UA_Province']);
+                            if (!empty($address['UA_ZipCode'])) $parts[] = htmlspecialchars($address['UA_ZipCode']);
+                            if (!empty($address['UA_AddressType'])) $parts[] = '('.htmlspecialchars($address['UA_AddressType']).')';
+                            $address_str = implode(', ', $parts);
+                            echo '<li class="list-group-item d-flex justify-content-between align-items-center">';
+                            echo $address_str;
+                            if (!empty($address['UA_IsDefault'])) {
+                                echo ' <span class="badge bg-primary ms-2">Default</span>';
+                            }
+                            echo '</li>';
+                        }
+                    } else {
+                        echo '<li class="list-group-item">No addresses found.</li>';
+                    }
+                    ?>
+                    </ul>
+                    <button class="btn btn-outline-primary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#addAddressForm" aria-expanded="false" aria-controls="addAddressForm">
+                        <i class="fas fa-plus me-1"></i> Add New Address
+                    </button>
+                    <div class="collapse" id="addAddressForm">
+                    <form method="POST" style="margin-top:2rem;">
                         <div class="row">
-                            <div class="col-md-12 mb-3">
-                                <label for="street" class="form-label">
-                                    Street Address <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" class="form-control" id="street" name="street" 
-                                       value="<?php echo htmlspecialchars($user_address['UA_Street'] ?? ''); ?>" 
-                                       placeholder="House/Unit Number, Street Name" required>
+                            <div class="col-12 mb-3">
+                                <label for="street" class="form-label">Street Address <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="street" name="street" value="" placeholder="House/Unit No., Street Name" required>
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label for="barangay" class="form-label">Barangay <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="barangay" name="barangay" value="" placeholder="Barangay" required>
                             </div>
                         </div>
-                        
                         <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label for="city" class="form-label">
-                                    City <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" class="form-control" id="city" name="city" 
-                                       value="<?php echo htmlspecialchars($user_address['UA_City'] ?? ''); ?>" required>
+                            <div class="col-md-6 mb-3">
+                                <label for="city" class="form-label">City <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="city" name="city" value="" required>
                             </div>
-                            <div class="col-md-4 mb-3">
-                                <label for="province" class="form-label">
-                                    Province <span class="text-danger">*</span>
-                                </label>
+                            <div class="col-md-6 mb-3">
+                                <label for="province" class="form-label">Province <span class="text-danger">*</span></label>
                                 <select class="form-select" id="province" name="province" required>
                                     <option value="">Select Province</option>
-                                    <option value="Metro Manila" <?php echo ($user_address['UA_Province'] ?? '') == 'Metro Manila' ? 'selected' : ''; ?>>Metro Manila</option>
-                                    <option value="Cebu" <?php echo ($user_address['UA_Province'] ?? '') == 'Cebu' ? 'selected' : ''; ?>>Cebu</option>
-                                    <option value="Davao" <?php echo ($user_address['UA_Province'] ?? '') == 'Davao' ? 'selected' : ''; ?>>Davao</option>
-                                    <option value="Laguna" <?php echo ($user_address['UA_Province'] ?? '') == 'Laguna' ? 'selected' : ''; ?>>Laguna</option>
-                                    <option value="Bulacan" <?php echo ($user_address['UA_Province'] ?? '') == 'Bulacan' ? 'selected' : ''; ?>>Bulacan</option>
+                                    <?php
+                                    $provinces = [
+                                        'Abra','Agusan del Norte','Agusan del Sur','Aklan','Albay','Antique','Apayao','Aurora','Basilan','Bataan','Batanes','Batangas','Benguet','Biliran','Bohol','Bukidnon','Bulacan','Cagayan','Camarines Norte','Camarines Sur','Camiguin','Capiz','Catanduanes','Cavite','Cebu','Cotabato','Davao de Oro','Davao del Norte','Davao del Sur','Davao Occidental','Davao Oriental','Dinagat Islands','Eastern Samar','Guimaras','Ifugao','Ilocos Norte','Ilocos Sur','Iloilo','Isabela','Kalinga','La Union','Laguna','Lanao del Norte','Lanao del Sur','Leyte','Maguindanao','Marinduque','Masbate','Metro Manila','Misamis Occidental','Misamis Oriental','Mountain Province','Negros Occidental','Negros Oriental','Northern Samar','Nueva Ecija','Nueva Vizcaya','Occidental Mindoro','Oriental Mindoro','Palawan','Pampanga','Pangasinan','Quezon','Quirino','Rizal','Romblon','Samar','Sarangani','Siquijor','Sorsogon','South Cotabato','Southern Leyte','Sultan Kudarat','Sulu','Surigao del Norte','Surigao del Sur','Tarlac','Tawi-Tawi','Zambales','Zamboanga del Norte','Zamboanga del Sur','Zamboanga Sibugay'
+                                    ];
+                                    foreach ($provinces as $province) {
+                                        echo "<option value=\"$province\">$province</option>";
+                                    }
+                                    ?>
                                 </select>
                             </div>
-                            <div class="col-md-4 mb-3">
-                                <label for="postal_code" class="form-label">Postal Code</label>
-                                <input type="text" class="form-control" id="postal_code" name="postal_code" 
-                                       value="<?php echo htmlspecialchars($user_address['UA_PostalCode'] ?? ''); ?>" 
-                                       pattern="[0-9]{4}" placeholder="1234">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="postal_code" class="form-label">Postal Code <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="postal_code" name="postal_code" value="" placeholder="Postal Code" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="address_type" class="form-label">Address Type <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="address_type" name="address_type" value="" placeholder="e.g. Home, Work" required>
                             </div>
                         </div>
-                        
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="is_default" name="is_default" 
-                                       <?php echo ($user_address['UA_IsDefault'] ?? 0) ? 'checked' : ''; ?>>
-                                <label class="form-check-label" for="is_default">
-                                    Set as default address
-                                </label>
+                                <input class="form-check-input" type="checkbox" id="is_default" name="is_default">
+                                <label class="form-check-label" for="is_default">Set as default address</label>
                             </div>
                         </div>
-                        
                         <div class="d-flex justify-content-end">
                             <button type="submit" name="update_address" class="btn btn-update">
-                                <i class="fas fa-map-marker-alt me-2"></i>Update Address
+                                <i class="fas fa-map-marker-alt me-2"></i>Save Address
                             </button>
                         </div>
                     </form>
+                    <script>
+                    document.getElementById('showAddAddressForm').addEventListener('click', function() {
+                        var form = document.getElementById('addAddressForm');
+                        form.style.display = (form.style.display === 'none' || form.style.display === '') ? 'block' : 'none';
+                        this.style.display = 'none';
+                    });
+                    </script>
                 </div>
             </div>
 
