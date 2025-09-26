@@ -11,6 +11,8 @@ $conn = $database->getConnection();
 $user_id = $_SESSION['user_id'];
 
 // Check subscription status
+
+// Get subscription info
 $query = "SELECT us.*, sp.Plan_Name, sp.Plan_MaxListings, sp.Plan_FeaturedListings 
           FROM user_subscriptions us 
           JOIN subscription_plans sp ON us.PlanID = sp.PlanID 
@@ -20,6 +22,16 @@ $stmt = $conn->prepare($query);
 $stmt->bindParam(1, $user_id);
 $stmt->execute();
 $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Get count of currently featured products
+$featured_used = 0;
+if ($subscription) {
+    $query = "SELECT COUNT(*) as cnt FROM products WHERE OwnerID = ? AND Prod_IsFeatured = 1 AND Prod_FeaturedUntil > NOW() AND Prod_Status = 'Active'";
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(1, $user_id);
+    $stmt->execute();
+    $featured_used = (int)($stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0);
+}
 
 // Get owner statistics
 $stats = [];
@@ -381,8 +393,11 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <i class="fas fa-crown"></i> <?php echo htmlspecialchars($subscription['Plan_Name']); ?> Plan
                             </h5>
                             <p class="mb-0 opacity-75">
-                                Active until <?php echo date('M j, Y', strtotime($subscription['Sub_EndDate'])); ?> • 
+                                Active until <?php echo date('M j, Y', strtotime($subscription['Sub_EndDate'])); ?> •
                                 <?php echo $stats['total_products']; ?>/<?php echo $subscription['Plan_MaxListings']; ?> listings used
+                                <?php if(isset($subscription['Plan_FeaturedListings'])): ?>
+                                    • <?php echo $featured_used; ?>/<?php echo $subscription['Plan_FeaturedListings']; ?> featured used
+                                <?php endif; ?>
                             </p>
                         </div>
                         <div class="col-md-4 text-end">
