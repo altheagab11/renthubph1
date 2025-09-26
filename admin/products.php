@@ -577,11 +577,6 @@ function formatCurrency($amount) {
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="payments.php">
-                    <i class="fas fa-money-bill"></i> Payments
-                </a>
-            </li>
-            <li class="nav-item">
                 <a class="nav-link" href="reports.php">
                     <i class="fas fa-chart-bar"></i> Reports
                 </a>
@@ -886,97 +881,47 @@ function formatCurrency($amount) {
                                                 </div>
                                                 
                                                 <div class="d-flex flex-wrap gap-1 mt-3">
-                                                    <div class="dropdown">
-                                                        <button class="btn btn-outline-primary btn-action dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                                            <i class="fas fa-cog"></i> Actions
-                                                        </button>
-                                                        <ul class="dropdown-menu">
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <input type="hidden" name="new_status" value="Active">
-                                                                    <button type="submit" name="update_product_status" class="dropdown-item text-success">
-                                                                        <i class="fas fa-check me-2"></i>Approve
-                                                                    </button>
-                                                                </form>
-                                                            </li>
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <input type="hidden" name="new_status" value="Suspended">
-                                                                    <button type="submit" name="update_product_status" class="dropdown-item text-danger">
-                                                                        <i class="fas fa-ban me-2"></i>Reject
-                                                                    </button>
-                                                                </form>
-                                                            </li>
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <input type="hidden" name="new_status" value="Inactive">
-                                                                    <button type="submit" name="update_product_status" class="dropdown-item">
-                                                                        <i class="fas fa-pause me-2"></i>Deactivate
-                                                                    </button>
-                                                                </form>
-                                                            </li>
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <input type="hidden" name="new_status" value="Suspended">
-                                                                    <button type="submit" name="update_product_status" class="dropdown-item text-warning">
-                                                                        <i class="fas fa-exclamation-triangle me-2"></i>Suspend
-                                                                    </button>
-                                                                </form>
-                                                            </li>
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <input type="hidden" name="new_status" value="Active">
-                                                                    <button type="submit" name="update_product_status" class="dropdown-item text-success">
-                                                                        <i class="fas fa-play me-2"></i>Activate
-                                                                    </button>
-                                                                </form>
-                                                            </li>
-                                                            
-                                                            <li><hr class="dropdown-divider"></li>
-                                                            
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <?php if($product['Prod_IsFeatured']): ?>
-                                                                    <button type="submit" name="feature_product" class="dropdown-item">
-                                                                        <i class="fas fa-star-half-alt me-2"></i>Remove Featured
-                                                                    </button>
-                                                                    <?php else: ?>
-                                                                    <input type="hidden" name="is_featured" value="1">
-                                                                    <button type="submit" name="feature_product" class="dropdown-item text-warning">
-                                                                        <i class="fas fa-star me-2"></i>Make Featured
-                                                                    </button>
-                                                                    <?php endif; ?>
-                                                                </form>
-                                                            </li>
-                                                            
-                                                            <li><hr class="dropdown-divider"></li>
-                                                            
-                                                            <li><a class="dropdown-item" href="#" onclick="viewProductDetails(<?php echo $product['ProductID']; ?>)">
-                                                                <i class="fas fa-eye me-2"></i>View Details
-                                                            </a></li>
-                                                            
-                                                            <li><a class="dropdown-item" href="#" onclick="editProduct(<?php echo $product['ProductID']; ?>)">
-                                                                <i class="fas fa-edit me-2"></i>Edit Product
-                                                            </a></li>
-                                                            
-                                                            <li><hr class="dropdown-divider"></li>
-                                                            
-                                                            <li>
-                                                                <form method="POST" style="display: inline;">
-                                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                                    <button type="submit" name="delete_product" class="dropdown-item text-danger"
-                                                                            onclick="return confirm('Are you sure you want to delete this product? This action cannot be undone.')">
-                                                                        <i class="fas fa-trash me-2"></i>Delete Product
-                                                                    </button>
-                                                                </form>
-                                                            </li>
-                                                        </ul>
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Active">
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-success btn-sm" title="Approve"><i class="fas fa-check"></i></button>
+                                                        </form>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Suspended">
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-danger btn-sm" title="Reject"><i class="fas fa-ban"></i></button>
+                                                        </form>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Inactive">
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-secondary btn-sm" title="Deactivate"><i class="fas fa-pause"></i></button>
+                                                        </form>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Suspended">
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-warning btn-sm" title="Suspend"><i class="fas fa-exclamation-triangle"></i></button>
+                                                        </form>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Active">
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-success btn-sm" title="Activate"><i class="fas fa-play"></i></button>
+                                                        </form>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <?php if($product['Prod_IsFeatured']): ?>
+                                                                <button type="submit" name="feature_product" class="btn btn-outline-info btn-sm" title="Remove Featured"><i class="fas fa-star-half-alt"></i></button>
+                                                            <?php else: ?>
+                                                                <input type="hidden" name="is_featured" value="1">
+                                                                <button type="submit" name="feature_product" class="btn btn-outline-warning btn-sm" title="Make Featured"><i class="fas fa-star"></i></button>
+                                                            <?php endif; ?>
+                                                        </form>
+                                                        <button class="btn btn-outline-primary btn-sm" title="View Details" onclick="viewProductDetails(<?php echo $product['ProductID']; ?>)"><i class="fas fa-eye"></i></button>
+                                                        <button class="btn btn-outline-secondary btn-sm" title="Edit Product" onclick="editProduct(<?php echo $product['ProductID']; ?>)"><i class="fas fa-edit"></i></button>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
+                                                            <button type="submit" name="delete_product" class="btn btn-outline-danger btn-sm" title="Delete Product" onclick="return confirm('Are you sure you want to delete this product? This action cannot be undone.')"><i class="fas fa-trash"></i></button>
+                                                        </form>
                                                     </div>
                                                 </div>
                                             </div>

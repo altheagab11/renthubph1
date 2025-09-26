@@ -364,11 +364,6 @@ function getRoleName($role_id) {
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="payments.php">
-                    <i class="fas fa-money-bill"></i> Payments
-                </a>
-            </li>
-            <li class="nav-item">
                 <a class="nav-link" href="reports.php">
                     <i class="fas fa-chart-bar"></i> Reports
                 </a>
@@ -565,25 +560,37 @@ function getRoleName($role_id) {
                                     <div class="user-card position-relative mb-0" style="border-radius:0; border-width:0 0 1px 0;">
                                         <div class="card-body py-3 px-4">
                                             <div class="actions-top">
-                                                <div class="dropdown">
-                                                    <button class="btn btn-outline-primary btn-action dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                                        <i class="fas fa-cog"></i> Actions
-                                                    </button>
-                                                    <ul class="dropdown-menu">
-                                                        <li><a class="dropdown-item" href="#" onclick="viewUserDetails(<?php echo $user['UserID']; ?>)"><i class="fas fa-eye me-2"></i>View Details</a></li>
-                                                        <li><a class="dropdown-item" href="#" onclick="editUser(<?php echo $user['UserID']; ?>)"><i class="fas fa-edit me-2"></i>Edit User</a></li>
-                                                        <?php if(!$user['User_IsVerified']): ?>
-                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><button type="submit" name="verify_user" class="dropdown-item text-success"><i class="fas fa-user-check me-2"></i>Verify</button></form></li>
-                                                        <?php else: ?>
-                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><button type="submit" name="unverify_user" class="dropdown-item text-warning"><i class="fas fa-user-times me-2"></i>Unverify</button></form></li>
-                                                        <?php endif; ?>
-                                                        <?php if($user['User_Status'] == 'Active'): ?>
-                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><input type="hidden" name="new_status" value="Inactive"><button type="submit" name="update_user_status" class="dropdown-item text-warning"><i class="fas fa-ban me-2"></i>Deactivate</button></form></li>
-                                                        <?php else: ?>
-                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><input type="hidden" name="new_status" value="Active"><button type="submit" name="update_user_status" class="dropdown-item text-success"><i class="fas fa-check-circle me-2"></i>Activate</button></form></li>
-                                                        <?php endif; ?>
-                                                        <li><form method="POST" style="display:inline;"><input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>"><button type="submit" name="delete_user" class="dropdown-item text-danger" onclick="return confirm('Delete this user?')"><i class="fas fa-trash me-2"></i>Delete</button></form></li>
-                                                    </ul>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <button class="btn btn-outline-primary btn-sm" title="View Details" onclick="viewUserDetails(<?php echo $user['UserID']; ?>)"><i class="fas fa-eye"></i></button>
+                                                    <button class="btn btn-outline-secondary btn-sm" title="Edit User" onclick="editUser(<?php echo $user['UserID']; ?>)"><i class="fas fa-edit"></i></button>
+                                                    <?php if(!$user['User_IsVerified']): ?>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                            <button type="submit" name="verify_user" class="btn btn-outline-success btn-sm" title="Verify"><i class="fas fa-user-check"></i></button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                            <button type="submit" name="unverify_user" class="btn btn-outline-warning btn-sm" title="Unverify"><i class="fas fa-user-times"></i></button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                    <?php if($user['User_Status'] == 'Active'): ?>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Inactive">
+                                                            <button type="submit" name="update_user_status" class="btn btn-outline-warning btn-sm" title="Deactivate"><i class="fas fa-ban"></i></button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Active">
+                                                            <button type="submit" name="update_user_status" class="btn btn-outline-success btn-sm" title="Activate"><i class="fas fa-check-circle"></i></button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                    <form method="POST" style="display:inline;">
+                                                        <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                        <button type="submit" name="delete_user" class="btn btn-outline-danger btn-sm" title="Delete" onclick="return confirm('Delete this user?')"><i class="fas fa-trash"></i></button>
+                                                    </form>
                                                 </div>
                                             </div>
                                             <div class="row align-items-center g-0 flex-nowrap">

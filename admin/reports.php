@@ -90,11 +90,6 @@ $auth->requireRole([1]); // Admin only
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="payments.php">
-                    <i class="fas fa-money-bill"></i> Payments
-                </a>
-            </li>
-            <li class="nav-item">
                 <a class="nav-link active" href="reports.php">
                     <i class="fas fa-chart-bar"></i> Reports
                 </a>
