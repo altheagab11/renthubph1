@@ -49,17 +49,36 @@ if ($_POST) {
                 
             case 'feature_product':
                 $product_id = $_POST['product_id'];
-                $featured_until = date('Y-m-d H:i:s', strtotime('+30 days'));
-                
-                $query = "UPDATE products SET Prod_IsFeatured = 1, Prod_FeaturedUntil = ? WHERE ProductID = ? AND OwnerID = ?";
+                // Get current active subscription and featured limit
+                $plan_limit = null;
+                $query = "SELECT sp.Plan_FeaturedListings FROM user_subscriptions us JOIN subscription_plans sp ON us.PlanID = sp.PlanID WHERE us.UserID = ? AND us.Sub_Status = 'Active' ORDER BY us.Sub_CreatedAt DESC LIMIT 1";
                 $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $featured_until);
-                $stmt->bindParam(2, $product_id);
-                $stmt->bindParam(3, $user_id);
-                
-                if ($stmt->execute()) {
-                    $message = "Product featured successfully!";
-                    $message_type = "success";
+                $stmt->bindParam(1, $user_id);
+                $stmt->execute();
+                $plan = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($plan && isset($plan['Plan_FeaturedListings'])) {
+                    $plan_limit = (int)$plan['Plan_FeaturedListings'];
+                }
+                // Count currently featured products
+                $query = "SELECT COUNT(*) as cnt FROM products WHERE OwnerID = ? AND Prod_IsFeatured = 1 AND Prod_FeaturedUntil > NOW() AND Prod_Status = 'Active'";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $user_id);
+                $stmt->execute();
+                $current_featured = (int)($stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0);
+                if ($plan_limit !== null && $current_featured >= $plan_limit) {
+                    $message = "You have reached your featured listing limit (" . $plan_limit . "). Upgrade your plan or unfeature another product.";
+                    $message_type = "danger";
+                } else {
+                    $featured_until = date('Y-m-d H:i:s', strtotime('+30 days'));
+                    $query = "UPDATE products SET Prod_IsFeatured = 1, Prod_FeaturedUntil = ? WHERE ProductID = ? AND OwnerID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindParam(1, $featured_until);
+                    $stmt->bindParam(2, $product_id);
+                    $stmt->bindParam(3, $user_id);
+                    if ($stmt->execute()) {
+                        $message = "Product featured successfully!";
+                        $message_type = "success";
+                    }
                 }
                 break;
         }
