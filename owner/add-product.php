@@ -807,6 +807,7 @@ try {
                         echo "</span>";
                         echo "<span class='ms-4'><strong>Featured:</strong> ";
                         echo ($max_featured == -1 ? "<b>Unlimited</b>" : "<b>{$current_featured}</b> / <b>{$max_featured}</b>") . "</span>";
+                        echo "<div class='small text-muted mt-1'>* Only active (not deleted/inactive) products are counted.</div>";
                     } else {
                         echo "No active subscription. Listing and featured limits not available.";
                     }
