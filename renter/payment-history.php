@@ -29,6 +29,16 @@ try {
 }
 
 $payments = [];
+
+// Notification dropdown logic (copied from dashboard.php)
+$notif_count = 0;
+$unread_notifications = [];
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count = count($unread_notifications);
+
 $stats = [
     'total_payments' => 0,
     'total_amount' => 0,
@@ -532,13 +542,23 @@ if ($payments_table_exists) {
                         <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
-                                <?php echo $stats['pending_payments']; ?>
+                                <?php echo $notif_count; ?>
                             </span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-credit-card text-success me-2"></i>Payment successful</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Payment pending</a></li>
+                            <?php if($notif_count == 0): ?>
+                                <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
+                            <?php else: ?>
+                                <?php foreach($unread_notifications as $notification): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="#">
+                                            <?php echo htmlspecialchars($notification['Not_Message']); ?>
+                                            <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
                         </ul>

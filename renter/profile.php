@@ -259,6 +259,15 @@ $stmt->bindParam(1, $user_id);
 $stmt->execute();
 $user_info = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// Notification dropdown logic (copied from dashboard.php)
+$notif_count = 0;
+$unread_notifications = [];
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count = count($unread_notifications);
+
 // Get user statistics
 $stats = [];
 
@@ -657,6 +666,31 @@ function getFieldValue($user_info, $field, $default = '') {
                 </div>
                 
                 <div class="navbar-nav ms-auto d-flex flex-row">
+                    <div class="nav-item dropdown me-3">
+                        <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-bell"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
+                                <?php echo $notif_count; ?>
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">Notifications</h6></li>
+                            <?php if($notif_count == 0): ?>
+                                <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
+                            <?php else: ?>
+                                <?php foreach($unread_notifications as $notification): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="#">
+                                            <?php echo htmlspecialchars($notification['Not_Message']); ?>
+                                            <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
+                        </ul>
+                    </div>
                     <div class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-user-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
