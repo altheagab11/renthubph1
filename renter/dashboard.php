@@ -235,50 +235,56 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Main Content -->
     <div class="main-content">
         <!-- Top Navigation -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
-            <div class="container-fluid">
-                <div class="d-flex align-items-center">
-                    <button class="btn btn-outline-secondary d-md-none me-3" type="button" id="sidebarToggle">
-                        <i class="fas fa-bars"></i>
-                    </button>
-                    <h5 class="mb-0">Welcome back, <?php echo htmlspecialchars($_SESSION['user_name']); ?>!</h5>
-                </div>
-                <div class="navbar-nav ms-auto">
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-bell"></i>
-                            <span class="badge bg-danger badge-sm"><?php echo $notif_count; ?></span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <?php if($notif_count == 0): ?>
-                            <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
-                            <?php else: ?>
-                            <?php foreach($unread_notifications as $notification): ?>
-                            <li>
-                                <a class="dropdown-item" href="#">
-                                    <?php echo htmlspecialchars($notification['Not_Message']); ?>
-                                    <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
+            <nav class="navbar navbar-expand-lg navbar-light sticky-top">
+                <div class="container-fluid">
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-outline-secondary d-md-none me-3" type="button" id="sidebarToggle">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <h5 class="mb-0">
+                            <i class="fas fa-tachometer-alt text-primary me-2"></i>Welcome back, <?php echo htmlspecialchars($_SESSION['user_name']); ?>!
+                        </h5>
+                    </div>
+                    <div class="navbar-nav ms-auto d-flex flex-row">
+                            <div class="nav-item dropdown me-3">
+                                <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
+                                    <i class="fas fa-bell"></i>
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
+                                        <?php echo $notif_count; ?>
+                                    </span>
                                 </a>
-                            </li>
-                            <?php endforeach; ?>
-                            <?php endif; ?>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="notifications.php">View all</a></li>
-                        </ul>
-                    </div>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user"></i> <?php echo $_SESSION['user_name']; ?>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="profile.php">Profile</a></li>
-                            <li><a class="dropdown-item" href="../logout.php">Logout</a></li>
-                        </ul>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><h6 class="dropdown-header">Notifications</h6></li>
+                                    <?php if($notif_count == 0): ?>
+                                    <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
+                                    <?php else: ?>
+                                    <?php foreach($unread_notifications as $notification): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="#">
+                                            <?php echo htmlspecialchars($notification['Not_Message']); ?>
+                                            <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
+                                        </a>
+                                    </li>
+                                    <?php endforeach; ?>
+                                    <?php endif; ?>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
+                                </ul>
+                            </div>
+                        <div class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="../logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </nav>
+            </nav>
 
         <!-- Dashboard Content -->
         <div class="container-fluid p-4">

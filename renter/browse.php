@@ -11,6 +11,14 @@ $user_query = "SELECT User_Name, User_Email, User_Phone, User_IsVerified FROM us
 $user_stmt = $conn->prepare($user_query);
 $user_stmt->execute([$user_id]);
 $current_user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+// Get unread notifications for the renter
+$notif_count = 0;
+$unread_notifications = [];
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count = count($unread_notifications);
 // Get all user addresses
 $addresses_query = "SELECT AddressID, UA_Street, UA_Barangay, UA_City,
                            UA_Province, UA_ZipCode, UA_IsDefault, UA_AddressType
@@ -853,41 +861,56 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Main Content -->
     <div class="main-content">
         <!-- Top Navigation (same as before) -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
-            <div class="container-fluid">
-                <div class="d-flex align-items-center">
-                    <button class="btn btn-outline-secondary d-md-none me-3" type="button" id="sidebarToggle">
-                        <i class="fas fa-bars"></i>
-                    </button>
-                    <h5 class="mb-0">Browse Available Items</h5>
-                </div>
-                <div class="navbar-nav ms-auto">
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-bell"></i>
-                            <span class="badge bg-danger badge-sm">3</span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#">Booking confirmed</a></li>
-                            <li><a class="dropdown-item" href="#">New message received</a></li>
-                            <li><a class="dropdown-item" href="#">Payment processed</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="notifications.php">View all</a></li>
-                        </ul>
+            <nav class="navbar navbar-expand-lg navbar-light sticky-top">
+                <div class="container-fluid">
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-outline-secondary d-md-none me-3" type="button" id="sidebarToggle">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <h5 class="mb-0">
+                            <i class="fas fa-search text-primary me-2"></i>Browse Available Items
+                        </h5>
                     </div>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user"></i> <?php echo $_SESSION['user_name']; ?>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="profile.php">Profile</a></li>
-                            <li><a class="dropdown-item" href="../logout.php">Logout</a></li>
-                        </ul>
+                    <div class="navbar-nav ms-auto d-flex flex-row">
+                            <div class="nav-item dropdown me-3">
+                                <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
+                                    <i class="fas fa-bell"></i>
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
+                                        <?php echo $notif_count; ?>
+                                    </span>
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><h6 class="dropdown-header">Notifications</h6></li>
+                                    <?php if($notif_count == 0): ?>
+                                    <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
+                                    <?php else: ?>
+                                    <?php foreach($unread_notifications as $notification): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="#">
+                                            <?php echo htmlspecialchars($notification['Not_Message']); ?>
+                                            <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
+                                        </a>
+                                    </li>
+                                    <?php endforeach; ?>
+                                    <?php endif; ?>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
+                                </ul>
+                            </div>
+                        <div class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="../logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </nav>
+            </nav>
         <!-- Browse Content -->
         <div class="container-fluid p-4">
             <!-- Filters (same as before) -->
