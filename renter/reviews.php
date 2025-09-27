@@ -116,7 +116,7 @@ $pending_reviews = [];
 // Notification dropdown logic (copied from dashboard.php)
 $notif_count = 0;
 $unread_notifications = [];
-$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 5";
 $notif_stmt = $conn->prepare($notif_query);
 $notif_stmt->execute([$user_id]);
 $unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -953,6 +953,12 @@ if ($reviews_table_exists) {
                                             <i class="fas fa-quote-left me-2"></i>My Review
                                         </h6>
                                         <p class="mb-0"><?php echo nl2br(htmlspecialchars($review['Rev_Comment'])); ?></p>
+                                        <?php if (!empty($review['Rev_OwnerResponse'])): ?>
+                                        <div class="mt-3 p-3" style="background: #f8f9fa; border-radius: 10px; border-left: 4px solid #38ef7d;">
+                                            <strong class="text-success"><i class="fas fa-reply me-2"></i>Owner's Response</strong>
+                                            <p class="mb-0 mt-1"><?php echo nl2br(htmlspecialchars($review['Rev_OwnerResponse'])); ?></p>
+                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                     
                                     <div class="d-flex gap-2 mt-3">

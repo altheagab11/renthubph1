@@ -13,7 +13,7 @@ $user_id = $_SESSION['user_id'];
 // Get unread notifications for the renter
 $notif_count = 0;
 $unread_notifications = [];
-$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 5";
 $notif_stmt = $conn->prepare($notif_query);
 $notif_stmt->execute([$user_id]);
 $unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
