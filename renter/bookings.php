@@ -99,6 +99,21 @@ if ($_POST) {
                 $stmt->bindParam(3, $user_id);
                 
                 if ($stmt->execute()) {
+                    // Send notification to owner
+                    $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                    $owner_stmt = $conn->prepare($owner_query);
+                    $owner_stmt->execute([$booking_id]);
+                    $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($owner) {
+                        $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_cancelled', 'Booking Cancelled', ?, ?, 0, NOW())";
+                        $notif_msg = 'A booking for your product: ' . $owner['Prod_Name'] . ' has been cancelled by the renter.';
+                        $notif_stmt = $conn->prepare($notif_query);
+                        $notif_stmt->execute([
+                            $owner['OwnerID'],
+                            $notif_msg,
+                            $booking_id
+                        ]);
+                    }
                     $message = "Booking cancelled successfully!";
                     $message_type = "success";
                 } else {
@@ -113,6 +128,21 @@ if ($_POST) {
                 $stmt->bindParam(3, $user_id);
                 
                 if ($stmt->execute()) {
+                    // Send notification to owner
+                    $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                    $owner_stmt = $conn->prepare($owner_query);
+                    $owner_stmt->execute([$booking_id]);
+                    $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($owner) {
+                        $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_cancelled', 'Booking Cancelled', ?, ?, 0, NOW())";
+                        $notif_msg = 'A booking for your product: ' . $owner['Prod_Name'] . ' has been cancelled by the renter.';
+                        $notif_stmt = $conn->prepare($notif_query);
+                        $notif_stmt->execute([
+                            $owner['OwnerID'],
+                            $notif_msg,
+                            $booking_id
+                        ]);
+                    }
                     if ($payment_status == 'Completed' && in_array(strtolower($payment_method), ['gcash', 'maya', 'bank transfer'])) {
                         $refund_amount = $notes['total_amount'] ?? 0;
                         $refund_option = $_POST['refund_option'] ?? 'full';
