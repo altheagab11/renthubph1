@@ -520,17 +520,19 @@ $stats['most_expensive'] = $most_expensive;
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><h6 class="dropdown-header">Notifications</h6></li>
-                                    <?php if($notif_count == 0): ?>
-                                    <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
+                                    <?php if ($unread_notifications && count($unread_notifications) > 0): ?>
+                                        <?php foreach ($unread_notifications as $notif): ?>
+                                            <li>
+                                                <a class="dropdown-item" href="notifications.php">
+                                                    <i class="fas fa-info-circle text-primary me-2"></i>
+                                                    <strong><?php echo htmlspecialchars($notif['Not_Title']); ?></strong><br>
+                                                    <span class="text-muted small"> <?php echo $notif['Not_Message']; ?> </span><br>
+                                                    <small class="text-muted d-block"> <?php echo date('M j, Y \a\t h:i A', strtotime($notif['Not_CreatedAt'])); ?> </small>
+                                                </a>
+                                            </li>
+                                        <?php endforeach; ?>
                                     <?php else: ?>
-                                    <?php foreach($unread_notifications as $notification): ?>
-                                    <li>
-                                        <a class="dropdown-item" href="#">
-                                            <?php echo htmlspecialchars($notification['Not_Message']); ?>
-                                            <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
-                                        </a>
-                                    </li>
-                                    <?php endforeach; ?>
+                                        <li><span class="dropdown-item text-muted">No new notifications</span></li>
                                     <?php endif; ?>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>

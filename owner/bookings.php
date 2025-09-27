@@ -101,6 +101,54 @@ if ($_POST) {
                             ]);
                         }
                     }
+                    // Send notification to renter if rental started
+                    if ($action === 'start') {
+                        // Get renter ID and product name
+                        $info_query = "SELECT b.RenterID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                        $info_stmt = $conn->prepare($info_query);
+                        $info_stmt->execute([$booking_id]);
+                        $info = $info_stmt->fetch(PDO::FETCH_ASSOC);
+                        if ($info) {
+                            $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'rental_started', 'Rental Started', ?, ?, 0, NOW())";
+                            $notif_stmt = $conn->prepare($notif_query);
+                            $notif_message = "Your rental for product: " . htmlspecialchars($info['Prod_Name']) . " has started.";
+                            $notif_stmt->execute([
+                                $info['RenterID'],
+                                $notif_message,
+                                $booking_id
+                            ]);
+                        }
+                    }
+
+                    // Send notification to renter if completed
+                    if ($action === 'complete') {
+                        // Get renter ID and product name
+                        $info_query = "SELECT b.RenterID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                        $info_stmt = $conn->prepare($info_query);
+                        $info_stmt->execute([$booking_id]);
+                        $info = $info_stmt->fetch(PDO::FETCH_ASSOC);
+                        if ($info) {
+                            if ($isDamaged) {
+                                $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_completed', 'Booking Completed (With Damage)', ?, ?, 0, NOW())";
+                                $notif_stmt = $conn->prepare($notif_query);
+                                $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been marked as completed by the owner.<br>Please note: The owner reported damage to the product.<br>The security deposit will NOT be refunded.<br>Thank you for using RentHub!";
+                                $notif_stmt->execute([
+                                    $info['RenterID'],
+                                    $notif_message,
+                                    $booking_id
+                                ]);
+                            } else {
+                                $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_completed', 'Booking Completed', ?, ?, 0, NOW())";
+                                $notif_stmt = $conn->prepare($notif_query);
+                                $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been marked as completed by the owner.<br>Your security deposit will be refunded within 2-3 working days.<br>Thank you for using RentHub!";
+                                $notif_stmt->execute([
+                                    $info['RenterID'],
+                                    $notif_message,
+                                    $booking_id
+                                ]);
+                            }
+                        }
+                    }
 
                     $message = "Booking status updated successfully!";
                     $message_type = "success";
