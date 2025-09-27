@@ -35,6 +35,24 @@ if ($_POST && isset($_POST['respond_review'])) {
         if ($stmt->execute()) {
             $message = "Response added successfully!";
             $message_type = "success";
+
+            // Send notification to renter
+            // Get review details for notification
+            $review_query = "SELECT r.*, b.RenterID, p.Prod_Name FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID JOIN products p ON b.ProductID = p.ProductID WHERE r.ReviewID = ?";
+            $review_stmt = $conn->prepare($review_query);
+            $review_stmt->execute([$review_id]);
+            $review = $review_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($review) {
+                $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, ?, ?, ?, ?, 0, NOW())";
+                $notif_stmt = $conn->prepare($notif_query);
+                $notif_stmt->execute([
+                    $review['RenterID'],
+                    'review_response',
+                    'Owner Responded to Your Review',
+                    'The owner responded to your review for product "' . htmlspecialchars($review['Prod_Name']) . '".',
+                    $review_id
+                ]);
+            }
         } else {
             $message = "Failed to add response. Please try again.";
             $message_type = "danger";

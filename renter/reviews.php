@@ -42,6 +42,17 @@ if ($_POST) {
                 if ($stmt->execute()) {
                     $message = "Review submitted successfully!";
                     $message_type = "success";
+
+                    // Send notification to owner
+                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, ?, ?, ?, ?, 0, NOW())";
+                    $notif_stmt = $conn->prepare($notif_query);
+                    $notif_stmt->execute([
+                        $booking['OwnerID'],
+                        'review',
+                        'New Review Received',
+                        'Your product "' . htmlspecialchars($booking['Prod_Name']) . '" received a new review: "' . htmlspecialchars($comment) . '" (Rating: ' . $rating . '/5)',
+                        $booking_id
+                    ]);
                 } else {
                     $message = "Failed to submit review. Please try again.";
                     $message_type = "danger";
