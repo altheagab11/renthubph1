@@ -904,15 +904,15 @@ if ($payments_table_exists) {
                             <i class="fas fa-file-export me-2"></i>Export Payment History
                         </h6>
                         <div class="d-flex justify-content-center gap-2 flex-wrap">
-                            <button class="btn btn-outline-primary" onclick="exportToPDF()">
+                            <a href="export-payment-history-pdf.php" class="btn btn-outline-primary">
                                 <i class="fas fa-file-pdf me-2"></i>Export PDF
-                            </button>
-                            <button class="btn btn-outline-success" onclick="exportToExcel()">
+                            </a>
+                            <a href="export-payment-history-excel.php" class="btn btn-outline-success">
                                 <i class="fas fa-file-excel me-2"></i>Export Excel
-                            </button>
-                            <button class="btn btn-outline-info" onclick="exportToCSV()">
+                            </a>
+                            <a href="export-payment-history-csv.php" class="btn btn-outline-info">
                                 <i class="fas fa-file-csv me-2"></i>Export CSV
-                            </button>
+                            </a>
                         </div>
                     </div>
                 </div>
