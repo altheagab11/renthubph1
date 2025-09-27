@@ -987,13 +987,15 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         <!-- Feature Button (or placeholder) -->
                                         <div class="action-col">
                                             <?php if($product['Prod_Status'] == 'Active'): ?>
-                                                <form method="POST" class="m-0">
-                                                    <input type="hidden" name="action" value="feature_product">
-                                                    <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                    <button type="submit" class="btn btn-outline-success btn-sm w-100" title="Feature">
+                                                <?php if($product['Prod_IsFeatured'] && $product['Prod_FeaturedUntil'] > date('Y-m-d H:i:s')): ?>
+                                                    <button type="button" class="btn btn-outline-warning btn-sm w-100 toggle-featured-btn" data-product-id="<?php echo $product['ProductID']; ?>" data-featured="1" title="Unfeature">
                                                         <i class="fas fa-star"></i>
                                                     </button>
-                                                </form>
+                                                <?php else: ?>
+                                                    <button type="button" class="btn btn-outline-success btn-sm w-100 toggle-featured-btn" data-product-id="<?php echo $product['ProductID']; ?>" data-featured="0" title="Feature">
+                                                        <i class="fas fa-star"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                             <?php else: ?>
                                                 <span class="d-block" style="visibility:hidden;">&nbsp;</span>
                                             <?php endif; ?>
@@ -1136,6 +1138,36 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
+        // Toggle featured/unfeatured AJAX
+        document.addEventListener('click', function(e) {
+            if(e.target.closest('.toggle-featured-btn')) {
+                const btn = e.target.closest('.toggle-featured-btn');
+                const productId = btn.dataset.productId;
+                const isFeatured = btn.dataset.featured == '1';
+                btn.disabled = true;
+                fetch('../api/toggle-featured.php', {
+                    method: 'POST',
+                    headers: {},
+                    body: new URLSearchParams({
+                        product_id: productId,
+                        action: isFeatured ? 'unfeature' : 'feature'
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) {
+                        window.location.reload();
+                    } else {
+                        alert('Failed to update featured status');
+                        btn.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Failed to update featured status');
+                    btn.disabled = false;
+                });
+            }
+        });
         // Save Changes AJAX handler
         document.addEventListener('DOMContentLoaded', function() {
             const editForm = document.getElementById('editProductForm');
