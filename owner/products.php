@@ -1041,6 +1041,30 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 </div>
             </div>
         </div>
+            <!-- Product Edit Modal -->
+            <div class="modal fade" id="editProductModal" tabindex="-1" aria-labelledby="editProductModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-xl modal-dialog-centered">
+                    <div class="modal-content" style="border-radius: 20px;">
+                        <form id="editProductForm" enctype="multipart/form-data">
+                            <div class="modal-header border-0">
+                                <h5 class="modal-title" id="editProductModalLabel">
+                                    <i class="fas fa-edit me-2"></i>Edit Product
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body" id="editProductBody">
+                                <!-- Form fields will be injected here by JS -->
+                            </div>
+                            <div class="modal-footer border-0">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
     <div class="modal fade" id="deleteModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content" style="border-radius: 20px;">
@@ -1112,6 +1136,188 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
+        // Save Changes AJAX handler
+        document.addEventListener('DOMContentLoaded', function() {
+            const editForm = document.getElementById('editProductForm');
+            if (editForm) {
+                editForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const formData = new FormData(editForm);
+
+                    // Collect removed images
+                    const removedImages = [];
+                    document.querySelectorAll('#editProductImages img[data-remove="1"]').forEach(img => {
+                        if (img.dataset.imgPath) removedImages.push(img.dataset.imgPath);
+                    });
+                    formData.append('removed_images', JSON.stringify(removedImages));
+
+                    fetch('../api/update-product.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Product updated successfully!');
+                            window.location.reload();
+                        } else {
+                            alert('Error: ' + (data.message || 'Failed to update product.'));
+                        }
+                    })
+                    .catch(() => alert('Error: Failed to update product.'));
+                });
+            }
+        });
+            // Open Edit Product Modal and fetch details
+            function openEditProductModal(product) {
+                // Show loading spinner while fetching
+                document.getElementById('editProductBody').innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>';
+                const modal = new bootstrap.Modal(document.getElementById('editProductModal'));
+                modal.show();
+
+                // Fetch full product details via AJAX
+                fetch('../api/get-owner-address.php?product_id=' + product.ProductID)
+                    .then(res => res.json())
+                    .then(data => {
+                        // Build form fields for all product columns
+                        let html = `<input type='hidden' name='ProductID' value='${product.ProductID}'>`;
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Name</label><input type='text' class='form-control' name='Prod_Name' value='${product.Prod_Name ?? ''}' required></div>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Brand</label><input type='text' class='form-control' name='Prod_Brand' value='${product.Prod_Brand ?? ''}'></div>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Model</label><input type='text' class='form-control' name='Prod_Model' value='${product.Prod_Model ?? ''}'></div>`;
+                        html += `</div>`;
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Condition</label><select class='form-select' name='Prod_Condition'>` +
+                            ["New", "Like New", "Good", "Fair", "Poor"].map(opt => `<option value='${opt}' ${product.Prod_Condition === opt ? "selected" : ""}>${opt}</option>`).join('') +
+                            `</select></div>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Category</label><select class='form-select' name='CategoryID' id='editProductCategorySelect'></select></div>`;
+                        html += `</div>`;
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Rental Price</label><input type='number' step='0.01' class='form-control' name='Prod_RentalPrice' value='${product.Prod_RentalPrice ?? ''}' required></div>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Price Type</label><input type='text' class='form-control' name='Prod_PriceType' value='${product.Prod_PriceType ?? ''}'></div>`;
+                        html += `<div class='col-md-4 mb-3'><label class='form-label'>Security Deposit</label><input type='number' step='0.01' class='form-control' name='Prod_SecurityDeposit' value='${product.Prod_SecurityDeposit ?? ''}'></div>`;
+                        html += `</div>`;
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-6 mb-3'><label class='form-label'>Min Rental Duration</label><input type='number' class='form-control' name='Prod_MinRentalDuration' value='${product.Prod_MinRentalDuration ?? ''}'></div>`;
+                        html += `<div class='col-md-6 mb-3'><label class='form-label'>Max Rental Duration</label><input type='number' class='form-control' name='Prod_MaxRentalDuration' value='${product.Prod_MaxRentalDuration ?? ''}'></div>`;
+                        html += `</div>`;
+                        // ...availability field removed...
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-6 mb-3'><label class='form-label'>Description</label><textarea class='form-control' name='Prod_Description' rows='3'>${product.Prod_Description ?? ''}</textarea></div>`;
+                        html += `</div>`;
+
+                        // Product Location section
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-6 mb-3'><label class='form-label'>Product Address</label><select class='form-select' name='AddressID' id='editProductAddressSelect'></select></div>`;
+                        html += `<div class='col-md-3 mb-3'><label class='form-label'>Pickup Available</label><select class='form-select' name='PL_PickupAvailable'><option value='1' ${(product.PL_PickupAvailable == 1) ? 'selected' : ''}>Yes</option><option value='0' ${(product.PL_PickupAvailable == 0) ? 'selected' : ''}>No</option></select></div>`;
+                        html += `<div class='col-md-3 mb-3'><label class='form-label'>Delivery Available</label><select class='form-select' name='PL_DeliveryAvailable'><option value='1' ${(product.PL_DeliveryAvailable == 1) ? 'selected' : ''}>Yes</option><option value='0' ${(product.PL_DeliveryAvailable == 0) ? 'selected' : ''}>No</option></select></div>`;
+                        html += `</div>`;
+                        html += `<div class='row'>`;
+                        html += `<div class='col-md-6 mb-3'><label class='form-label'>Delivery Radius (km)</label><input type='number' step='0.1' class='form-control' name='PL_DeliveryRadius' value='${product.PL_DeliveryRadius ?? ''}'></div>`;
+                        html += `<div class='col-md-6 mb-3'><label class='form-label'>Delivery Fee (₱)</label><input type='number' step='0.01' class='form-control' name='PL_DeliveryFee' value='${product.PL_DeliveryFee ?? ''}'></div>`;
+                        html += `</div>`;
+
+                        // Images section
+                        html += `<div class='mb-3'><label class='form-label'>Images</label><div id='editProductImages' class='d-flex flex-wrap gap-2'></div>`;
+                        html += `<input type='file' name='images[]' id='editProductImageInput' multiple accept='image/*' class='form-control mt-2'>`;
+                        html += `<small class='text-muted'>Upload multiple images. Click an image to remove before saving.</small></div>`;
+
+                        document.getElementById('editProductBody').innerHTML = html;
+
+                        // Fetch categories and populate dropdown
+                        fetch('../api/get-categories.php')
+                            .then(res => res.json())
+                            .then(categories => {
+                                const select = document.getElementById('editProductCategorySelect');
+                                select.innerHTML = categories.map(cat => {
+                                    return `<option value='${cat.CategoryID}' ${cat.CategoryID == product.CategoryID ? 'selected' : ''}>${cat.Cat_Name}</option>`;
+                                }).join('');
+                            });
+
+                        // Fetch owner's addresses and populate dropdown
+                        fetch('../api/get-owner-address.php?owner_id=' + product.OwnerID)
+                            .then(res => res.json())
+                            .then(addresses => {
+                                const select = document.getElementById('editProductAddressSelect');
+                                select.innerHTML = addresses.map(addr => {
+                                    let label = `${addr.UA_Street}, ${addr.UA_Barangay}, ${addr.UA_City}, ${addr.UA_Province}`;
+                                    return `<option value='${addr.AddressID}' ${addr.AddressID == product.AddressID ? 'selected' : ''}>${label}</option>`;
+                                }).join('');
+                            });
+
+                        // Show existing images
+                        if(product.all_images) {
+                            const imgDiv = document.getElementById('editProductImages');
+                            product.all_images.forEach((img, idx) => {
+                                // Create image wrapper
+                                const wrapper = document.createElement('div');
+                                wrapper.style = 'position:relative;display:inline-block;margin:2px;';
+                                // Create image element
+                                const imgElem = document.createElement('img');
+                                imgElem.src = '../' + img.PI_ImagePath;
+                                imgElem.className = 'rounded border';
+                                imgElem.style = 'height:80px;width:80px;object-fit:cover;';
+                                imgElem.dataset.imgPath = img.PI_ImagePath;
+                                // Create delete button
+                                const delBtn = document.createElement('button');
+                                delBtn.innerHTML = '&times;';
+                                delBtn.type = 'button';
+                                delBtn.className = 'btn btn-sm btn-danger';
+                                delBtn.style = 'position:absolute;top:2px;right:2px;padding:0 6px;line-height:1;font-size:16px;border-radius:50%;z-index:2;';
+                                delBtn.title = 'Delete image';
+                                delBtn.onclick = function(e) {
+                                    e.stopPropagation();
+                                    delBtn.disabled = true;
+                                    fetch('../api/delete-product-image.php', {
+                                        method: 'POST',
+                                        headers: { },
+                                        body: new URLSearchParams({
+                                            ProductID: product.ProductID,
+                                            PI_ImagePath: img.PI_ImagePath
+                                        })
+                                    })
+                                    .then(res => res.json())
+                                    .then(data => {
+                                        if(data.success) {
+                                            wrapper.remove();
+                                        } else {
+                                            alert('Failed to delete image');
+                                            delBtn.disabled = false;
+                                        }
+                                    })
+                                    .catch(() => {
+                                        alert('Failed to delete image');
+                                        delBtn.disabled = false;
+                                    });
+                                };
+                                // Append image and button to wrapper
+                                wrapper.appendChild(imgElem);
+                                wrapper.appendChild(delBtn);
+                                imgDiv.appendChild(wrapper);
+                            });
+                        }
+
+                        // Preview newly selected images
+                        document.getElementById('editProductImageInput').addEventListener('change', function(e) {
+                            const imgDiv = document.getElementById('editProductImages');
+                            Array.from(e.target.files).forEach(file => {
+                                const reader = new FileReader();
+                                reader.onload = function(ev) {
+                                    const imgElem = document.createElement('img');
+                                    imgElem.src = ev.target.result;
+                                    imgElem.className = 'rounded border';
+                                    imgElem.style = 'height:80px;width:80px;object-fit:cover;cursor:pointer;';
+                                    imgElem.title = 'Click to remove';
+                                    imgElem.onclick = function() { imgElem.remove(); };
+                                    imgElem.dataset.newFile = file.name;
+                                    imgDiv.appendChild(imgElem);
+                                };
+                                reader.readAsDataURL(file);
+                            });
+                        });
+                    });
+            }
+            window.openEditProductModal = openEditProductModal;
         function showProductDetails(product) {
             let html = `<div class='container-fluid'>`;
             html += `<div class='row'><div class='col-md-6'><strong>Name:</strong> ${product.Prod_Name}</div><div class='col-md-6'><strong>Category:</strong> ${product.Cat_Name ?? 'Uncategorized'}</div></div>`;
