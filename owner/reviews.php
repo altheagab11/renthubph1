@@ -787,13 +787,7 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     <div class="card-body p-4">
                         <div class="row">
-                            <div class="col-md-3">
-                                <img src="<?php echo $review['PI_ImagePath'] ? htmlspecialchars($review['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                     class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($review['Prod_Name']); ?>">
-                            </div>
-                            
-                            <div class="col-md-9">
+                                <div class="col-md-12">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>
                                         <h5 class="mb-1"><?php echo htmlspecialchars($review['Prod_Name']); ?></h5>
