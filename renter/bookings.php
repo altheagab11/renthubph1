@@ -670,6 +670,9 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                         <i class="fas fa-user me-2"></i> Profile Settings
                     </a>
                 </li>
+                <li class="nav-item mt-3">
+                    <hr class="text-white-50">
+                </li>
                 <?php if($_SESSION['user_role'] == 3): ?>
                 <li class="nav-item mt-3">
                     <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">

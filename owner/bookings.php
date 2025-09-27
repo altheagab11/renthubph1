@@ -82,6 +82,26 @@ if ($_POST) {
                     $stmt->bindParam(4, $user_id);
                     $stmt->bindParam(5, $reason);
                     $stmt->execute();
+
+                    // Send notification to renter if accepted
+                    if ($action === 'accept') {
+                        // Get renter ID and product name
+                        $info_query = "SELECT b.RenterID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                        $info_stmt = $conn->prepare($info_query);
+                        $info_stmt->execute([$booking_id]);
+                        $info = $info_stmt->fetch(PDO::FETCH_ASSOC);
+                        if ($info) {
+                            $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking', 'Booking Accepted', ?, ?, 0, NOW())";
+                            $notif_stmt = $conn->prepare($notif_query);
+                            $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been accepted.";
+                            $notif_stmt->execute([
+                                $info['RenterID'],
+                                $notif_message,
+                                $booking_id
+                            ]);
+                        }
+                    }
+
                     $message = "Booking status updated successfully!";
                     $message_type = "success";
                 } else {

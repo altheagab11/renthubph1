@@ -10,6 +10,15 @@ $conn = $database->getConnection();
 
 $user_id = $_SESSION['user_id'];
 
+// Get unread notifications for the renter
+$notif_count = 0;
+$unread_notifications = [];
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count = count($unread_notifications);
+
 // Get renter statistics
 $stats = [];
 
@@ -198,6 +207,9 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <i class="fas fa-user me-2"></i> Profile Settings
                     </a>
                 </li>
+                <li class="nav-item mt-3">
+                    <hr class="text-white-50">
+                </li>
                 <?php if($_SESSION['user_role'] == 3): ?>
                 <li class="nav-item mt-3">
                     <a class="nav-link" href="../owner/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
@@ -235,13 +247,22 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
-                            <span class="badge bg-danger badge-sm">3</span>
+                            <span class="badge bg-danger badge-sm"><?php echo $notif_count; ?></span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#">Booking confirmed</a></li>
-                            <li><a class="dropdown-item" href="#">New message received</a></li>
-                            <li><a class="dropdown-item" href="#">Payment processed</a></li>
+                            <?php if($notif_count == 0): ?>
+                            <li><a class="dropdown-item text-center" href="#">No new notifications</a></li>
+                            <?php else: ?>
+                            <?php foreach($unread_notifications as $notification): ?>
+                            <li>
+                                <a class="dropdown-item" href="#">
+                                    <?php echo htmlspecialchars($notification['Not_Message']); ?>
+                                    <small class="text-muted d-block"><?php echo date('M j, Y \a\t h:i A', strtotime($notification['Not_CreatedAt'])); ?></small>
+                                </a>
+                            </li>
+                            <?php endforeach; ?>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="notifications.php">View all</a></li>
                         </ul>
