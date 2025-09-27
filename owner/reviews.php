@@ -12,6 +12,15 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
+// Get unread notifications for the owner
+$notif_count = 0;
+$unread_notifications = [];
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count = count($unread_notifications);
+
 // Handle review response
 if ($_POST && isset($_POST['respond_review'])) {
     $review_id = $_POST['review_id'];
@@ -496,13 +505,24 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
-                                <?php echo $stats['pending_responses']; ?>
+                                <?php echo $notif_count; ?>
                             </span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-star text-warning me-2"></i>New review received</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-calendar-check text-success me-2"></i>New booking request</a></li>
+                            <?php if ($unread_notifications && count($unread_notifications) > 0): ?>
+                                <?php foreach ($unread_notifications as $notif): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="notifications.php">
+                                            <i class="fas fa-info-circle text-primary me-2"></i>
+                                            <strong><?php echo htmlspecialchars($notif['Not_Title']); ?></strong><br>
+                                            <span class="text-muted small"> <?php echo htmlspecialchars($notif['Not_Message']); ?> </span>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <li><span class="dropdown-item text-muted">No new notifications</span></li>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
                         </ul>

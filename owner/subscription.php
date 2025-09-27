@@ -12,6 +12,15 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
+// Get unread notifications for the owner
+$notif_count = 0;
+$unread_notifications = [];
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 10";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count = count($unread_notifications);
+
 // Handle plan selection and subscription creation with payment
 if ($_POST) {
     // Check owner verification status
@@ -817,6 +826,32 @@ function getPlanType($plan_name) {
                 </div>
                 
                 <div class="navbar-nav ms-auto d-flex flex-row">
+                    <div class="nav-item dropdown me-3">
+                        <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-bell"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
+                                <?php echo $notif_count; ?>
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">Notifications</h6></li>
+                            <?php if ($unread_notifications && count($unread_notifications) > 0): ?>
+                                <?php foreach ($unread_notifications as $notif): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="notifications.php">
+                                            <i class="fas fa-info-circle text-primary me-2"></i>
+                                            <strong><?php echo htmlspecialchars($notif['Not_Title']); ?></strong><br>
+                                            <span class="text-muted small"> <?php echo htmlspecialchars($notif['Not_Message']); ?> </span>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <li><span class="dropdown-item text-muted">No new notifications</span></li>
+                            <?php endif; ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
+                        </ul>
+                    </div>
                     <div class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-user-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
