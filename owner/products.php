@@ -45,12 +45,11 @@ if ($_POST) {
                 
             case 'delete_product':
                 $product_id = $_POST['product_id'];
-                
-                $query = "UPDATE products SET Prod_Status = 'Deleted' WHERE ProductID = ? AND OwnerID = ?";
+                // Remove featured status as well
+                $query = "UPDATE products SET Prod_Status = 'Deleted', Prod_IsFeatured = 0, Prod_FeaturedUntil = NULL WHERE ProductID = ? AND OwnerID = ?";
                 $stmt = $conn->prepare($query);
                 $stmt->bindParam(1, $product_id);
                 $stmt->bindParam(2, $user_id);
-                
                 if ($stmt->execute()) {
                     $message = "Product deleted successfully!";
                     $message_type = "success";
