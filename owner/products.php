@@ -964,11 +964,12 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                             </button>
                                         </div>
                                         <!-- View Button -->
-                                        <div class="action-col">
-                                            <a href="../product.php?id=<?php echo $product['ProductID']; ?>" target="_blank" class="btn btn-outline-secondary btn-sm w-100" title="View">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        </div>
+                                            <div class="action-col">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" title="View Details"
+                                                    onclick='showProductDetails(<?php echo htmlspecialchars(json_encode($product), ENT_QUOTES, "UTF-8"); ?>)'>
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </div>
                                         <!-- Toggle Availability Button (or placeholder) -->
                                         <div class="action-col">
                                             <?php if($product['Prod_Status'] == 'Active'): ?>
@@ -1022,6 +1023,25 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     </div>
 
     <!-- Delete Product Modal -->
+        <!-- Product Details Modal -->
+        <div class="modal fade" id="productDetailsModal" tabindex="-1" aria-labelledby="productDetailsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content" style="border-radius: 20px;">
+                    <div class="modal-header border-0">
+                        <h5 class="modal-title" id="productDetailsModalLabel">
+                            <i class="fas fa-eye me-2"></i>Product Details
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="productDetailsBody">
+                        <!-- Details will be injected here -->
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     <div class="modal fade" id="deleteModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content" style="border-radius: 20px;">
@@ -1092,6 +1112,27 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+        function showProductDetails(product) {
+            let html = `<div class='container-fluid'>`;
+            html += `<div class='row'><div class='col-md-6'><strong>Name:</strong> ${product.Prod_Name}</div><div class='col-md-6'><strong>Category:</strong> ${product.Cat_Name ?? 'Uncategorized'}</div></div>`;
+            html += `<div class='row'><div class='col-md-6'><strong>Status:</strong> ${product.Prod_Status}</div><div class='col-md-6'><strong>Availability:</strong> ${product.Prod_Availability ? 'Available' : 'Unavailable'}</div></div>`;
+            html += `<div class='row'><div class='col-md-12'><strong>Description:</strong> ${product.Prod_Description}</div></div>`;
+        html += `<div class='row'><div class='col-md-6'><strong>Rental Price:</strong> ₱${parseFloat(product.Prod_RentalPrice).toFixed(2)} / ${product.Prod_PriceType}</div><div class='col-md-6'><strong>Security Deposit:</strong> ₱${parseFloat(product.Prod_SecurityDeposit ?? 0).toFixed(2)}</div></div>`;
+            html += `<div class='row'><div class='col-md-6'><strong>Booking Count:</strong> ${product.booking_count ?? 0}</div><div class='col-md-6'><strong>Average Rating:</strong> ${product.avg_rating ?? 'N/A'}</div></div>`;
+            html += `<div class='row'><div class='col-md-12'><strong>Address:</strong> ${[product.UA_Street, product.UA_Barangay, product.UA_City, product.UA_Province].filter(Boolean).join(', ')}</div></div>`;
+            html += `<div class='row'><div class='col-md-6'><strong>Pickup Available:</strong> ${product.PL_PickupAvailable ? 'Yes' : 'No'}</div><div class='col-md-6'><strong>Delivery Available:</strong> ${product.PL_DeliveryAvailable ? 'Yes' : 'No'}`;
+            if(product.PL_DeliveryAvailable && product.PL_DeliveryRadius) html += ` (Radius: ${product.PL_DeliveryRadius}km)`;
+            html += `</div></div>`;
+        html += `<div class='row'><div class='col-md-12'><strong>Date Added:</strong> ${product.Prod_CreatedAt ?? ''}</div></div>`;
+            html += `<div class='row'><div class='col-md-12'><strong>Featured Until:</strong> ${product.Prod_FeaturedUntil ?? 'N/A'}</div></div>`;
+            html += `<div class='row'><div class='col-md-12'><strong>Product ID:</strong> ${product.ProductID}</div></div>`;
+            html += `</div>`;
+            document.getElementById('productDetailsBody').innerHTML = html;
+            const modal = new bootstrap.Modal(document.getElementById('productDetailsModal'));
+            modal.show();
+        }
+        </script>
     <script>
         // Sidebar toggle for mobile
         document.getElementById('sidebarToggle')?.addEventListener('click', function() {
