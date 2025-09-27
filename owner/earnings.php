@@ -759,11 +759,6 @@ if ($previous_month_earnings > 0) {
                                 <div class="transaction-card card">
                                     <div class="card-body">
                                         <div class="row align-items-center">
-                                            <div class="col-md-2">
-                                                <img src="<?php echo $transaction['PI_ImagePath'] ? htmlspecialchars($transaction['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                                     class="img-fluid rounded" style="height: 60px; width: 60px; object-fit: cover;" 
-                                                     alt="<?php echo htmlspecialchars($transaction['Prod_Name']); ?>">
-                                            </div>
                                             <div class="col-md-4">
                                                 <h6 class="mb-1"><?php echo htmlspecialchars($transaction['Prod_Name']); ?></h6>
                                                 <p class="text-muted small mb-0">
