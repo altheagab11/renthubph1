@@ -8,11 +8,24 @@ $auth->requireRole([3]); // Owner role only
 $database = new Database();
 $conn = $database->getConnection();
 
-$user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
 // Check for success parameter from redirect
+// ...existing code...
+$user_id = $_SESSION['user_id'];
+$message = '';
+$message_type = '';
+
+// Get unread notifications for navbar
+$notif_query = "SELECT * FROM notifications WHERE UserID = ? AND Not_IsRead = 0 ORDER BY Not_CreatedAt DESC LIMIT 5";
+$notif_stmt = $conn->prepare($notif_query);
+$notif_stmt->execute([$user_id]);
+$unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+$notif_count_query = "SELECT COUNT(*) as cnt FROM notifications WHERE UserID = ? AND Not_IsRead = 0";
+$notif_count_stmt = $conn->prepare($notif_count_query);
+$notif_count_stmt->execute([$user_id]);
+$notif_count = $notif_count_stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
 if (isset($_GET['success']) && $_GET['success'] == '1') {
     $message = "Product added successfully!";
     $message_type = 'success';
@@ -747,13 +760,24 @@ try {
                         <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
-                                2
+                                <?php echo $notif_count; ?>
                             </span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-calendar-check text-success me-2"></i>New booking request</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-money-bill text-primary me-2"></i>Payment received</a></li>
+                            <?php if ($unread_notifications && count($unread_notifications) > 0): ?>
+                                <?php foreach ($unread_notifications as $notif): ?>
+                                    <li>
+                                        <a class="dropdown-item" href="notifications.php">
+                                            <i class="fas fa-info-circle text-primary me-2"></i>
+                                            <strong><?php echo htmlspecialchars($notif['Not_Title']); ?></strong><br>
+                                            <span class="text-muted small"> <?php echo htmlspecialchars($notif['Not_Message']); ?> </span>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <li><span class="dropdown-item text-muted">No new notifications</span></li>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
                         </ul>

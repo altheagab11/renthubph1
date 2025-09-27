@@ -114,9 +114,20 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
         ]);
        
         if ($booking_result) {
+            // Create notification for owner
+            $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, ?, ?, ?, ?, 0, NOW())";
+            $notif_stmt = $conn->prepare($notif_query);
+            $notif_title = 'New Booking Request';
+            $notif_message = 'You have a new booking request for your product: ' . htmlspecialchars($product['Prod_Name']) . '.';
+            $notif_stmt->execute([
+                $product['OwnerID'],
+                'booking',
+                $notif_title,
+                $notif_message,
+                $_POST['product_id']
+            ]);
 
-              // Conversation logic: create if it doesn't exist yet
-            // Use $user_id (renter), $product['OwnerID'] (owner), $_POST['product_id'] (product)
+            // Conversation logic: create if it doesn't exist yet
             $check_conv_query = "SELECT ConversationID FROM conversations WHERE ((User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)) AND ProductID = ?";
             $check_conv_stmt = $conn->prepare($check_conv_query);
             $check_conv_stmt->execute([
