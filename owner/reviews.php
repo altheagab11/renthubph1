@@ -241,17 +241,18 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         .rating-bar {
             background: #e9ecef;
-            height: 8px;
+            height: 16px;
             border-radius: 10px;
             overflow: hidden;
             position: relative;
         }
         
         .rating-bar .progress-fill {
-            background: var(--warning-gradient);
+            background: linear-gradient(90deg, #ffc107 0%, #ff9800 100%);
             height: 100%;
             border-radius: 10px;
             transition: width 0.5s ease;
+            min-width: 2px;
         }
         
         .search-filters {
