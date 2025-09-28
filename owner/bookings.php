@@ -252,7 +252,7 @@ $stmt->execute();
 $stats['active_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
 // Total revenue: add security deposit only if damaged
-$query = "SELECT SUM(b.Book_TotalAmount + IFNULL(CASE WHEN b.Book_Damaged = 1 THEN b.Book_SecurityDeposit ELSE 0 END,0)) as total
+$query = "SELECT SUM(b.Book_TotalAmount + IFNULL(CASE WHEN b.Book_Damaged = 1 THEN b.Book_SecurityDeposit ELSE 0 END,0) - IFNULL(CASE WHEN b.Book_Damaged = 0 THEN b.Book_SecurityDeposit ELSE 0 END,0)) as total
           FROM bookings b JOIN products p ON b.ProductID = p.ProductID
           WHERE p.OwnerID = ? AND b.Book_Status = 'Completed'";
 $stmt = $conn->prepare($query);
@@ -857,6 +857,13 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                                 <h4 class="text-success mb-2">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
                                                 <?php if($booking['Book_SecurityDeposit'] > 0): ?>
                                                 <p class="text-muted small mb-1">Security: ₱<?php echo number_format($booking['Book_SecurityDeposit'], 2); ?></p>
+                                                <p class="text-info small mb-1">
+                                                    <?php if(isset($booking['Book_Damaged']) && $booking['Book_Damaged'] == 1): ?>
+                                                        <i class="fas fa-info-circle"></i> Security deposit is <strong>included</strong> in total (damage reported)
+                                                    <?php else: ?>
+                                                        <i class="fas fa-info-circle"></i> Security deposit is <strong>not included</strong> in total (no damage)
+                                                    <?php endif; ?>
+                                                </p>
                                                 <?php endif; ?>
                                                 <?php if($booking['Book_DeliveryFee'] > 0): ?>
                                                 <p class="text-muted small mb-2">Delivery: ₱<?php echo number_format($booking['Book_DeliveryFee'], 2); ?></p>

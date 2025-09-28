@@ -968,6 +968,11 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                             <div class="small"><strong>End Date:</strong> <?php echo date('M j, Y', strtotime($booking['Book_EndDate'])); ?></div>
                                         </div>
                                     </div>
+                                    <div class="row mb-2">
+                                        <div class="col-12">
+                                            <div class="small"><strong>Security Deposit:</strong> ₱<?php echo number_format($booking['Book_SecurityDeposit'], 2); ?></div>
+                                        </div>
+                                    </div>
                                     <?php if($booking['Book_Notes']): ?>
                                         <div class="mb-1 small fw-semibold">Booking Details:</div>
                                         <div class="mb-0 small"><?php echo $booking_notes['html']; ?></div>
