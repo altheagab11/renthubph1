@@ -1,3 +1,39 @@
+<!-- Edit Review Modal -->
+<div class="modal fade" id="editReviewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border-radius: 20px;">
+            <form method="POST" id="editReviewForm">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-edit text-primary me-2"></i>Edit Review</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="edit_review" value="1">
+                    <input type="hidden" name="review_id" id="editReviewId">
+                    <div class="mb-3">
+                        <label class="form-label">Rating</label>
+                        <select class="form-select" name="rating" id="editReviewRating" required>
+                            <option value="">Select rating</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Your Review</label>
+                        <textarea class="form-control" name="comment" id="editReviewComment" rows="4" maxlength="500" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn action-btn edit"><i class="fas fa-save me-1"></i>Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../config/database.php';
@@ -772,13 +808,7 @@ if ($reviews_table_exists) {
                     
                     <div class="card-body p-4">
                         <div class="row">
-                            <div class="col-md-3">
-                                <img src="<?php echo $pending['PI_ImagePath'] ? htmlspecialchars($pending['PI_ImagePath']) : '../assets/images/no-image.jpg'; ?>" 
-                                     class="img-fluid rounded" style="height: 150px; width: 100%; object-fit: cover;" 
-                                     alt="<?php echo htmlspecialchars($pending['Prod_Name']); ?>">
-                            </div>
-                            
-                            <div class="col-md-9">
+                            <div class="col-12">
                                 <h5 class="mb-2"><?php echo htmlspecialchars($pending['Prod_Name']); ?></h5>
                                 
                                 <div class="product-info mb-3">
@@ -825,10 +855,9 @@ if ($reviews_table_exists) {
                                             <button type="submit" name="add_review" class="btn action-btn submit">
                                                 <i class="fas fa-star me-1"></i>Submit Review
                                             </button>
-                                            <a href="../product.php?id=<?php echo $pending['ProductID']; ?>" 
-                                               class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
-                                                <i class="fas fa-eye me-1"></i>View Product
-                                            </a>
+                                                <a href="../product.php?id=<?php echo $pending['ProductID']; ?>" class="btn action-btn view-product" style="border-radius: 20px; background: linear-gradient(90deg, #6a82fb 0%, #fc5c7d 100%); color: #fff; font-weight: 500;">
+                                                    <i class="fas fa-eye me-1"></i>View Product
+                                                </a>
                                         </div>
                                     </form>
                                 </div>
@@ -968,14 +997,10 @@ if ($reviews_table_exists) {
                                         </button>
                                         <?php endif; ?>
                                         
-                                        <a href="../product.php?id=<?php echo $review['ProductID']; ?>" 
-                                           class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
+                                        <a href="../product.php?id=<?php echo $review['ProductID']; ?>" class="btn action-btn edit" style="border-radius: 20px; background: var(--secondary-gradient); color: #fff;">
                                             <i class="fas fa-eye me-1"></i>View Product
                                         </a>
                                         
-                                        <button class="btn btn-outline-secondary btn-sm" onclick="shareReview(<?php echo $review['ProductID']; ?>, '<?php echo addslashes($review['Prod_Name']); ?>')" style="border-radius: 15px;">
-                                            <i class="fas fa-share me-1"></i>Share
-                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1072,7 +1097,15 @@ if ($reviews_table_exists) {
 
         // Edit review function
         function editReview(reviewId) {
-            alert('Edit review feature coming soon! Review ID: ' + reviewId);
+            // Find review data in DOM
+            var reviewCard = document.querySelector('[onclick="editReview(' + reviewId + ')"]').closest('.review-card');
+            var rating = reviewCard.querySelector('.rating-stars span')?.textContent?.split('/')[0]?.trim() || '';
+            var comment = reviewCard.querySelector('.review-content p')?.textContent?.trim() || '';
+            document.getElementById('editReviewId').value = reviewId;
+            document.getElementById('editReviewRating').value = rating;
+            document.getElementById('editReviewComment').value = comment;
+            var modal = new bootstrap.Modal(document.getElementById('editReviewModal'));
+            modal.show();
         }
 
         // Form validation
