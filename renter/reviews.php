@@ -107,7 +107,7 @@ if ($_POST) {
         $review_id = $_POST['review_id'];
         $rating = $_POST['rating'];
         $comment = trim($_POST['comment']);
-        
+
         try {
             $query = "UPDATE reviews SET Rev_Rating = ?, Rev_Comment = ?, Rev_UpdatedAt = NOW() 
                       WHERE ReviewID = ? AND BookingID IN (SELECT BookingID FROM bookings WHERE RenterID = ?)";
@@ -116,10 +116,29 @@ if ($_POST) {
             $stmt->bindParam(2, $comment);
             $stmt->bindParam(3, $review_id);
             $stmt->bindParam(4, $user_id);
-            
+
             if ($stmt->execute()) {
                 $message = "Review updated successfully!";
                 $message_type = "success";
+
+                // Get BookingID and OwnerID for the review
+                $info_query = "SELECT r.BookingID, p.OwnerID, p.Prod_Name FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID JOIN products p ON b.ProductID = p.ProductID WHERE r.ReviewID = ?";
+                $info_stmt = $conn->prepare($info_query);
+                $info_stmt->execute([$review_id]);
+                $review_info = $info_stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($review_info) {
+                    // Send notification to owner
+                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, ?, ?, ?, ?, 0, NOW())";
+                    $notif_stmt = $conn->prepare($notif_query);
+                    $notif_stmt->execute([
+                        $review_info['OwnerID'],
+                        'review',
+                        'Review Updated',
+                        'Your product "' . htmlspecialchars($review_info['Prod_Name']) . '" received an updated review: "' . htmlspecialchars($comment) . '" (Rating: ' . $rating . '/5)',
+                        $review_info['BookingID']
+                    ]);
+                }
             } else {
                 $message = "Failed to update review. Please try again.";
                 $message_type = "danger";
