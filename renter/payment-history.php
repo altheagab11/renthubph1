@@ -875,10 +875,6 @@ if ($payments_table_exists) {
                                         </button>
                                         <?php endif; ?>
                                         
-                                        <a href="../product.php?id=<?php echo $payment['ProductID']; ?>" 
-                                           class="btn action-btn view">
-                                            <i class="fas fa-eye me-1"></i>View Product
-                                        </a>
                                         
                                         <?php if($payment['Pay_Status'] == 'Completed'): ?>
                                         <button class="btn action-btn refund" onclick="requestRefund(<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>)">
@@ -930,8 +926,7 @@ if ($payments_table_exists) {
         // Download receipt function
         function downloadReceipt(paymentId) {
             if (paymentId) {
-                alert('Downloading receipt for payment ID: ' + paymentId);
-                // Implementation for actual receipt download
+                window.open('download-receipt.php?payment_id=' + paymentId, '_blank');
             } else {
                 alert('Receipt download feature will be available when payment system is fully configured.');
             }
@@ -940,8 +935,32 @@ if ($payments_table_exists) {
         // Request refund function
         function requestRefund(paymentId) {
             if (confirm('Are you sure you want to request a refund for this payment?')) {
-                alert('Refund request has been submitted for payment ID: ' + paymentId);
-                // Implementation for actual refund request
+                // Get product name from the row (assumes product name is available in payment object)
+                var productName = '';
+                var btn = event.target;
+                var parent = btn.closest('.actions, .row, .card');
+                if (parent) {
+                    var prodElem = parent.querySelector('.product-name');
+                    if (prodElem) productName = prodElem.textContent.trim();
+                }
+                // Fallback: try to get from PHP variable if available
+                if (!productName && window.paymentProductName) productName = window.paymentProductName;
+                fetch('../api/request-refund.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'payment_id=' + encodeURIComponent(paymentId) + '&product_name=' + encodeURIComponent(productName)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Refund request sent! The owner has been notified.');
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(() => {
+                    alert('Failed to send refund request.');
+                });
             }
         }
 
