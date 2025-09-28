@@ -780,6 +780,16 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
+
+        .product-card .d-flex.justify-content-between.align-items-center.gap-2.w-100 > .btn {
+        min-width: 0;
+        flex: 1 1 0;
+        margin: 0;
+        border-radius: 20px !important;
+        font-size: 0.95em;
+        white-space: nowrap;
+    }
+
     </style>
 </head>
 <body>
@@ -1275,17 +1285,26 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 </div>
                                
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <div class="price-display">
-                                        <span class="fw-bold text-primary">₱<?php echo number_format($product['Prod_RentalPrice'], 0); ?></span>
-                                        <small class="text-muted">/<?php echo $product['Prod_PriceType'] ?? 'day'; ?></small>
+                                    <div class="w-100">
+                                        <div class="price-display mb-2">
+                                            <span class="fw-bold text-primary">₱<?php echo number_format($product['Prod_RentalPrice'], 0); ?></span>
+                                            <small class="text-muted">/<?php echo $product['Prod_PriceType'] ?? 'day'; ?></small>
+                                            <?php if($product['Prod_SecurityDeposit'] > 0): ?>
+                                                <br><span class="security-deposit-badge mt-2 d-inline-block">Security Deposit: ₱<?php echo number_format($product['Prod_SecurityDeposit'], 0); ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center gap-2 w-100">
+                                            <button class="btn view-details-btn flex-fill" onclick="viewProductDetails(<?php echo $product['ProductID']; ?>)"><i class="fas fa-eye"></i> View Details</button>
+                                            <button class="btn flag-btn flex-fill" onclick="flagProduct(<?php echo $product['ProductID']; ?>)"><i class="fas fa-flag"></i> Flag</button>
+                                            <button class="btn book-btn flex-fill <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>"
+                                                onclick="bookProduct(<?php echo $product['ProductID']; ?>)"
+                                                data-pickup-available="<?php echo $product['PL_PickupAvailable'] ?? 1; ?>"
+                                                data-delivery-available="<?php echo $product['PL_DeliveryAvailable'] ?? 0; ?>"
+                                                <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?> >
+                                                <?php echo $product['AvailabilityStatus'] == 'Available' ? 'Book' : 'N/A'; ?>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <button class="btn book-btn btn-sm <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>"
-                                            onclick="bookProduct(<?php echo $product['ProductID']; ?>)"
-                                            data-pickup-available="<?php echo $product['PL_PickupAvailable'] ?? 1; ?>"
-                                            data-delivery-available="<?php echo $product['PL_DeliveryAvailable'] ?? 0; ?>"
-                                            <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?> >
-                                        <?php echo $product['AvailabilityStatus'] == 'Available' ? 'Book' : 'N/A'; ?>
-                                    </button>
                                 </div>
                             </div>
                         </div>
