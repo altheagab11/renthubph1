@@ -396,6 +396,13 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
             margin-left: var(--sidebar-width);
             min-height: 100vh;
         }
+        
+        /* Top Navigation Styles */
+        .navbar.sticky-top {
+            background-color: #fff !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-bottom: 1px solid #e9ecef;
+        }
        
         @media (max-width: 768px) {
             .sidebar {
@@ -1295,7 +1302,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                         </div>
                                         <div class="d-flex justify-content-between align-items-center gap-2 w-100">
                                             <button class="btn view-details-btn flex-fill" onclick="viewProductDetails(<?php echo $product['ProductID']; ?>)"><i class="fas fa-eye"></i> View Details</button>
-                                            <button class="btn flag-btn flex-fill" onclick="flagProduct(<?php echo $product['ProductID']; ?>)"><i class="fas fa-flag"></i> Flag</button>
+                                            <button class="btn flag-btn flex-fill" onclick="openFlagModal(<?php echo $product['ProductID']; ?>, <?php echo $product['OwnerID']; ?>)"><i class="fas fa-flag"></i> Flag</button>
                                             <button class="btn book-btn flex-fill <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>"
                                                 onclick="bookProduct(<?php echo $product['ProductID']; ?>)"
                                                 data-pickup-available="<?php echo $product['PL_PickupAvailable'] ?? 1; ?>"
@@ -1379,6 +1386,44 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
+    <!-- Waiver Modal -->
+    <!-- Flag Modal -->
+    <div class="modal fade" id="flagModal" tabindex="-1" aria-labelledby="flagModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="flagModalLabel">Flag Report</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="flagForm">
+                    <div class="modal-body">
+                        <input type="hidden" id="flag_product_id" name="product_id">
+                        <input type="hidden" id="flag_owner_id" name="owner_id">
+                        <div class="mb-3">
+                            <label class="form-label">What do you want to flag?</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="flag_type" id="flag_type_product" value="product" required>
+                                <label class="form-check-label" for="flag_type_product">Product</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="flag_type" id="flag_type_owner" value="owner" required>
+                                <label class="form-check-label" for="flag_type_owner">Owner</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="flag_reason" class="form-label">Reason</label>
+                            <textarea class="form-control" id="flag_reason" name="reason" rows="3" required placeholder="Describe your reason..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger">Submit Flag</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
     <!-- Waiver Modal -->
     <div class="modal fade waiver-modal" id="waiverModal" tabindex="-1" aria-labelledby="waiverModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -1649,6 +1694,37 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
+    // Flag modal logic
+    function openFlagModal(productId, ownerId) {
+        document.getElementById('flag_product_id').value = productId;
+        document.getElementById('flag_owner_id').value = ownerId;
+        document.getElementById('flagForm').reset();
+        var flagModal = new bootstrap.Modal(document.getElementById('flagModal'));
+        flagModal.show();
+    }
+
+    document.getElementById('flagForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('../api/flag-report.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Flag report submitted successfully.');
+                bootstrap.Modal.getInstance(document.getElementById('flagModal')).hide();
+            } else {
+                // Show the actual error from backend
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred: ' + error);
+        });
+    });
 window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && $current_user['User_IsVerified'] == 1 ? 'true' : 'false'; ?>;
 </script>
 

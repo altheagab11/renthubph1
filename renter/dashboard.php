@@ -110,6 +110,13 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             min-height: 100vh;
         }
         
+        /* Top Navigation Styles */
+        .navbar.sticky-top {
+            background-color: #fff !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-bottom: 1px solid #e9ecef;
+        }
+        
         @media (max-width: 768px) {
             .sidebar {
                 margin-left: calc(-1 * var(--sidebar-width));
