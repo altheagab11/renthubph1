@@ -18,17 +18,44 @@ if ($_POST) {
         $new_status = $_POST['new_status'];
         
         try {
-            $query = "UPDATE products SET Prod_Status = ?, Prod_UpdatedAt = NOW() WHERE ProductID = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $new_status);
-            $stmt->bindParam(2, $product_id);
-            
-            if ($stmt->execute()) {
-                $message = "Product status updated successfully!";
-                $message_type = "success";
+            // Check if product is currently suspended and trying to activate
+            if ($new_status === 'Active') {
+                $check_query = "SELECT Prod_Status FROM products WHERE ProductID = ?";
+                $check_stmt = $conn->prepare($check_query);
+                $check_stmt->bindParam(1, $product_id);
+                $check_stmt->execute();
+                $current_product = $check_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($current_product && $current_product['Prod_Status'] === 'Suspended') {
+                    $message = "Cannot activate suspended product. Suspended products cannot be reactivated.";
+                    $message_type = "warning";
+                } else {
+                    $query = "UPDATE products SET Prod_Status = ?, Prod_UpdatedAt = NOW() WHERE ProductID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindParam(1, $new_status);
+                    $stmt->bindParam(2, $product_id);
+                    
+                    if ($stmt->execute()) {
+                        $message = "Product status updated successfully!";
+                        $message_type = "success";
+                    } else {
+                        $message = "Failed to update product status.";
+                        $message_type = "danger";
+                    }
+                }
             } else {
-                $message = "Failed to update product status.";
-                $message_type = "danger";
+                $query = "UPDATE products SET Prod_Status = ?, Prod_UpdatedAt = NOW() WHERE ProductID = ?";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $new_status);
+                $stmt->bindParam(2, $product_id);
+                
+                if ($stmt->execute()) {
+                    $message = "Product status updated successfully!";
+                    $message_type = "success";
+                } else {
+                    $message = "Failed to update product status.";
+                    $message_type = "danger";
+                }
             }
         } catch (PDOException $e) {
             $message = "Error updating product status: " . $e->getMessage();
@@ -915,21 +942,27 @@ function formatCurrency($amount) {
                                                 
                                                 <div class="d-flex flex-wrap gap-1 mt-3">
                                                     <div class="d-flex flex-wrap gap-1">
+                                                        <?php if ($product['Prod_Status'] !== 'Suspended'): ?>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <input type="hidden" name="new_status" value="Active">
                                                             <button type="submit" name="update_product_status" class="btn btn-outline-success btn-sm" title="Activate"><i class="fas fa-play"></i></button>
                                                         </form>
+                                                        <?php else: ?>
+                                                        <button class="btn btn-outline-success btn-sm" title="Cannot activate suspended product" disabled><i class="fas fa-ban"></i></button>
+                                                        <?php endif; ?>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <input type="hidden" name="new_status" value="Inactive">
                                                             <button type="submit" name="update_product_status" class="btn btn-outline-secondary btn-sm" title="Deactivate"><i class="fas fa-pause"></i></button>
                                                         </form>
+                                                        <?php if ($product['Prod_Status'] !== 'Suspended'): ?>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <input type="hidden" name="new_status" value="Suspended">
-                                                            <button type="submit" name="update_product_status" class="btn btn-outline-warning btn-sm" title="Suspend"><i class="fas fa-exclamation-triangle"></i></button>
+                                                            <button type="submit" name="update_product_status" class="btn btn-outline-warning btn-sm" title="Suspend (Permanent)" onclick="return confirm('Are you sure you want to suspend this product? This action cannot be undone and the product can never be activated again.')"><i class="fas fa-exclamation-triangle"></i></button>
                                                         </form>
+                                                        <?php endif; ?>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <button type="submit" name="delete_product" class="btn btn-outline-danger btn-sm" title="Delete Product" onclick="return confirm('Are you sure you want to delete this product? This action cannot be undone.')"><i class="fas fa-trash"></i></button>
