@@ -4,8 +4,14 @@ require_once 'includes/auth.php';
 $auth = new Auth();
 $error = '';
 
+// Check if user was redirected due to deactivation
+if(isset($_GET['deactivated']) && $_GET['deactivated'] == '1') {
+    $error = "Your account has been deactivated. Please contact the administrator for assistance.";
+}
+
 if($_POST) {
-    if($auth->login($_POST['email'], $_POST['password'])) {
+    $login_result = $auth->login($_POST['email'], $_POST['password']);
+    if($login_result === true) {
         $role = $_SESSION['user_role'];
         switch($role) {
             case 1: // Admin
@@ -21,6 +27,8 @@ if($_POST) {
                 header("Location: index.php");
         }
         exit();
+    } else if($login_result === 'deactivated') {
+        $error = "Your account has been deactivated. Please contact the administrator for assistance.";
     } else {
         $error = "Invalid email or password.";
     }

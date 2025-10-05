@@ -12,7 +12,7 @@ class Auth {
     }
     
     public function login($email, $password) {
-        $query = "SELECT UserID, User_Name, User_Email, User_Role, User_Password, User_Status FROM user_accounts WHERE User_Email = ? AND User_Status = 'Active'";
+        $query = "SELECT UserID, User_Name, User_Email, User_Role, User_Password, User_Status FROM user_accounts WHERE User_Email = ?";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(1, $email);
         $stmt->execute();
@@ -20,6 +20,12 @@ class Auth {
         if($stmt->rowCount() > 0) {
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             if(password_verify($password, $row['User_Password'])) {
+                if($row['User_Status'] === 'Inactive') {
+                    return 'deactivated'; // Return specific status for deactivated accounts
+                }
+                if($row['User_Status'] !== 'Active') {
+                    return false; // Other non-active statuses
+                }
                 $_SESSION['user_id'] = $row['UserID'];
                 $_SESSION['user_name'] = $row['User_Name'];
                 $_SESSION['user_email'] = $row['User_Email'];
@@ -83,6 +89,33 @@ class Auth {
             header("Location: " . $this->getBaseUrl() . "/login.php");
             exit();
         }
+        
+        // Check if user is still active
+        $this->checkUserStatus();
+    }
+    
+    public function checkUserStatus() {
+        if($this->isLoggedIn()) {
+            $query = "SELECT User_Status FROM user_accounts WHERE UserID = ?";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(1, $_SESSION['user_id']);
+            $stmt->execute();
+            
+            if($stmt->rowCount() > 0) {
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if($row['User_Status'] !== 'Active') {
+                    // User has been deactivated, log them out
+                    session_destroy();
+                    header("Location: " . $this->getBaseUrl() . "/login.php?deactivated=1");
+                    exit();
+                }
+            } else {
+                // User no longer exists, log them out
+                session_destroy();
+                header("Location: " . $this->getBaseUrl() . "/login.php");
+                exit();
+            }
+        }
     }
     
     public function requireRole($roles) {
@@ -91,6 +124,9 @@ class Auth {
             header("Location: " . $this->getBaseUrl() . "/unauthorized.php");
             exit();
         }
+        
+        // Additional check for user status
+        $this->checkUserStatus();
     }
     
     private function getBaseUrl() {

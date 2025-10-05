@@ -54,8 +54,10 @@ if ($_POST) {
             if ($new_status === 'Inactive') {
                 $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
                 $prod_stmt->execute([$user_id]);
+                $message = "User deactivated successfully! The user will be automatically logged out if currently logged in.";
+            } else {
+                $message = "User status updated successfully!";
             }
-            $message = "User status updated successfully!";
             $message_type = "success";
         } else {
             $message = "Failed to update user status.";
