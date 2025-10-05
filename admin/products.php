@@ -168,7 +168,8 @@ if ($products_table_exists) {
                 (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as total_bookings,
                 (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID AND Book_Status = 'Active') as active_bookings,
                 (SELECT SUM(Book_TotalAmount) FROM bookings WHERE ProductID = p.ProductID AND Book_Status IN ('Active', 'Completed')) as total_revenue,
-                (SELECT PI_ImagePath FROM product_images WHERE ProductID = p.ProductID AND PI_IsMain = 1 LIMIT 1) as Main_Image
+                (SELECT PI_ImagePath FROM product_images WHERE ProductID = p.ProductID AND PI_IsMain = 1 LIMIT 1) as Main_Image,
+                (SELECT COUNT(*) FROM flag_reports WHERE ProductID = p.ProductID AND FlagType = 'product') as flag_count
             FROM products p 
             LEFT JOIN user_accounts u ON p.OwnerID = u.UserID";
         
@@ -207,10 +208,11 @@ if ($products_table_exists) {
         $stmt->execute();
         $stats['active_products'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-        $query = "SELECT COUNT(*) as total FROM products WHERE Prod_Status = 'Pending'";
+        // Get flagged products count
+        $query = "SELECT COUNT(DISTINCT ProductID) as total FROM flag_reports WHERE FlagType = 'product'";
         $stmt = $conn->prepare($query);
         $stmt->execute();
-        $stats['pending_products'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+        $stats['flagged_products'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
         $query = "SELECT COUNT(*) as total FROM products WHERE Prod_IsFeatured = 1 AND Prod_Status = 'Active'";
         $stmt = $conn->prepare($query);
@@ -284,6 +286,7 @@ function getStatusBadgeClass($status) {
     switch(strtolower($status)) {
         case 'active': return 'success';
         case 'pending': return 'warning';
+        case 'flagged': return 'danger';
         case 'inactive': return 'secondary';
         case 'suspended': return 'danger';
         default: return 'secondary';
@@ -369,7 +372,7 @@ function formatCurrency($amount) {
         }
         .stat-card.total { border-left-color: #007bff; }
         .stat-card.active { border-left-color: #28a745; }
-        .stat-card.pending { border-left-color: #ffc107; }
+        .stat-card.flagged { border-left-color: #dc3545; }
         .stat-card.featured { border-left-color: #dc3545; }
         
         .product-card {
@@ -436,6 +439,21 @@ function formatCurrency($amount) {
             font-size: 0.7rem;
             font-weight: 600;
             box-shadow: 0 2px 4px rgba(255, 215, 0, 0.3);
+        }
+        
+        .flagged-badge {
+            background: rgba(220, 53, 69, 0.1);
+            padding: 0.4rem;
+            border-radius: 50%;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(220, 53, 69, 0.2);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        
+        .flagged-badge:hover {
+            background: rgba(220, 53, 69, 0.15);
+            transform: scale(1.1);
         }
         
         .product-stats {
@@ -671,17 +689,17 @@ function formatCurrency($amount) {
                 </div>
 
                 <div class="col-xl-3 col-md-6 mb-4">
-                    <div class="card stat-card pending">
+                    <div class="card stat-card flagged">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
-                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                        Pending Approval
+                                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                        Flagged Products
                                     </div>
-                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['pending_products']); ?></div>
+                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['flagged_products']); ?></div>
                                 </div>
                                 <div class="col-auto">
-                                    <i class="fas fa-clock fa-2x text-warning"></i>
+                                    <i class="fas fa-flag fa-2x text-danger"></i>
                                 </div>
                             </div>
                         </div>
@@ -798,6 +816,12 @@ function formatCurrency($amount) {
                                     </div>
                                     <?php endif; ?>
                                     
+                                    <?php if(isset($product['is_flagged']) && $product['is_flagged']): ?>
+                                    <div class="flagged-badge position-absolute top-0 <?php echo $product['Prod_IsFeatured'] ? 'start-0' : 'end-0'; ?> m-2">
+                                        <i class="fas fa-flag text-danger" title="Flagged Product"></i>
+                                    </div>
+                                    <?php endif; ?>
+                                    
                                     <div class="card-body">
                                         <div class="row align-items-center">
                                             <div class="col-md-2">
@@ -828,6 +852,11 @@ function formatCurrency($amount) {
                                                     <?php if($product['Category_Name']): ?>
                                                     <span class="category-badge">
                                                         <?php echo htmlspecialchars($product['Category_Name']); ?>
+                                                    </span>
+                                                    <?php endif; ?>
+                                                    <?php if($product['flag_count'] > 0): ?>
+                                                    <span class="badge bg-danger me-2" title="This product has been flagged <?php echo $product['flag_count']; ?> time(s)">
+                                                        <i class="fas fa-flag"></i> <?php echo $product['flag_count']; ?> Flag<?php echo $product['flag_count'] > 1 ? 's' : ''; ?>
                                                     </span>
                                                     <?php endif; ?>
                                                 </div>
@@ -865,15 +894,19 @@ function formatCurrency($amount) {
                                             <div class="col-md-3">
                                                 <div class="product-stats">
                                                     <div class="row">
-                                                        <div class="col-4 product-stat-item">
+                                                        <div class="col-3 product-stat-item">
                                                             <div class="product-stat-value"><?php echo number_format($product['total_bookings'] ?? 0); ?></div>
                                                             <div class="product-stat-label">Bookings</div>
                                                         </div>
-                                                        <div class="col-4 product-stat-item">
+                                                        <div class="col-3 product-stat-item">
                                                             <div class="product-stat-value"><?php echo number_format($product['active_bookings'] ?? 0); ?></div>
                                                             <div class="product-stat-label">Active</div>
                                                         </div>
-                                                        <div class="col-4 product-stat-item">
+                                                        <div class="col-3 product-stat-item">
+                                                            <div class="product-stat-value"><?php echo number_format($product['flag_count'] ?? 0); ?></div>
+                                                            <div class="product-stat-label">Flags</div>
+                                                        </div>
+                                                        <div class="col-3 product-stat-item">
                                                             <div class="product-stat-value">₱<?php echo number_format($product['total_revenue'] ?? 0, 0); ?></div>
                                                             <div class="product-stat-label">Revenue</div>
                                                         </div>
@@ -980,9 +1013,6 @@ function formatCurrency($amount) {
                                 <div class="d-grid gap-2">
                                     <button class="btn btn-success" onclick="exportProducts()">
                                         <i class="fas fa-download"></i> Export Products
-                                    </button>
-                                    <button class="btn btn-warning" onclick="bulkApprove()">
-                                        <i class="fas fa-check-double"></i> Bulk Approve
                                     </button>
                                     <a href="categories.php" class="btn btn-info">
                                         <i class="fas fa-tags"></i> Manage Categories
@@ -1129,13 +1159,6 @@ function formatCurrency($amount) {
             // Bulk actions function
             function bulkActions() {
                 alert('Bulk actions functionality will be implemented. This will allow selecting multiple products for batch operations.');
-            }
-
-            // Bulk approve function
-            function bulkApprove() {
-                if (confirm('Approve all pending products? This will make them visible to renters.')) {
-                    alert('Bulk approve functionality will be implemented.');
-                }
             }
 
             // View product details

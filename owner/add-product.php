@@ -759,7 +759,7 @@ try {
                     <div class="nav-item dropdown me-3">
                         <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
+                            <span id="notifCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
                                 <?php echo $notif_count; ?>
                             </span>
                         </a>
@@ -1512,5 +1512,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const notifDropdown = document.querySelector('.nav-link.dropdown-toggle[role="button"]');
+    notifDropdown?.addEventListener('show.bs.dropdown', function() {
+        fetch('../api/mark-notifications-read.php', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    document.getElementById('notifCount').textContent = '0';
+                }
+            });
+    });
+});
+</script>
 </body>
 </html>

@@ -102,11 +102,12 @@ $sort_options = [
 
 $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'User_CreatedAt DESC';
 
-// Get users (unchanged from original)
+// Get users (with flag count added)
 $query = "SELECT u.*, 
           (SELECT COUNT(*) FROM bookings WHERE RenterID = u.UserID) as total_bookings,
           (SELECT COUNT(*) FROM products WHERE OwnerID = u.UserID) as total_products,
-          (SELECT SUM(Book_TotalAmount) FROM bookings WHERE RenterID = u.UserID AND Book_Status IN ('Active', 'Completed')) as total_spent
+          (SELECT SUM(Book_TotalAmount) FROM bookings WHERE RenterID = u.UserID AND Book_Status IN ('Active', 'Completed')) as total_spent,
+          (SELECT COUNT(*) FROM flag_reports WHERE OwnerID = u.UserID AND FlagType = 'owner') as flag_count
           FROM user_accounts u 
           WHERE " . implode(' AND ', $conditions) . " 
           ORDER BY " . $order_by;
@@ -130,11 +131,11 @@ $stmt = $conn->prepare($query);
 $stmt->execute();
 $stats['active_users'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// New users this month (excluding admins)
-$query = "SELECT COUNT(*) as total FROM user_accounts WHERE User_CreatedAt >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND User_Status != 'Deleted' AND User_Role != 1";
+// Flagged users (excluding admins)
+$query = "SELECT COUNT(DISTINCT OwnerID) as total FROM flag_reports WHERE FlagType = 'owner' AND OwnerID IS NOT NULL";
 $stmt = $conn->prepare($query);
 $stmt->execute();
-$stats['new_users'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+$stats['flagged_users'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
 // Users by role (excluding admins)
 $query = "SELECT User_Role, COUNT(*) as count FROM user_accounts WHERE User_Status != 'Deleted' AND User_Role != 1 GROUP BY User_Role";
@@ -458,17 +459,17 @@ function getRoleName($role_id) {
                 </div>
 
                 <div class="col-xl-3 col-md-6 d-flex">
-                    <div class="card stat-card new w-100">
+                    <div class="card stat-card flagged w-100">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
-                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                        New This Month
+                                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                        Flagged Users
                                     </div>
-                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['new_users']); ?></div>
+                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['flagged_users']); ?></div>
                                 </div>
                                 <div class="col-auto">
-                                    <i class="fas fa-user-plus fa-2x text-warning"></i>
+                                    <i class="fas fa-flag fa-2x text-danger"></i>
                                 </div>
                             </div>
                         </div>
@@ -611,6 +612,11 @@ function getRoleName($role_id) {
                                                         <?php else: ?>
                                                             <span class="badge bg-secondary">Unverified</span>
                                                         <?php endif; ?>
+                                                        <?php if(($user['flag_count'] ?? 0) > 0): ?>
+                                                            <span class="badge bg-danger ms-2" title="This user has been flagged <?php echo $user['flag_count']; ?> time(s)">
+                                                                <i class="fas fa-flag"></i> <?php echo $user['flag_count']; ?> Flag<?php echo $user['flag_count'] > 1 ? 's' : ''; ?>
+                                                            </span>
+                                                        <?php endif; ?>
                                                     </div>
                                                     <div class="fw-bold mb-1" style="font-size:1.1rem;"> <?php echo htmlspecialchars($user['User_Name']); ?> </div>
                                                     <div class="text-muted small mb-1"> <?php echo htmlspecialchars($user['User_Email']); ?> </div>
@@ -619,6 +625,7 @@ function getRoleName($role_id) {
                                                         <div class="me-3"><i class="fas fa-calendar-plus me-1"></i> Joined: <?php echo date('M j, Y', strtotime($user['User_CreatedAt'])); ?></div>
                                                         <div class="me-3">Bookings: <span class="fw-bold"><?php echo $user['total_bookings'] ?? 0; ?></span></div>
                                                         <div class="me-3">Products: <span class="fw-bold"><?php echo $user['total_products'] ?? 0; ?></span></div>
+                                                        <div class="me-3">Flags: <span class="fw-bold <?php echo ($user['flag_count'] ?? 0) > 0 ? 'text-danger' : ''; ?>"><?php echo $user['flag_count'] ?? 0; ?></span></div>
                                                     </div>
                                                 </div>
                                             </div>
