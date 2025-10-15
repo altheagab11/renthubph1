@@ -290,7 +290,7 @@ $sort_options = [
 $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'b.Book_CreatedAt DESC';
 
 // Get bookings
-$query = "SELECT b.*, p.Prod_Name, p.Prod_Description, pi.PI_ImagePath, u.User_Name as Owner_Name, u.User_Phone as Owner_Phone,
+$query = "SELECT b.*, p.Prod_Name, p.Prod_Description, pi.PI_ImagePath, u.User_Name as Owner_Name, u.User_Phone as Owner_Phone, u.User_Status as Owner_Status,
           ua.UA_City, ua.UA_Province,
           pay.PaymentID, pay.Pay_Amount, pay.Pay_Type, pay.Pay_Method, pay.Pay_Status, pay.Pay_CreatedAt as Payment_CreatedAt, pay.Pay_ProcessedAt,
           (SELECT COUNT(*) FROM reviews WHERE BookingID = b.BookingID) as has_review
@@ -948,6 +948,13 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         <i class="fas fa-user me-2"></i>Owner Information
                                     </h6>
                                     <p class="mb-1"><strong><?php echo htmlspecialchars($booking['Owner_Name']); ?></strong></p>
+                                    <?php if($booking['Owner_Status'] == 'Inactive'): ?>
+                                        <div class="alert alert-warning py-1 px-2 mb-2 small">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            <strong>Owner Account Suspended</strong><br>
+                                            This owner's account has been suspended. Active bookings will be completed but new bookings are not available.
+                                        </div>
+                                    <?php endif; ?>
                                     <?php if($booking['UA_City']): ?>
                                         <p class="mb-0 small text-muted">
                                             <i class="fas fa-map-marker-alt me-1"></i>
@@ -1047,11 +1054,15 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         <?php endif; ?>
                                     <?php endif; ?>
                                     
-                                    <?php if($booking['Owner_Phone']): ?>
+                                    <?php if($booking['Owner_Phone'] && $booking['Owner_Status'] == 'Active'): ?>
                                         <a href="tel:<?php echo htmlspecialchars($booking['Owner_Phone']); ?>" 
                                            class="btn action-btn contact btn-sm">
                                             <i class="fas fa-phone me-1"></i>Contact
                                         </a>
+                                    <?php elseif($booking['Owner_Phone'] && $booking['Owner_Status'] == 'Inactive'): ?>
+                                        <button class="btn action-btn contact btn-sm" disabled title="Owner account is suspended">
+                                            <i class="fas fa-phone me-1"></i>Contact (Unavailable)
+                                        </button>
                                     <?php endif; ?>
                                     
                                     <?php if($booking['Book_Status'] == 'Completed' && $booking['has_review'] == 0): ?>

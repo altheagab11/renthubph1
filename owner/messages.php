@@ -542,11 +542,6 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     <hr class="text-white-50">
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="../renter/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
-                        <i class="fas fa-search me-2"></i> Switch to Renter
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="../index.php">
                         <i class="fas fa-arrow-left me-2"></i> Back to Site
                     </a>

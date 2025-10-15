@@ -17,32 +17,133 @@ $stmt = $conn->prepare($query);
 $stmt->execute();
 $stats['total_users'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
+// Users by role
+$query = "SELECT 
+          SUM(CASE WHEN User_Role = 2 THEN 1 ELSE 0 END) as renters,
+          SUM(CASE WHEN User_Role = 3 THEN 1 ELSE 0 END) as owners
+          FROM user_accounts WHERE User_Status = 'Active'";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$user_breakdown = $stmt->fetch(PDO::FETCH_ASSOC);
+$stats['renters'] = $user_breakdown['renters'];
+$stats['owners'] = $user_breakdown['owners'];
+
 // Total products
 $query = "SELECT COUNT(*) as total FROM products WHERE Prod_Status = 'Active'";
 $stmt = $conn->prepare($query);
 $stmt->execute();
 $stats['total_products'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Total bookings
-$query = "SELECT COUNT(*) as total FROM bookings";
+// Product statistics
+$query = "SELECT 
+          COUNT(*) as total_products,
+          SUM(CASE WHEN Prod_Status = 'Active' THEN 1 ELSE 0 END) as active_products,
+          SUM(CASE WHEN Prod_Status = 'Pending' THEN 1 ELSE 0 END) as pending_products,
+          SUM(CASE WHEN Prod_IsFeatured = 1 THEN 1 ELSE 0 END) as featured_products
+          FROM products WHERE Prod_Status != 'Deleted'";
 $stmt = $conn->prepare($query);
 $stmt->execute();
-$stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+$product_stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Total revenue
-$query = "SELECT SUM(PH_Amount) as total FROM payment_history WHERE PH_Status = 'Completed'";
+// Total bookings
+$query = "SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN Book_Status = 'Active' THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN Book_Status = 'Pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN Book_Status = 'Completed' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN Book_Status = 'Cancelled' THEN 1 ELSE 0 END) as cancelled
+          FROM bookings";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$booking_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+$stats['total_bookings'] = $booking_stats['total'];
+
+// Total revenue from completed bookings
+$query = "SELECT SUM(Book_TotalAmount) as total FROM bookings WHERE Book_Status IN ('Active', 'Completed')";
 $stmt = $conn->prepare($query);
 $stmt->execute();
 $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
 
-// Recent activities
-$query = "SELECT 'User Registration' as activity, User_Name as details, User_CreatedAt as created_at 
+// Commission earned
+$query = "SELECT SUM(Comm_Amount) as total FROM commission_payments WHERE Comm_Status = 'Completed'";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$stats['total_commission'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+// Monthly revenue trend (last 6 months)
+$query = "SELECT 
+          DATE_FORMAT(Book_CreatedAt, '%Y-%m') as month,
+          SUM(Book_TotalAmount) as revenue,
+          COUNT(*) as bookings
+          FROM bookings 
+          WHERE Book_Status IN ('Active', 'Completed') 
+          AND Book_CreatedAt >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+          GROUP BY DATE_FORMAT(Book_CreatedAt, '%Y-%m')
+          ORDER BY month DESC
+          LIMIT 6";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$monthly_revenue = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Recent activities - more comprehensive
+$recent_activities = [];
+
+// Recent user registrations
+$query = "SELECT 'User Registration' as activity, User_Name as details, User_CreatedAt as created_at, 'user' as type
           FROM user_accounts 
           ORDER BY User_CreatedAt DESC 
+          LIMIT 3";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$recent_activities = array_merge($recent_activities, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+// Recent product listings
+$query = "SELECT 'Product Listed' as activity, 
+          CONCAT(p.Prod_Name, ' by ', u.User_Name) as details, 
+          p.Prod_CreatedAt as created_at, 'product' as type
+          FROM products p
+          JOIN user_accounts u ON p.OwnerID = u.UserID
+          ORDER BY p.Prod_CreatedAt DESC 
+          LIMIT 3";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$recent_activities = array_merge($recent_activities, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+// Recent bookings
+$query = "SELECT 'New Booking' as activity,
+          CONCAT(p.Prod_Name, ' booked by ', u.User_Name) as details,
+          b.Book_CreatedAt as created_at, 'booking' as type
+          FROM bookings b
+          JOIN products p ON b.ProductID = p.ProductID  
+          JOIN user_accounts u ON b.RenterID = u.UserID
+          ORDER BY b.Book_CreatedAt DESC
+          LIMIT 3";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$recent_activities = array_merge($recent_activities, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+// Sort all activities by date
+usort($recent_activities, function($a, $b) {
+    return strtotime($b['created_at']) - strtotime($a['created_at']);
+});
+
+// Take only the 10 most recent
+$recent_activities = array_slice($recent_activities, 0, 10);
+
+// Top performing products
+$query = "SELECT p.Prod_Name, u.User_Name as Owner_Name,
+          COUNT(b.BookingID) as booking_count,
+          SUM(b.Book_TotalAmount) as total_revenue
+          FROM products p
+          LEFT JOIN bookings b ON p.ProductID = b.ProductID AND b.Book_Status IN ('Active', 'Completed')
+          JOIN user_accounts u ON p.OwnerID = u.UserID
+          WHERE p.Prod_Status = 'Active'
+          GROUP BY p.ProductID
+          ORDER BY booking_count DESC, total_revenue DESC
           LIMIT 5";
 $stmt = $conn->prepare($query);
 $stmt->execute();
-$recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -130,11 +231,6 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
-            <li class="nav-item mt-3">
-                <a class="nav-link" href="../index.php">
-                    <i class="fas fa-arrow-left"></i> Back to Site
-                </a>
-            </li>
             <li class="nav-item">
                 <a class="nav-link" href="../logout.php">
                     <i class="fas fa-sign-out-alt"></i> Logout
@@ -176,6 +272,9 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         Total Users
                                     </div>
                                     <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['total_users']); ?></div>
+                                    <small class="text-muted">
+                                        <?php echo $stats['renters']; ?> Renters, <?php echo $stats['owners']; ?> Owners
+                                    </small>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-users fa-2x text-primary"></i>
@@ -194,6 +293,9 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         Total Products
                                     </div>
                                     <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['total_products']); ?></div>
+                                    <small class="text-muted">
+                                        <?php echo $product_stats['featured_products']; ?> Featured
+                                    </small>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-box fa-2x text-success"></i>
@@ -212,6 +314,9 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         Total Bookings
                                     </div>
                                     <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['total_bookings']); ?></div>
+                                    <small class="text-muted">
+                                        <?php echo $booking_stats['active']; ?> Active, <?php echo $booking_stats['pending']; ?> Pending
+                                    </small>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-calendar-check fa-2x text-warning"></i>
@@ -230,6 +335,9 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         Total Revenue
                                     </div>
                                     <div class="h5 mb-0 font-weight-bold">₱<?php echo number_format($stats['total_revenue'], 2); ?></div>
+                                    <small class="text-muted">
+                                        Commission: ₱<?php echo number_format($stats['total_commission'], 2); ?>
+                                    </small>
                                 </div>
                                 <div class="col-auto">
                                     <i class="fas fa-peso-sign fa-2x text-danger"></i>
@@ -240,7 +348,93 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Recent Activities and Quick Actions -->
+            <!-- Additional Statistics -->
+            <div class="row mb-4">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Monthly Revenue Trend (Last 6 Months)</h5>
+                        </div>
+                        <div class="card-body">
+                            <?php if (!empty($monthly_revenue)): ?>
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Month</th>
+                                                <th>Bookings</th>
+                                                <th>Revenue</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach($monthly_revenue as $month): ?>
+                                            <tr>
+                                                <td><?php echo date('F Y', strtotime($month['month'] . '-01')); ?></td>
+                                                <td><?php echo number_format($month['bookings']); ?></td>
+                                                <td>₱<?php echo number_format($month['revenue'], 2); ?></td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php else: ?>
+                                <p class="text-muted">No revenue data available for the last 6 months.</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Booking Status Breakdown</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span>Completed</span>
+                                    <span class="badge bg-success"><?php echo $booking_stats['completed']; ?></span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div class="progress-bar bg-success" style="width: <?php echo $stats['total_bookings'] > 0 ? ($booking_stats['completed'] / $stats['total_bookings']) * 100 : 0; ?>%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span>Active</span>
+                                    <span class="badge bg-primary"><?php echo $booking_stats['active']; ?></span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div class="progress-bar bg-primary" style="width: <?php echo $stats['total_bookings'] > 0 ? ($booking_stats['active'] / $stats['total_bookings']) * 100 : 0; ?>%"></div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span>Pending</span>
+                                    <span class="badge bg-warning"><?php echo $booking_stats['pending']; ?></span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div class="progress-bar bg-warning" style="width: <?php echo $stats['total_bookings'] > 0 ? ($booking_stats['pending'] / $stats['total_bookings']) * 100 : 0; ?>%"></div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span>Cancelled</span>
+                                    <span class="badge bg-danger"><?php echo $booking_stats['cancelled']; ?></span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div class="progress-bar bg-danger" style="width: <?php echo $stats['total_bookings'] > 0 ? ($booking_stats['cancelled'] / $stats['total_bookings']) * 100 : 0; ?>%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activities and Top Products -->
             <div class="row">
                 <div class="col-lg-8">
                     <div class="card">
@@ -252,6 +446,13 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <?php foreach($recent_activities as $activity): ?>
                                 <div class="list-group-item d-flex justify-content-between align-items-center">
                                     <div>
+                                        <i class="fas fa-<?php 
+                                            echo $activity['type'] == 'user' ? 'user-plus' : 
+                                                ($activity['type'] == 'product' ? 'box' : 'calendar-check'); 
+                                        ?> me-2 text-<?php 
+                                            echo $activity['type'] == 'user' ? 'primary' : 
+                                                ($activity['type'] == 'product' ? 'success' : 'warning'); 
+                                        ?>"></i>
                                         <strong><?php echo htmlspecialchars($activity['activity']); ?>:</strong>
                                         <?php echo htmlspecialchars($activity['details']); ?>
                                     </div>
@@ -266,6 +467,31 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="col-lg-4">
                     <div class="card">
                         <div class="card-header">
+                            <h5 class="card-title mb-0">Top Performing Products</h5>
+                        </div>
+                        <div class="card-body">
+                            <?php if (!empty($top_products)): ?>
+                                <?php foreach($top_products as $index => $product): ?>
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="badge bg-primary rounded-pill me-3"><?php echo $index + 1; ?></div>
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold"><?php echo htmlspecialchars($product['Prod_Name']); ?></div>
+                                        <small class="text-muted">by <?php echo htmlspecialchars($product['Owner_Name']); ?></small>
+                                        <div class="small">
+                                            <?php echo $product['booking_count']; ?> bookings • 
+                                            ₱<?php echo number_format($product['total_revenue'] ?? 0, 2); ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <p class="text-muted">No product data available yet.</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
                             <h5 class="card-title mb-0">Quick Actions</h5>
                         </div>
                         <div class="card-body">
@@ -273,14 +499,17 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <a href="users.php" class="btn btn-primary">
                                     <i class="fas fa-user-plus"></i> Manage Users
                                 </a>
-                                <a href="categories.php" class="btn btn-success">
-                                    <i class="fas fa-plus"></i> Add Category
+                                <a href="products.php" class="btn btn-success">
+                                    <i class="fas fa-box"></i> Manage Products
                                 </a>
-                                <a href="reports.php" class="btn btn-info">
+                                <a href="bookings.php" class="btn btn-warning">
+                                    <i class="fas fa-calendar-check"></i> Manage Bookings
+                                </a>
+                                <a href="commissions.php" class="btn btn-info">
+                                    <i class="fas fa-percentage"></i> View Commissions
+                                </a>
+                                <a href="reports.php" class="btn btn-secondary">
                                     <i class="fas fa-download"></i> Generate Report
-                                </a>
-                                <a href="settings.php" class="btn btn-warning">
-                                    <i class="fas fa-cog"></i> System Settings
                                 </a>
                             </div>
                         </div>
@@ -299,9 +528,13 @@ $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <span>Database</span>
                                 <span class="badge bg-success">Connected</span>
                             </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>Active Users</span>
+                                <span class="text-muted small"><?php echo $stats['total_users']; ?></span>
+                            </div>
                             <div class="d-flex justify-content-between align-items-center">
-                                <span>Last Backup</span>
-                                <span class="text-muted small">2 hours ago</span>
+                                <span>Last Updated</span>
+                                <span class="text-muted small"><?php echo date('M j, Y H:i'); ?></span>
                             </div>
                         </div>
                     </div>

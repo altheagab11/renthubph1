@@ -26,41 +26,118 @@ if (isset($_POST['unverify_user']) && !empty($_POST['user_id'])) {
     $stmt->execute([$user_id]);
     // Optionally add a success message or redirect
 }
-// Handle activate/deactivate user
-if (isset($_POST['update_user_status']) && !empty($_POST['user_id']) && isset($_POST['new_status'])) {
-    $user_id = intval($_POST['user_id']);
-    $new_status = $_POST['new_status'] === 'Active' ? 'Active' : 'Inactive';
-    $stmt = $conn->prepare("UPDATE user_accounts SET User_Status = ? WHERE UserID = ?");
-    $stmt->execute([$new_status, $user_id]);
-    // If user is deactivated, set all their products to inactive
-    if ($new_status === 'Inactive') {
-        $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
-        $prod_stmt->execute([$user_id]);
-    }
-    // Optionally add a success message or redirect
-}
 if ($_POST) {
     if (isset($_POST['update_user_status'])) {
         $user_id = $_POST['user_id'];
         $new_status = $_POST['new_status'];
         
-        $query = "UPDATE user_accounts SET User_Status = ? WHERE UserID = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $new_status);
-        $stmt->bindParam(2, $user_id);
-        
-        if ($stmt->execute()) {
-            // If user is deactivated, set all their products to inactive
+        try {
+            // Start transaction
+            $conn->beginTransaction();
+            
+            // Update user status
+            $query = "UPDATE user_accounts SET User_Status = ? WHERE UserID = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bindParam(1, $new_status);
+            $stmt->bindParam(2, $user_id);
+            $stmt->execute();
+            
             if ($new_status === 'Inactive') {
-                $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
-                $prod_stmt->execute([$user_id]);
-                $message = "User deactivated successfully! The user will be automatically logged out if currently logged in.";
+                // Get user info to check if they are an owner
+                $user_check = $conn->prepare("SELECT User_Role, User_Name, User_Email FROM user_accounts WHERE UserID = ?");
+                $user_check->execute([$user_id]);
+                $user_info = $user_check->fetch(PDO::FETCH_ASSOC);
+                
+                // If user is owner (role 2 or 3), handle their products and bookings
+                if ($user_info && in_array($user_info['User_Role'], [2, 3])) {
+                    // 1. Deactivate all their products
+                    $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
+                    $prod_stmt->execute([$user_id]);
+                    
+                    // 2. Get all pending bookings for this owner
+                    $pending_bookings_query = "SELECT b.BookingID, b.RenterID, b.Book_TotalAmount, b.Book_SecurityDeposit, 
+                                             p.Prod_Name, r.User_Name as Renter_Name, r.User_Email as Renter_Email,
+                                             pay.PaymentID, pay.Pay_Status, pay.Pay_Amount
+                                             FROM bookings b
+                                             JOIN products p ON b.ProductID = p.ProductID
+                                             JOIN user_accounts r ON b.RenterID = r.UserID
+                                             LEFT JOIN payments pay ON b.BookingID = pay.BookingID
+                                             WHERE b.OwnerID = ? AND b.Book_Status = 'Pending'";
+                    $pending_stmt = $conn->prepare($pending_bookings_query);
+                    $pending_stmt->execute([$user_id]);
+                    $pending_bookings = $pending_stmt->fetchAll(PDO::FETCH_ASSOC);
+                    
+                    // 3. Cancel all pending bookings
+                    if (!empty($pending_bookings)) {
+                        $cancel_pending = $conn->prepare("UPDATE bookings SET Book_Status = 'Cancelled', 
+                                                         Book_CancelReason = 'Owner account suspended by administrator', 
+                                                         Book_UpdatedAt = NOW() 
+                                                         WHERE OwnerID = ? AND Book_Status = 'Pending'");
+                        $cancel_pending->execute([$user_id]);
+                        
+                        // 4. Create notifications for affected renters and handle refunds
+                        foreach ($pending_bookings as $booking) {
+                            // Create notification for renter
+                            $notification_msg = "Your booking for '{$booking['Prod_Name']}' has been cancelled due to owner account suspension. ";
+                            
+                            // Handle refunds for paid bookings
+                            if ($booking['PaymentID'] && $booking['Pay_Status'] == 'Completed') {
+                                // Create refund record
+                                $refund_amount = $booking['Pay_Amount'];
+                                $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
+                                               VALUES (?, ?, 'Pending', 'Owner account suspended', NOW())";
+                                $refund_stmt = $conn->prepare($refund_query);
+                                $refund_stmt->execute([$booking['BookingID'], $refund_amount]);
+                                
+                                $notification_msg .= "A refund of ₱" . number_format($refund_amount, 2) . " will be processed within 3-5 business days.";
+                            } else {
+                                $notification_msg .= "No payment was processed for this booking.";
+                            }
+                            
+                            // Insert notification
+                            $notif_query = "INSERT INTO notifications (UserID, Not_Title, Not_Message, Not_Type, Not_CreatedAt) 
+                                          VALUES (?, ?, ?, 'booking', NOW())";
+                            $notif_stmt = $conn->prepare($notif_query);
+                            $notif_stmt->execute([
+                                $booking['RenterID'], 
+                                'Booking Cancelled - Owner Suspended',
+                                $notification_msg
+                            ]);
+                        }
+                    }
+                    
+                    // 5. Get confirmed/active bookings that need attention
+                    $active_bookings_query = "SELECT COUNT(*) as count FROM bookings 
+                                            WHERE OwnerID = ? AND Book_Status IN ('Confirmed', 'Active')";
+                    $active_stmt = $conn->prepare($active_bookings_query);
+                    $active_stmt->execute([$user_id]);
+                    $active_count = $active_stmt->fetch(PDO::FETCH_ASSOC)['count'];
+                    
+                    $cancelled_count = count($pending_bookings);
+                    $message = "User deactivated successfully! ";
+                    $message .= "Products deactivated. ";
+                    if ($cancelled_count > 0) {
+                        $message .= "{$cancelled_count} pending booking(s) cancelled with renter notifications sent. ";
+                    }
+                    if ($active_count > 0) {
+                        $message .= "{$active_count} active booking(s) require manual review.";
+                    }
+                } else {
+                    $message = "User deactivated successfully!";
+                }
             } else {
-                $message = "User status updated successfully!";
+                // Reactivating user
+                $message = "User reactivated successfully!";
             }
+            
+            // Commit transaction
+            $conn->commit();
             $message_type = "success";
-        } else {
-            $message = "Failed to update user status.";
+            
+        } catch (Exception $e) {
+            // Rollback transaction on error
+            $conn->rollback();
+            $message = "Failed to update user status: " . $e->getMessage();
             $message_type = "danger";
         }
     }
@@ -374,11 +451,6 @@ function getRoleName($role_id) {
             <li class="nav-item">
                 <a class="nav-link" href="settings.php">
                     <i class="fas fa-cog"></i> Settings
-                </a>
-            </li>
-            <li class="nav-item mt-3">
-                <a class="nav-link" href="../index.php">
-                    <i class="fas fa-arrow-left"></i> Back to Site
                 </a>
             </li>
             <li class="nav-item">

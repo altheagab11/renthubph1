@@ -83,6 +83,57 @@ if ($_POST) {
                     $stmt->bindParam(5, $reason);
                     $stmt->execute();
 
+                    // If booking is completed, create commission record
+                    if ($action === 'complete') {
+                        try {
+                            // Get booking and owner subscription details for commission calculation
+                            $commission_query = "SELECT b.BookingID, b.Book_TotalAmount, b.OwnerID,
+                                               sp.Plan_CommissionRate
+                                               FROM bookings b
+                                               JOIN user_accounts ua ON b.OwnerID = ua.UserID
+                                               LEFT JOIN user_subscriptions us ON ua.UserID = us.UserID 
+                                                   AND us.Sub_Status = 'Active' 
+                                                   AND us.Sub_EndDate >= NOW()
+                                               LEFT JOIN subscription_plans sp ON us.PlanID = sp.PlanID
+                                               WHERE b.BookingID = ?";
+                            $commission_stmt = $conn->prepare($commission_query);
+                            $commission_stmt->execute([$booking_id]);
+                            $commission_data = $commission_stmt->fetch(PDO::FETCH_ASSOC);
+                            
+                            if ($commission_data) {
+                                // Default commission rate if no active subscription
+                                $commission_rate = $commission_data['Plan_CommissionRate'] ?? 10.00; // Default 10%
+                                $gross_amount = $commission_data['Book_TotalAmount'];
+                                $commission_amount = $gross_amount * ($commission_rate / 100);
+                                $net_amount = $gross_amount - $commission_amount;
+                                
+                                // Check if commission record already exists
+                                $check_query = "SELECT CommissionID FROM commission_payments WHERE BookingID = ?";
+                                $check_stmt = $conn->prepare($check_query);
+                                $check_stmt->execute([$booking_id]);
+                                
+                                if (!$check_stmt->fetch()) {
+                                    // Insert commission record
+                                    $insert_commission = "INSERT INTO commission_payments 
+                                                        (BookingID, OwnerID, Comm_GrossAmount, Comm_Rate, Comm_Amount, Comm_NetAmount, Comm_Status, Comm_CreatedAt) 
+                                                        VALUES (?, ?, ?, ?, ?, ?, 'Completed', NOW())";
+                                    $insert_stmt = $conn->prepare($insert_commission);
+                                    $insert_stmt->execute([
+                                        $booking_id,
+                                        $commission_data['OwnerID'],
+                                        $gross_amount,
+                                        $commission_rate,
+                                        $commission_amount,
+                                        $net_amount
+                                    ]);
+                                }
+                            }
+                        } catch (Exception $e) {
+                            // Commission creation failed but booking completion should still proceed
+                            error_log("Commission creation failed for booking ID $booking_id: " . $e->getMessage());
+                        }
+                    }
+
                     // Send notification to renter if accepted
                     if ($action === 'accept') {
                         // Get renter ID and product name
@@ -542,11 +593,6 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                 <li class="nav-item">
                     <a class="nav-link" href="../renter/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
                         <i class="fas fa-search me-2"></i> Switch to Renter
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Site
                     </a>
                 </li>
                 <li class="nav-item">

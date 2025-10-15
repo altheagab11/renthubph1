@@ -220,7 +220,8 @@ $stats = [
     'active_products' => 0,
     'pending_products' => 0,
     'featured_products' => 0,
-    'total_revenue' => 0
+    'total_revenue' => 0,
+    'total_commission' => 0
 ];
 
 if ($products_table_exists) {
@@ -253,6 +254,18 @@ if ($products_table_exists) {
             $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
         } catch (PDOException $e) {
             $stats['total_revenue'] = 0;
+        }
+
+        // Calculate total commission from commission_payments table
+        try {
+            $commission_query = "SELECT SUM(Comm_Amount) as total_commission
+                               FROM commission_payments 
+                               WHERE Comm_Status = 'Completed'";
+            $commission_stmt = $conn->prepare($commission_query);
+            $commission_stmt->execute();
+            $stats['total_commission'] = $commission_stmt->fetch(PDO::FETCH_ASSOC)['total_commission'] ?? 0;
+        } catch (PDOException $e) {
+            $stats['total_commission'] = 0;
         }
     } catch (PDOException $e) {
         // Keep default stats if queries fail
@@ -400,7 +413,21 @@ function formatCurrency($amount) {
         .stat-card.total { border-left-color: #007bff; }
         .stat-card.active { border-left-color: #28a745; }
         .stat-card.flagged { border-left-color: #dc3545; }
-        .stat-card.featured { border-left-color: #dc3545; }
+        .stat-card.featured { border-left-color: #ffc107; }
+        .stat-card.commission { border-left-color: #17a2b8; }
+        
+        /* Custom column class for 5 equal columns */
+        .col-xl-2-4 {
+            flex: 0 0 20%;
+            max-width: 20%;
+        }
+        
+        @media (max-width: 1199.98px) {
+            .col-xl-2-4 {
+                flex: 0 0 50%;
+                max-width: 50%;
+            }
+        }
         
         .product-card {
             border: 1px solid #e9ecef;
@@ -631,11 +658,6 @@ function formatCurrency($amount) {
                     <i class="fas fa-cog"></i> Settings
                 </a>
             </li>
-            <li class="nav-item mt-3">
-                <a class="nav-link" href="../index.php">
-                    <i class="fas fa-arrow-left"></i> Back to Site
-                </a>
-            </li>
             <li class="nav-item">
                 <a class="nav-link" href="../logout.php">
                     <i class="fas fa-sign-out-alt"></i> Logout
@@ -679,7 +701,7 @@ function formatCurrency($amount) {
 
             <!-- Statistics Cards -->
             <div class="row mb-4">
-                <div class="col-xl-3 col-md-6 mb-4">
+                <div class="col-xl-2-4 col-md-6 mb-4">
                     <div class="card stat-card total">
                         <div class="card-body">
                             <div class="row align-items-center">
@@ -697,7 +719,7 @@ function formatCurrency($amount) {
                     </div>
                 </div>
 
-                <div class="col-xl-3 col-md-6 mb-4">
+                <div class="col-xl-2-4 col-md-6 mb-4">
                     <div class="card stat-card active">
                         <div class="card-body">
                             <div class="row align-items-center">
@@ -715,7 +737,7 @@ function formatCurrency($amount) {
                     </div>
                 </div>
 
-                <div class="col-xl-3 col-md-6 mb-4">
+                <div class="col-xl-2-4 col-md-6 mb-4">
                     <div class="card stat-card flagged">
                         <div class="card-body">
                             <div class="row align-items-center">
@@ -733,18 +755,36 @@ function formatCurrency($amount) {
                     </div>
                 </div>
 
-                <div class="col-xl-3 col-md-6 mb-4">
+                <div class="col-xl-2-4 col-md-6 mb-4">
                     <div class="card stat-card featured">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
-                                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
                                         Featured Products
                                     </div>
                                     <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['featured_products']); ?></div>
                                 </div>
                                 <div class="col-auto">
-                                    <i class="fas fa-star fa-2x text-danger"></i>
+                                    <i class="fas fa-star fa-2x text-warning"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2-4 col-md-6 mb-4">
+                    <div class="card stat-card commission">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                        Total Commission
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold">₱<?php echo number_format($stats['total_commission'], 2); ?></div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-percentage fa-2x text-info"></i>
                                 </div>
                             </div>
                         </div>
