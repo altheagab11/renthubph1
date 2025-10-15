@@ -10,6 +10,12 @@ $conn = $database->getConnection();
 
 $user_id = $_SESSION['user_id'];
 
+// Check for upgrade success message
+$upgrade_message = '';
+if (isset($_GET['upgraded']) && $_GET['upgraded'] == '1') {
+    $upgrade_message = "🎉 Welcome to RentHub PH Owner Dashboard! Your account has been successfully upgraded. You can now start listing products and earning money!";
+}
+
 // Check subscription status
 
 // Get subscription info
@@ -314,8 +320,8 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <hr class="text-white-50">
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Site
+                    <a class="nav-link" href="../renter/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
+                        <i class="fas fa-search me-2"></i> Switch to Renter
                     </a>
                 </li>
                 <li class="nav-item">
@@ -397,6 +403,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Dashboard Content -->
         <div class="container-fluid p-4">
+            <!-- Upgrade Success Message -->
+            <?php if($upgrade_message): ?>
+            <div class="alert alert-success alert-dismissible fade show mb-4 border-0" style="border-radius: 15px; background: linear-gradient(135deg, #00b894 0%, #00a085 100%); color: white;">
+                <div class="row align-items-center">
+                    <div class="col-md-10">
+                        <h5 class="alert-heading mb-1">
+                            <i class="fas fa-crown"></i> Account Upgraded Successfully!
+                        </h5>
+                        <p class="mb-0"><?php echo $upgrade_message; ?></p>
+                    </div>
+                    <div class="col-md-2 text-end">
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+            
             <!-- Subscription Status -->
             <?php if(!$subscription): ?>
             <div class="alert alert-warning mb-4 border-0" style="border-radius: 15px;">
