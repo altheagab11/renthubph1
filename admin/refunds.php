@@ -153,224 +153,429 @@ $stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Refund Management - RentHub PH Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        /* Fix dropdown menu being cut off */
+        .dropdown-menu {
+            z-index: 2000 !important;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .card, .card-body {
+            overflow: visible !important;
+        }
+
+        /* Sidebar Styling */
         .sidebar {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 250px;
+            height: 100vh;
+            background-color: #343a40;
+            transition: all 0.3s;
+            z-index: 1000;
         }
         .sidebar .nav-link {
-            color: rgba(255, 255, 255, 0.8);
-            border-radius: 10px;
-            margin: 5px 0;
+            color: #adb5bd;
+            padding: 0.75rem 1rem;
         }
-        .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            color: white;
-            background-color: rgba(255, 255, 255, 0.1);
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: #fff;
+            background-color: #495057;
         }
-        .card {
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+
+        /* Main Content Styling */
+        .main-content {
+            margin-left: 250px;
+            padding-top: 70px;
+            min-height: 100vh;
+            transition: all 0.3s;
         }
+
+        /* Top Navbar Styling */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 250px;
+            right: 0;
+            z-index: 1000;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* Stat Cards */
+        .stat-card {
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        .stat-card.total { border-left-color: #007bff; }
+        .stat-card.pending { border-left-color: #ffc107; }
+        .stat-card.completed { border-left-color: #28a745; }
+        .stat-card.refunded { border-left-color: #17a2b8; }
+        
+        /* Custom column class for 4 equal columns */
+        .col-xl-2-4 {
+            flex: 0 0 25%;
+            max-width: 25%;
+        }
+        
+        @media (max-width: 1199.98px) {
+            .col-xl-2-4 {
+                flex: 0 0 50%;
+                max-width: 50%;
+            }
+        }
+        
+        .refund-card {
+            border: 1px solid #e9ecef;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+            overflow: visible !important;
+        }
+        .refund-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
         .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 50px;
-            font-size: 0.875rem;
-            font-weight: 500;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 0.4rem;
+            border-radius: 50%;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
         }
-        .status-pending { background-color: #fff3cd; color: #856404; }
-        .status-completed { background-color: #d1edff; color: #0c5460; }
-        .status-rejected { background-color: #f8d7da; color: #721c24; }
+        
+        .status-badge:hover {
+            transform: scale(1.1);
+        }
+        
+        .status-pending { 
+            background: rgba(255, 193, 7, 0.9); 
+            color: #000;
+        }
+        .status-completed { 
+            background: rgba(40, 167, 69, 0.9); 
+            color: white;
+        }
+        .status-rejected { 
+            background: rgba(220, 53, 69, 0.9); 
+            color: white;
+        }
+        
+        .filter-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .btn-action {
+            padding: 0.4rem 0.8rem;
+            margin: 0 0.1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 0;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            color: #dee2e6;
+            margin-bottom: 1rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 991px) {
+            .sidebar {
+                transform: translateX(-250px);
+            }
+            .main-content {
+                margin-left: 0;
+                padding-top: 60px;
+            }
+            .navbar {
+                left: 0;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+        }
     </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
-                <div class="position-sticky pt-3">
-                    <div class="text-center mb-4">
-                        <h4 class="text-white">RentHub PH</h4>
-                        <small class="text-white-50">Admin Panel</small>
+    <!-- Sidebar -->
+    <nav class="sidebar position-fixed top-0 start-0" style="width: 250px; z-index: 1000;">
+        <div class="p-3">
+            <h4 class="text-white">
+                <i class="fas fa-home"></i> RentHub PH
+            </h4>
+            <p class="text-muted small">Admin Panel</p>
+        </div>
+        
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.php">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="users.php">
+                    <i class="fas fa-users"></i> Users Management
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="products.php">
+                    <i class="fas fa-box"></i> Products Management
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="bookings.php">
+                    <i class="fas fa-calendar-check"></i> Bookings Management
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="refunds.php">
+                    <i class="fas fa-undo"></i> Refunds Management
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="categories.php">
+                    <i class="fas fa-tags"></i> Categories
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="subscriptions.php">
+                    <i class="fas fa-credit-card"></i> Subscriptions
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="reports.php">
+                    <i class="fas fa-chart-bar"></i> Reports
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="settings.php">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="../logout.php">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Navigation -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+            <div class="container-fluid">
+                <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <h5 class="mb-0">Refund Management</h5>
+                <div class="navbar-nav ms-auto">
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user"></i> <?php echo $_SESSION['user_name']; ?>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="profile.php">Profile</a></li>
+                            <li><a class="dropdown-item" href="../logout.php">Logout</a></li>
+                        </ul>
                     </div>
-                    <ul class="nav flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link" href="dashboard.php">
-                                <i class="fas fa-home me-2"></i>Dashboard
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="users.php">
-                                <i class="fas fa-users me-2"></i>Users
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="products.php">
-                                <i class="fas fa-box me-2"></i>Products
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="bookings.php">
-                                <i class="fas fa-calendar me-2"></i>Bookings
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link active" href="refunds.php">
-                                <i class="fas fa-money-bill-wave me-2"></i>Refunds
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="reports.php">
-                                <i class="fas fa-chart-bar me-2"></i>Reports
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="../logout.php">
-                                <i class="fas fa-sign-out-alt me-2"></i>Logout
-                            </a>
-                        </li>
-                    </ul>
                 </div>
-            </nav>
+            </div>
+        </nav>
 
-            <!-- Main Content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">Refund Management</h1>
-                </div>
+        <!-- Dashboard Content -->
+        <div class="container-fluid p-4">
+            <?php if($message): ?>
+            <div class="alert alert-<?php echo $message_type; ?> alert-dismissible fade show">
+                <i class="fas fa-<?php echo $message_type == 'success' ? 'check-circle' : ($message_type == 'warning' ? 'exclamation-triangle' : 'times-circle'); ?> me-2"></i>
+                <?php echo $message; ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <?php endif; ?>
 
-                <?php if ($message): ?>
-                    <div class="alert alert-<?php echo $message_type; ?> alert-dismissible fade show" role="alert">
-                        <?php echo $message; ?>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                <?php endif; ?>
-
-                <!-- Statistics Cards -->
-                <div class="row mb-4">
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                            Total Refunds</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            <?php echo number_format($stats['total_refunds']); ?>
-                                        </div>
+            <!-- Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-xl-2-4 col-md-6 mb-4">
+                    <div class="card stat-card total">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                        Total Refunds
                                     </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
-                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['total_refunds']); ?></div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                            Pending Refunds</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            <?php echo number_format($stats['pending_refunds']); ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-clock fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                            Completed Refunds</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            <?php echo number_format($stats['completed_refunds']); ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                            Total Refunded</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            ₱<?php echo number_format($stats['total_refunded'], 2); ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-peso-sign fa-2x text-gray-300"></i>
-                                    </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-undo fa-2x text-primary"></i>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Filters -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <form method="GET" class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Status</label>
-                                <select class="form-select" name="status">
-                                    <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Status</option>
-                                    <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending</option>
-                                    <option value="completed" <?php echo $status_filter == 'completed' ? 'selected' : ''; ?>>Completed</option>
-                                    <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
-                                </select>
+                <div class="col-xl-2-4 col-md-6 mb-4">
+                    <div class="card stat-card pending">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                        Pending Refunds
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['pending_refunds']); ?></div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-clock fa-2x text-warning"></i>
+                                </div>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Sort By</label>
-                                <select class="form-select" name="sort">
-                                    <option value="newest" <?php echo $sort_by == 'newest' ? 'selected' : ''; ?>>Newest First</option>
-                                    <option value="oldest" <?php echo $sort_by == 'oldest' ? 'selected' : ''; ?>>Oldest First</option>
-                                    <option value="amount_high" <?php echo $sort_by == 'amount_high' ? 'selected' : ''; ?>>Amount: High to Low</option>
-                                    <option value="amount_low" <?php echo $sort_by == 'amount_low' ? 'selected' : ''; ?>>Amount: Low to High</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4 d-flex align-items-end">
-                                <button type="submit" class="btn btn-primary">Apply Filters</button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Refunds Table -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">Refund Requests</h5>
-                    </div>
-                    <div class="card-body">
-                        <?php if (empty($refunds)): ?>
-                            <div class="text-center py-4">
-                                <i class="fas fa-money-bill-wave fa-3x text-muted mb-3"></i>
-                                <h5 class="text-muted">No refund requests found</h5>
+                <div class="col-xl-2-4 col-md-6 mb-4">
+                    <div class="card stat-card completed">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                        Completed Refunds
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['completed_refunds']); ?></div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-check-circle fa-2x text-success"></i>
+                                </div>
                             </div>
-                        <?php else: ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-2-4 col-md-6 mb-4">
+                    <div class="card stat-card refunded">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                        Total Refunded
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold">₱<?php echo number_format($stats['total_refunded'], 2); ?></div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-money-bill-wave fa-2x text-info"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search and Filter Section -->
+            <div class="filter-card">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-filter me-2"></i>Status
+                        </label>
+                        <select class="form-select" name="status" onchange="window.location.href='?status='+this.value+'&sort=<?php echo $sort_by; ?>'">
+                            <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Status</option>
+                            <option value="pending" <?php echo $status_filter == 'pending' ? 'selected' : ''; ?>>Pending</option>
+                            <option value="completed" <?php echo $status_filter == 'completed' ? 'selected' : ''; ?>>Completed</option>
+                            <option value="rejected" <?php echo $status_filter == 'rejected' ? 'selected' : ''; ?>>Rejected</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-sort me-2"></i>Sort By
+                        </label>
+                        <select class="form-select" name="sort" onchange="window.location.href='?status=<?php echo $status_filter; ?>&sort='+this.value">
+                            <option value="newest" <?php echo $sort_by == 'newest' ? 'selected' : ''; ?>>Newest First</option>
+                            <option value="oldest" <?php echo $sort_by == 'oldest' ? 'selected' : ''; ?>>Oldest First</option>
+                            <option value="amount_high" <?php echo $sort_by == 'amount_high' ? 'selected' : ''; ?>>Amount (High to Low)</option>
+                            <option value="amount_low" <?php echo $sort_by == 'amount_low' ? 'selected' : ''; ?>>Amount (Low to High)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-search me-2"></i>Search
+                        </label>
+                        <input type="text" class="form-control" placeholder="Search refunds..." id="searchInput">
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" onclick="window.location.reload()">
+                            <i class="fas fa-sync me-2"></i>Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Refunds Management Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                    <div>
+                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Refund Requests</h5>
+                        <small class="text-muted"><?php echo count($refunds); ?> Found</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success btn-sm" onclick="window.location.reload()">
+                            <i class="fas fa-sync me-1"></i>Export
+                        </button>
+                        <div class="btn-group">
+                            <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="fas fa-cog me-1"></i>Bulk Actions
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#"><i class="fas fa-check me-2"></i>Mark as Processed</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="fas fa-times me-2"></i>Reject Selected</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <?php if (empty($refunds)): ?>
+                        <div class="text-center py-5">
+                            <i class="fas fa-money-bill-wave fa-4x text-muted mb-4"></i>
+                            <h5 class="text-muted">No refund requests found</h5>
+                            <p class="text-muted">Refund requests will appear here when customers cancel bookings with payments.</p>
+                        </div>
+                    <?php else: ?>
                             <div class="table-responsive">
-                                <table class="table table-hover">
+                                <table class="table table-hover mb-0">
                                     <thead>
                                         <tr>
+                                            <th style="width: 60px;">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="selectAll">
+                                                </div>
+                                            </th>
                                             <th>Refund ID</th>
                                             <th>Renter</th>
                                             <th>Product</th>
@@ -378,40 +583,79 @@ $stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
                                             <th>Reason</th>
                                             <th>Status</th>
                                             <th>Created</th>
-                                            <th>Actions</th>
+                                            <th style="width: 150px;">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <?php foreach ($refunds as $refund): ?>
                                         <tr>
-                                            <td>#<?php echo $refund['RefundID']; ?></td>
                                             <td>
-                                                <strong><?php echo htmlspecialchars($refund['Renter_Name']); ?></strong><br>
-                                                <small class="text-muted"><?php echo htmlspecialchars($refund['Renter_Email']); ?></small>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="<?php echo $refund['RefundID']; ?>">
+                                                </div>
                                             </td>
-                                            <td><?php echo htmlspecialchars($refund['Prod_Name']); ?></td>
-                                            <td><strong>₱<?php echo number_format($refund['Refund_Amount'], 2); ?></strong></td>
-                                            <td><?php echo htmlspecialchars($refund['Refund_Reason']); ?></td>
                                             <td>
-                                                <span class="status-badge status-<?php echo strtolower($refund['Refund_Status']); ?>">
-                                                    <?php echo $refund['Refund_Status']; ?>
+                                                <strong class="text-primary">#<?php echo $refund['RefundID']; ?></strong>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="avatar-circle bg-primary text-white me-3">
+                                                        <?php echo strtoupper(substr($refund['Renter_Name'], 0, 1)); ?>
+                                                    </div>
+                                                    <div>
+                                                        <strong><?php echo htmlspecialchars($refund['Renter_Name']); ?></strong><br>
+                                                        <small class="text-muted"><?php echo htmlspecialchars($refund['Renter_Email']); ?></small>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo htmlspecialchars($refund['Prod_Name']); ?></strong><br>
+                                                <small class="text-muted">Booking #<?php echo $refund['BookingID']; ?></small>
+                                            </td>
+                                            <td>
+                                                <strong class="text-success">₱<?php echo number_format($refund['Refund_Amount'], 2); ?></strong><br>
+                                                <small class="text-muted">of ₱<?php echo number_format($refund['Book_TotalAmount'], 2); ?></small>
+                                            </td>
+                                            <td>
+                                                <span class="text-muted" style="max-width: 200px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="<?php echo htmlspecialchars($refund['Refund_Reason']); ?>">
+                                                    <?php echo htmlspecialchars($refund['Refund_Reason']); ?>
                                                 </span>
                                             </td>
-                                            <td><?php echo date('M j, Y', strtotime($refund['Refund_CreatedAt'])); ?></td>
                                             <td>
-                                                <?php if ($refund['Refund_Status'] == 'Pending'): ?>
-                                                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#processModal<?php echo $refund['RefundID']; ?>">
-                                                        <i class="fas fa-check"></i> Process
-                                                    </button>
-                                                    <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectModal<?php echo $refund['RefundID']; ?>">
-                                                        <i class="fas fa-times"></i> Reject
-                                                    </button>
-                                                <?php else: ?>
-                                                    <span class="text-muted">Processed</span>
-                                                    <?php if ($refund['Processed_By_Name']): ?>
-                                                        <br><small>by <?php echo htmlspecialchars($refund['Processed_By_Name']); ?></small>
+                                                <span class="badge status-<?php echo strtolower($refund['Refund_Status']); ?>">
+                                                    <?php 
+                                                    $status_icons = [
+                                                        'Pending' => 'fas fa-clock',
+                                                        'Completed' => 'fas fa-check-circle',
+                                                        'Rejected' => 'fas fa-times-circle'
+                                                    ];
+                                                    $icon = $status_icons[$refund['Refund_Status']] ?? 'fas fa-question';
+                                                    ?>
+                                                    <i class="<?php echo $icon; ?> me-1"></i><?php echo $refund['Refund_Status']; ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo date('M j, Y', strtotime($refund['Refund_CreatedAt'])); ?></strong><br>
+                                                <small class="text-muted"><?php echo date('g:i A', strtotime($refund['Refund_CreatedAt'])); ?></small>
+                                            </td>
+                                            <td>
+                                                <div class="action-buttons">
+                                                    <?php if ($refund['Refund_Status'] == 'Pending'): ?>
+                                                        <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#processModal<?php echo $refund['RefundID']; ?>" title="Process Refund">
+                                                            <i class="fas fa-check"></i>
+                                                        </button>
+                                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectModal<?php echo $refund['RefundID']; ?>" title="Reject Refund">
+                                                            <i class="fas fa-times"></i>
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-secondary">
+                                                            <i class="fas fa-check me-1"></i>Processed
+                                                        </span>
+                                                        <?php if ($refund['Processed_By_Name']): ?>
+                                                            <br><small class="text-muted">by <?php echo htmlspecialchars($refund['Processed_By_Name']); ?></small>
+                                                        <?php endif; ?>
                                                     <?php endif; ?>
-                                                <?php endif; ?>
+                                                </div>
                                             </td>
                                         </tr>
 
@@ -497,14 +741,34 @@ $stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
-                            </div>
-                        <?php endif; ?>
-                    </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            </main>
+            </div>
         </div>
     </div>
 
+    <!-- Bootstrap and FontAwesome -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+    
+    <script>
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('keyup', function() {
+            var input = this.value.toLowerCase();
+            var rows = document.querySelectorAll('.card-body .table tbody tr');
+            
+            rows.forEach(function(row) {
+                var text = row.textContent.toLowerCase();
+                row.style.display = text.includes(input) ? '' : 'none';
+            });
+        });
+
+        // Select all functionality
+        document.getElementById('selectAll').addEventListener('change', function() {
+            var checkboxes = document.querySelectorAll('.table tbody input[type="checkbox"]');
+            checkboxes.forEach(checkbox => checkbox.checked = this.checked);
+        });
+    </script>
 </body>
 </html>

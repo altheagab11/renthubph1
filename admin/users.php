@@ -434,6 +434,11 @@ function getRoleName($role_id) {
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link" href="refunds.php">
+                    <i class="fas fa-undo"></i> Refunds Management
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link" href="categories.php">
                     <i class="fas fa-tags"></i> Categories
                 </a>

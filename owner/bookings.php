@@ -390,13 +390,6 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
             box-shadow: 0 15px 30px rgba(0,0,0,0.15);
         }
         
-        .booking-status {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            z-index: 2;
-        }
-        
         .status-badge {
             border-radius: 20px;
             padding: 0.5rem 1rem;
@@ -827,16 +820,24 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
     $notes = json_decode($booking['Book_Notes'], true); 
     ?>
     <div class="booking-card card mb-4">
-        <div class="row">
-            <div class="col-12 d-flex justify-content-end align-items-center" style="min-height: 40px; padding-right: 24px;">
-                <div class="booking-status" style="position:static;top:auto;right:auto;">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div class="d-flex flex-column gap-2">
                     <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
                         <?php echo htmlspecialchars($booking['Book_Status']); ?>
                     </span>
+                    <?php if ($payment_completed): ?>
+                        <span class="badge bg-success">
+                            <i class="fas fa-check-circle me-1"></i>Payment: Completed
+                        </span>
+                    <?php else: ?>
+                        <span class="badge bg-warning text-dark">
+                            <i class="fas fa-clock me-1"></i>Payment: Pending
+                        </span>
+                    <?php endif; ?>
                 </div>
+                <small class="text-muted">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></small>
             </div>
-        </div>
-        <div class="card-body p-4">
                                     <div class="row">
                                         <div class="col-md-3">
                                             <img
@@ -985,12 +986,13 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                     <?php else: ?>
                         <?php foreach($history_bookings as $booking): ?>
                             <div class="booking-card card bg-light mb-4">
-                                <div class="booking-status">
-                                    <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
-                                        <?php echo htmlspecialchars($booking['Book_Status']); ?>
-                                    </span>
-                                </div>
                                 <div class="card-body p-4">
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
+                                            <?php echo htmlspecialchars($booking['Book_Status']); ?>
+                                        </span>
+                                        <small class="text-muted">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></small>
+                                    </div>
                                     <div class="row">
                                         <!-- Image container removed for booking history -->
                                         <div class="col-md-6">

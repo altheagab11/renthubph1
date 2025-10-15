@@ -243,7 +243,7 @@ $stats['most_expensive'] = $most_expensive;
         .favorite-badge {
             position: absolute;
             top: 15px;
-            right: 15px;
+            left: 15px;
             background: var(--secondary-gradient);
             color: white;
             border-radius: 50%;

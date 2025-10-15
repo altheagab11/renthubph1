@@ -100,14 +100,88 @@ if ($_POST) {
             $payment_method = $notes['payment_method'] ?? 'Cash';
             $payment_status = $booking['Pay_Status'] ?? null;
 
-            if ($booking['Book_Status'] == 'Pending') {
-                $query = "UPDATE bookings SET Book_Status = 'Cancelled', Book_UpdatedAt = NOW(), Book_CancelReason = ? WHERE BookingID = ? AND RenterID = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $reason);
-                $stmt->bindParam(2, $booking_id);
-                $stmt->bindParam(3, $user_id);
-                
-                if ($stmt->execute()) {
+            // Debug: Log the booking status
+            error_log("Debug - Booking Status: " . $booking['Book_Status']);
+            error_log("Debug - Payment Status: " . ($payment_status ?? 'NULL'));
+
+            if (in_array($booking['Book_Status'], ['Pending', 'Confirmed', 'Active'])) {
+                $conn->beginTransaction();
+                try {
+                    // Cancel the booking
+                    $query = "UPDATE bookings SET Book_Status = 'Cancelled', Book_UpdatedAt = NOW(), Book_CancelReason = ? WHERE BookingID = ? AND RenterID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->execute([$reason, $booking_id, $user_id]);
+                    
+                    // Create refund ONLY if payment is completed
+                    $refund_created = false;
+                    
+                    // Debug: Check payment status
+                    error_log("Debug - Payment Status: " . ($payment_status ?? 'NULL'));
+                    error_log("Debug - Booking ID: " . $booking_id);
+                    
+                    if ($payment_status == 'Completed') {
+                        // Get booking details for refund calculation
+                        $booking_query = "SELECT Book_StartDate, Book_TotalAmount FROM bookings WHERE BookingID = ?";
+                        $booking_stmt = $conn->prepare($booking_query);
+                        $booking_stmt->execute([$booking_id]);
+                        $booking_details = $booking_stmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        error_log("Debug - Booking Details: " . print_r($booking_details, true));
+                        
+                        if ($booking_details) {
+                            // Calculate refund amount based on time until booking
+                            $start_date = new DateTime($booking_details['Book_StartDate']);
+                            $now = new DateTime();
+                            $days_until = $now->diff($start_date)->days;
+                            $total_amount = $booking_details['Book_TotalAmount'];
+                            
+                            // Calculate refund percentage based on timing
+                            if ($start_date > $now) {
+                                if ($days_until >= 7) {
+                                    $refund_percentage = 1.00; // 100%
+                                } elseif ($days_until >= 3) {
+                                    $refund_percentage = 0.75; // 75%
+                                } elseif ($days_until >= 1) {
+                                    $refund_percentage = 0.50; // 50%
+                                } else {
+                                    $refund_percentage = 0.25; // 25%
+                                }
+                            } else {
+                                $refund_percentage = 0.25; // 25% for same day/after start
+                            }
+                            
+                            $refund_amount = $total_amount * $refund_percentage;
+                            
+                            error_log("Debug - Refund Amount: " . $refund_amount);
+                            error_log("Debug - Refund Percentage: " . $refund_percentage);
+                            
+                            // Create refund record
+                            try {
+                                $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
+                                               VALUES (?, ?, 'Pending', ?, NOW())";
+                                $refund_stmt = $conn->prepare($refund_query);
+                                $refund_result = $refund_stmt->execute([
+                                    $booking_id,
+                                    $refund_amount,
+                                    "Booking cancelled - " . ($refund_percentage*100) . "% refund based on cancellation timing"
+                                ]);
+                                if ($refund_result) {
+                                    $refund_created = true;
+                                    error_log("Debug - Refund created successfully");
+                                } else {
+                                    error_log("Debug - Refund creation failed");
+                                }
+                            } catch (Exception $refund_error) {
+                                // Log the error but don't stop the cancellation
+                                error_log("Refund creation failed: " . $refund_error->getMessage());
+                            }
+                        } else {
+                            error_log("Debug - No booking details found");
+                        }
+                    } else {
+                        error_log("Debug - Payment not completed, no refund created");
+                    }
+                    
                     // Send notification to owner
                     $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
                     $owner_stmt = $conn->prepare($owner_query);
@@ -115,7 +189,7 @@ if ($_POST) {
                     $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
                     if ($owner) {
                         $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_cancelled', 'Booking Cancelled', ?, ?, 0, NOW())";
-                        $notif_msg = 'A booking for your product: ' . $owner['Prod_Name'] . ' has been cancelled by the renter.';
+                        $notif_msg = 'A booking for your product: ' . $owner['Prod_Name'] . ' has been cancelled by the renter. Reason: ' . $reason;
                         $notif_stmt = $conn->prepare($notif_query);
                         $notif_stmt->execute([
                             $owner['OwnerID'],
@@ -123,53 +197,26 @@ if ($_POST) {
                             $booking_id
                         ]);
                     }
-                    $message = "Booking cancelled successfully!";
+                    
+                    $conn->commit();
+                    
+                    if ($payment_status == 'Completed' && $refund_created) {
+                        $message = "Booking cancelled successfully! Refund has been processed according to our cancellation policy.";
+                    } elseif ($payment_status == 'Pending') {
+                        $message = "Booking cancelled successfully! No refund needed as payment was still pending.";
+                    } else {
+                        $message = "Booking cancelled successfully!";
+                    }
                     $message_type = "success";
-                } else {
+                    
+                } catch (Exception $e) {
+                    $conn->rollback();
                     $message = "Failed to cancel booking. Please try again.";
                     $message_type = "danger";
                 }
-            } elseif ($booking['Book_Status'] == 'Confirmed') {
-                $query = "UPDATE bookings SET Book_Status = 'Cancelled', Book_UpdatedAt = NOW(), Book_CancelReason = ? WHERE BookingID = ? AND RenterID = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $reason);
-                $stmt->bindParam(2, $booking_id);
-                $stmt->bindParam(3, $user_id);
-                
-                if ($stmt->execute()) {
-                    // Send notification to owner
-                    $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
-                    $owner_stmt = $conn->prepare($owner_query);
-                    $owner_stmt->execute([$booking_id]);
-                    $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
-                    if ($owner) {
-                        $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_cancelled', 'Booking Cancelled', ?, ?, 0, NOW())";
-                        $notif_msg = 'A booking for your product: ' . $owner['Prod_Name'] . ' has been cancelled by the renter.';
-                        $notif_stmt = $conn->prepare($notif_query);
-                        $notif_stmt->execute([
-                            $owner['OwnerID'],
-                            $notif_msg,
-                            $booking_id
-                        ]);
-                    }
-                    if ($payment_status == 'Completed' && in_array(strtolower($payment_method), ['gcash', 'maya', 'bank transfer'])) {
-                        $refund_amount = $notes['total_amount'] ?? 0;
-                        $refund_option = $_POST['refund_option'] ?? 'full';
-                        $refund_amount = ($refund_option == 'partial') ? ($refund_amount * 0.5) : $refund_amount;
-                        $query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_CreatedAt) VALUES (?, ?, 'Pending', NOW())";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bindParam(1, $booking_id);
-                        $stmt->bindParam(2, $refund_amount);
-                        $stmt->execute();
-                    }
-                    $message = "Booking cancelled successfully! " . ($payment_status == 'Completed' && in_array(strtolower($payment_method), ['gcash', 'maya', 'bank transfer']) ? "Refund processing initiated." : "");
-                    $message_type = "success";
-                } else {
-                    $message = "Failed to cancel booking.";
-                    $message_type = "danger";
-                }
             } else {
-                $message = "This booking cannot be cancelled.";
+                error_log("Debug - Booking status '" . $booking['Book_Status'] . "' not allowed for cancellation");
+                $message = "This booking cannot be cancelled. Current status: " . $booking['Book_Status'];
                 $message_type = "warning";
             }
         }
@@ -188,25 +235,24 @@ if ($_POST) {
         $booking_data = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($booking_data) {
-            // Check if payment record exists, if not create it as Pending
+            // Check if payment record exists
             $payment_check = "SELECT PaymentID, Pay_Status FROM payments WHERE BookingID = ?";
             $payment_check_stmt = $conn->prepare($payment_check);
             $payment_check_stmt->execute([$booking_id]);
             $existing_payment = $payment_check_stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$existing_payment) {
-                // Create payment record as Completed and activate booking in one step
-                $notes = json_decode($booking_data['Book_Notes'], true);
-                $payment_method = $notes['payment_method'] ?? 'Cash';
+            $notes = json_decode($booking_data['Book_Notes'], true);
+            $payment_method = $notes['payment_method'] ?? 'Cash';
 
-                // Generate unique transaction ID
+            if (!$existing_payment) {
+                // Create payment record as PENDING first
                 $user_id = $_SESSION['user_id'];
                 $now = date('YmdHis');
                 $random = mt_rand(1000, 9999);
                 $pay_transaction_id = "TXN{$now}-USER{$user_id}-{$random}";
 
-                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt, Pay_ProcessedAt) 
-                                  VALUES (?, ?, 'Rental Payment', ?, 'Completed', ?, NOW(), NOW())";
+                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt) 
+                                  VALUES (?, ?, 'Rental Payment', ?, 'Pending', ?, NOW())";
                 $create_payment_stmt = $conn->prepare($create_payment);
                 $create_payment_stmt->execute([
                     $booking_id,
@@ -215,20 +261,14 @@ if ($_POST) {
                     $pay_transaction_id
                 ]);
 
-                // Update booking status to Active (rental is now active)
-                $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
-                                 WHERE BookingID = ? AND RenterID = ?";
-                $booking_stmt = $conn->prepare($booking_query);
-                $booking_stmt->execute([$booking_id, $user_id]);
-
-                // Notify owner about payment confirmation
+                // Notify owner about payment initiation
                 $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
                 $owner_stmt = $conn->prepare($owner_query);
                 $owner_stmt->execute([$booking_id]);
                 $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
                 if ($owner) {
-                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'payment_confirmed', 'Payment Confirmed', ?, ?, 0, NOW())";
-                    $notif_msg = 'A renter has confirmed payment for your product: ' . $owner['Prod_Name'] . '.';
+                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'payment_pending', 'Payment Pending', ?, ?, 0, NOW())";
+                    $notif_msg = 'A renter has initiated payment for your product: ' . $owner['Prod_Name'] . '. Payment is now pending verification.';
                     $notif_stmt = $conn->prepare($notif_query);
                     $notif_stmt->execute([
                         $owner['OwnerID'],
@@ -237,30 +277,55 @@ if ($_POST) {
                     ]);
                 }
 
-                $message = "Payment confirmed successfully! Your rental is now active.";
-                $message_type = "success";
-            } elseif ($existing_payment['Pay_Status'] === 'Pending') {
-                // If payment is already pending, mark as completed now
-                $payment_query = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
-                                 WHERE BookingID = ? AND Pay_Status = 'Pending'";
-                $payment_stmt = $conn->prepare($payment_query);
-                $payment_stmt->execute([$booking_id]);
-
-                // Update booking status to Active (rental is now active)
-                $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
-                                 WHERE BookingID = ? AND RenterID = ?";
-                $booking_stmt = $conn->prepare($booking_query);
-                $booking_stmt->execute([$booking_id, $user_id]);
-
-                $message = "Payment confirmed successfully! Your rental is now active.";
-                $message_type = "success";
-            } else {
-                $message = "Payment already completed for this booking.";
+                $message = "Payment initiated successfully! Your payment is now pending. Please wait for verification.";
                 $message_type = "info";
+            } else {
+                $message = "Payment already exists for this booking.";
+                $message_type = "warning";
             }
         } else {
             $message = "Cannot process payment. Booking must be approved by owner first.";
             $message_type = "warning";
+        }
+    }
+
+    // Add new action for completing pending payments
+    if (isset($_POST['complete_payment'])) {
+        $booking_id = $_POST['booking_id'];
+        
+        // Update payment status to completed
+        $payment_query = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
+                         WHERE BookingID = ? AND Pay_Status = 'Pending'";
+        $payment_stmt = $conn->prepare($payment_query);
+        
+        if ($payment_stmt->execute([$booking_id])) {
+            // Update booking status to Active
+            $booking_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
+                             WHERE BookingID = ? AND RenterID = ?";
+            $booking_stmt = $conn->prepare($booking_query);
+            $booking_stmt->execute([$booking_id, $user_id]);
+            
+            // Notify owner about payment completion
+            $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+            $owner_stmt = $conn->prepare($owner_query);
+            $owner_stmt->execute([$booking_id]);
+            $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($owner) {
+                $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'payment_completed', 'Payment Completed', ?, ?, 0, NOW())";
+                $notif_msg = 'Payment has been completed for your product: ' . $owner['Prod_Name'] . '. The rental is now active.';
+                $notif_stmt = $conn->prepare($notif_query);
+                $notif_stmt->execute([
+                    $owner['OwnerID'],
+                    $notif_msg,
+                    $booking_id
+                ]);
+            }
+            
+            $message = "Payment completed successfully! Your rental is now active.";
+            $message_type = "success";
+        } else {
+            $message = "Failed to complete payment. Please try again.";
+            $message_type = "danger";
         }
     }
 }
@@ -915,7 +980,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 <?php $booking_notes = formatBookingNotes($booking['Book_Notes']); ?>
                 <div class="booking-card card" data-payment-method="<?php echo htmlspecialchars($booking_notes['payment_method']); ?>">
                     <div class="booking-status">
-                        <?php if($booking['Book_Status'] !== 'Completed' && $booking['PaymentID']): ?>
+                        <?php if($booking['Book_Status'] !== 'Completed' && $booking['Book_Status'] !== 'Cancelled' && $booking['PaymentID']): ?>
                         <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
                             Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
                         </span>
@@ -1033,25 +1098,55 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         </div>
                                     <?php endif; ?>
                                     
-                                    <?php if($booking['Book_Status'] == 'Confirmed' || $booking['Book_Status'] == 'Active'): ?>
-                                        <!-- Cancel Booking Button (for confirmed/active bookings) -->
+                                    <?php if($booking['Book_Status'] == 'Confirmed'): ?>
+                                        <!-- Cancel Booking Button (for confirmed bookings) -->
                                         <button type="button" class="btn action-btn cancel btn-sm" 
                                                 data-bs-toggle="modal" data-bs-target="#cancelModal-<?php echo $booking['BookingID']; ?>">
                                             <i class="fas fa-times me-1"></i>Cancel
                                         </button>
-                                        <!-- Payment options for confirmed/active bookings -->
-                                        <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
-                                            <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
-                                                <i class="fas fa-credit-card me-1"></i>Confirm Payment
+                                        
+                                        <!-- Payment options based on payment status -->
+                                        <?php if(!$booking['PaymentID']): ?>
+                                            <!-- No payment record yet - show initiate payment -->
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
+                                                <i class="fas fa-credit-card me-1"></i>Initiate Payment
                                             </button>
+                                            <div class="text-info small mt-2">
+                                                <i class="fas fa-info-circle me-1"></i>Click to start payment process
+                                            </div>
+                                        <?php elseif($booking['Pay_Status'] == 'Pending'): ?>
+                                            <!-- Payment is pending - show complete payment -->
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
+                                                <button type="submit" name="complete_payment" class="btn btn-success btn-sm">
+                                                    <i class="fas fa-check me-1"></i>Complete Payment
+                                                </button>
+                                            </form>
                                             <div class="text-warning small mt-2">
-                                                <i class="fas fa-exclamation-triangle me-1"></i>Please make payment to activate rental
+                                                <i class="fas fa-clock me-1"></i>Payment pending - click to complete
                                             </div>
                                         <?php elseif($booking['Pay_Status'] == 'Completed'): ?>
                                             <div class="text-success small">
-                                                <i class="fas fa-check-circle me-1"></i>Payment Confirmed
+                                                <i class="fas fa-check-circle me-1"></i>Payment Completed - Rental Active
                                             </div>
                                         <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <?php if($booking['Book_Status'] == 'Cancelled'): ?>
+                                        <div class="text-muted small">
+                                            <i class="fas fa-times-circle me-1"></i>Booking has been cancelled
+                                        </div>
+                                    <?php endif; ?>
+                                    
+                                    <?php if($booking['Book_Status'] == 'Active'): ?>
+                                        <!-- Cancel Booking Button (for active bookings) -->
+                                        <button type="button" class="btn action-btn cancel btn-sm" 
+                                                data-bs-toggle="modal" data-bs-target="#cancelModal-<?php echo $booking['BookingID']; ?>">
+                                            <i class="fas fa-times me-1"></i>Cancel
+                                        </button>
+                                        <div class="text-success small mt-2">
+                                            <i class="fas fa-check-circle me-1"></i>Rental is Active
+                                        </div>
                                     <?php endif; ?>
                                     
                                     <?php if($booking['Owner_Phone'] && $booking['Owner_Status'] == 'Active'): ?>
@@ -1084,7 +1179,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
                 <!-- Cancellation Modal for each booking -->
                 <div class="modal fade" id="cancelModal-<?php echo $booking['BookingID']; ?>" tabindex="-1" aria-labelledby="cancelModalLabel-<?php echo $booking['BookingID']; ?>" aria-hidden="true">
-                    <div class="modal-dialog">
+                    <div class="modal-dialog modal-lg">
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title" id="cancelModalLabel-<?php echo $booking['BookingID']; ?>">Cancel Booking</h5>
@@ -1093,24 +1188,95 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                             <form method="POST">
                                 <div class="modal-body">
                                     <input type="hidden" name="booking_id" value="<?php echo $booking['BookingID']; ?>">
-                                    <div class="mb-3">
-                                        <label for="cancel_reason_<?php echo $booking['BookingID']; ?>" class="form-label">Reason for Cancellation</label>
-                                        <textarea class="form-control" id="cancel_reason_<?php echo $booking['BookingID']; ?>" name="cancel_reason" rows="3" required></textarea>
+                                    
+                                    <!-- Booking Information -->
+                                    <div class="alert alert-info">
+                                        <h6><i class="fas fa-info-circle"></i> Booking Details</h6>
+                                        <strong>Product:</strong> <?php echo htmlspecialchars($booking['Prod_Name']); ?><br>
+                                        <strong>Amount:</strong> ₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?><br>
+                                        <strong>Start Date:</strong> <?php echo date('M j, Y', strtotime($booking['Book_StartDate'])); ?><br>
+                                        <strong>Status:</strong> <?php echo $booking['Book_Status']; ?>
+                                        <?php if ($booking['Pay_Status'] == 'Completed'): ?>
+                                            <br><strong>Payment:</strong> <span class="text-success">Paid</span>
+                                        <?php elseif ($booking['Pay_Status'] == 'Pending'): ?>
+                                            <br><strong>Payment:</strong> <span class="text-warning">Pending</span>
+                                        <?php else: ?>
+                                            <br><strong>Payment:</strong> <span class="text-muted">Not yet initiated</span>
+                                        <?php endif; ?>
                                     </div>
-                                    <?php if ($booking['Book_Status'] == 'Confirmed' && $booking['Pay_Status'] == 'Completed' && in_array(strtolower($booking_notes['payment_method']), ['gcash', 'maya', 'bank transfer'])): ?>
-                                        <div class="mb-3">
-                                            <label class="form-label">Refund Option</label>
-                                            <select class="form-select" name="refund_option" required>
-                                                <option value="full">Full Refund</option>
-                                                <option value="partial">Partial Refund (50%)</option>
-                                                <option value="none">No Refund</option>
-                                            </select>
+                                    
+                                    <!-- No Refund Notice for Pending/No Payment -->
+                                    <?php if ($booking['Pay_Status'] != 'Completed'): ?>
+                                        <div class="alert alert-info">
+                                            <h6><i class="fas fa-info-circle"></i> Cancellation Notice</h6>
+                                            <p class="mb-0">
+                                                <?php if ($booking['Pay_Status'] == 'Pending'): ?>
+                                                    <strong>No refund needed</strong> - Your payment is still pending and will not be processed.
+                                                <?php else: ?>
+                                                    <strong>No refund needed</strong> - No payment has been made for this booking.
+                                                <?php endif; ?>
+                                            </p>
                                         </div>
                                     <?php endif; ?>
+                                    
+                                    <!-- Refund Policy - Only for Completed Payments -->
+                                    <?php if ($booking['Pay_Status'] == 'Completed'): ?>
+                                        <div class="alert alert-warning">
+                                            <h6><i class="fas fa-exclamation-triangle"></i> Refund Policy</h6>
+                                            <p class="mb-2">Refund amount depends on when you cancel:</p>
+                                            <ul class="mb-0">
+                                                <li><strong>7+ days before start:</strong> 100% refund (₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?>)</li>
+                                                <li><strong>3-6 days before:</strong> 75% refund (₱<?php echo number_format($booking['Book_TotalAmount'] * 0.75, 2); ?>)</li>
+                                                <li><strong>1-2 days before:</strong> 50% refund (₱<?php echo number_format($booking['Book_TotalAmount'] * 0.50, 2); ?>)</li>
+                                                <li><strong>Same day/after start:</strong> 25% refund (₱<?php echo number_format($booking['Book_TotalAmount'] * 0.25, 2); ?>)</li>
+                                            </ul>
+                                            <div class="mt-2">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-clock"></i> 
+                                                    <?php 
+                                                    $start_date = new DateTime($booking['Book_StartDate']);
+                                                    $now = new DateTime();
+                                                    $days_until = $now->diff($start_date)->days;
+                                                    if ($start_date > $now) {
+                                                        echo "Time until booking: {$days_until} day(s)";
+                                                    } else {
+                                                        echo "Booking has started";
+                                                    }
+                                                    ?>
+                                                </small>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Cancellation Reason -->
+                                    <div class="mb-3">
+                                        <label for="cancel_reason_<?php echo $booking['BookingID']; ?>" class="form-label">
+                                            <i class="fas fa-comment"></i> Reason for Cancellation <span class="text-danger">*</span>
+                                        </label>
+                                        <textarea class="form-control" 
+                                                  id="cancel_reason_<?php echo $booking['BookingID']; ?>" 
+                                                  name="cancel_reason" 
+                                                  rows="3" 
+                                                  placeholder="Please provide a detailed reason for cancelling this booking..."
+                                                  required></textarea>
+                                        <small class="text-muted">This information will be shared with the owner.</small>
+                                    </div>
+                                    
+                                    <!-- Confirmation -->
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="confirmCancel_<?php echo $booking['BookingID']; ?>" required>
+                                        <label class="form-check-label" for="confirmCancel_<?php echo $booking['BookingID']; ?>">
+                                            I understand the cancellation policy and want to proceed with cancelling this booking.
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                    <button type="submit" name="cancel_booking" class="btn btn-danger">Confirm Cancellation</button>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        <i class="fas fa-times"></i> Keep Booking
+                                    </button>
+                                    <button type="submit" name="cancel_booking" class="btn btn-danger">
+                                        <i class="fas fa-trash"></i> Confirm Cancellation
+                                    </button>
                                 </div>
                             </form>
                         </div>
