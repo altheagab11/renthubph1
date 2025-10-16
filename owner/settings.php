@@ -210,6 +210,7 @@ try {
     <title>Settings - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -405,6 +406,16 @@ try {
             box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
         }
         
+        .tab-content {
+            display: none;
+            min-height: 400px;
+            width: 100%;
+        }
+        
+        #notificationsContent {
+            display: block;
+        }
+        
         .navbar {
             border-bottom: 1px solid #e9ecef;
             background: rgba(255,255,255,0.95) !important;
@@ -577,21 +588,6 @@ try {
                     <div class="nav-item dropdown me-3">
                         <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-bell"></i>
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
-                                2
-                            </span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-calendar-check text-success me-2"></i>New booking request</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="fas fa-star text-warning me-2"></i>New review received</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
-                        </ul>
-                    </div>
-                    <div class="nav-item dropdown me-3">
-                        <a class="nav-link dropdown-toggle position-relative" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-bell"></i>
                             <span id="notifCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">
                                 <?php echo $notif_count; ?>
                             </span>
@@ -615,6 +611,21 @@ try {
                             <li><a class="dropdown-item text-center" href="notifications.php">View all notifications</a></li>
                         </ul>
                     </div>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="../logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
         <!-- Content -->
         <div class="container-fluid p-4">
             <?php if($message): ?>
@@ -1130,6 +1141,7 @@ try {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
     <script>
         // Sidebar toggle for mobile
         document.getElementById('sidebarToggle')?.addEventListener('click', function() {
@@ -1159,38 +1171,89 @@ try {
 
         // Reset functions
         function resetNotifications() {
-            if (confirm('Reset all notification settings to default?')) {
-                document.getElementById('email_bookings').checked = true;
-                document.getElementById('email_messages').checked = true;
-                document.getElementById('email_reviews').checked = true;
-                document.getElementById('email_marketing').checked = false;
-                document.getElementById('sms_bookings').checked = true;
-                document.getElementById('sms_urgent').checked = true;
-                updateSettingItems();
-            }
+            Swal.fire({
+                title: 'Reset Notification Settings?',
+                text: 'This will restore all notification settings to their default values.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, reset them!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('email_bookings').checked = true;
+                    document.getElementById('email_messages').checked = true;
+                    document.getElementById('email_reviews').checked = true;
+                    document.getElementById('email_marketing').checked = false;
+                    document.getElementById('sms_bookings').checked = true;
+                    document.getElementById('sms_urgent').checked = true;
+                    updateSettingItems();
+                    
+                    Swal.fire(
+                        'Reset Complete!',
+                        'Notification settings have been restored to defaults.',
+                        'success'
+                    );
+                }
+            });
         }
 
         function resetBusiness() {
-            if (confirm('Reset all business settings to default?')) {
-                document.getElementById('auto_accept').checked = false;
-                document.getElementById('instant_booking').checked = false;
-                document.getElementById('require_approval').checked = true;
-                document.getElementById('min_advance_booking').value = 1;
-                document.getElementById('max_advance_booking').value = 30;
-                document.getElementById('default_rental_duration').value = 1;
-                updateSettingItems();
-            }
+            Swal.fire({
+                title: 'Reset Business Settings?',
+                text: 'This will restore all business settings to their default values.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, reset them!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('auto_accept').checked = false;
+                    document.getElementById('instant_booking').checked = false;
+                    document.getElementById('require_approval').checked = true;
+                    document.getElementById('min_advance_booking').value = 1;
+                    document.getElementById('max_advance_booking').value = 30;
+                    document.getElementById('default_rental_duration').value = 1;
+                    updateSettingItems();
+                    
+                    Swal.fire(
+                        'Reset Complete!',
+                        'Business settings have been restored to defaults.',
+                        'success'
+                    );
+                }
+            });
         }
 
         function resetPrivacy() {
-            if (confirm('Reset all privacy settings to default?')) {
-                document.getElementById('profile_visibility').value = 'public';
-                document.getElementById('show_contact').checked = true;
-                document.getElementById('show_location').checked = true;
-                document.getElementById('allow_reviews').checked = true;
-                document.getElementById('data_sharing').checked = false;
-                updateSettingItems();
-            }
+            Swal.fire({
+                title: 'Reset Privacy Settings?',
+                text: 'This will restore all privacy settings to their default values.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, reset them!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('profile_visibility').value = 'public';
+                    document.getElementById('show_contact').checked = true;
+                    document.getElementById('show_location').checked = true;
+                    document.getElementById('allow_reviews').checked = true;
+                    document.getElementById('data_sharing').checked = false;
+                    updateSettingItems();
+                    
+                    Swal.fire(
+                        'Reset Complete!',
+                        'Privacy settings have been restored to defaults.',
+                        'success'
+                    );
+                }
+            });
         }
 
         // Update setting item visual states

@@ -47,8 +47,88 @@ if ($_POST) {
             $existing = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($existing) {
-                $message = "You already have an active subscription! Cancel your current subscription first.";
-                $message_type = "warning";
+                // Get the new plan details to compare
+                $query = "SELECT * FROM subscription_plans WHERE PlanID = ? AND Plan_IsActive = 1";
+                $stmt = $conn->prepare($query);
+                $stmt->bindParam(1, $plan_id);
+                $stmt->execute();
+                $new_plan = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($new_plan && $existing['PlanID'] == $plan_id) {
+                    // Same plan selected
+                    $message = "You are already subscribed to this plan.";
+                    $message_type = "info";
+                } else if ($new_plan) {
+                    // Different plan selected - allow plan change/upgrade
+                    // Cancel current subscription and create new one
+                    $conn->beginTransaction();
+                    
+                    // Cancel current subscription
+                    $query = "UPDATE user_subscriptions SET Sub_Status = 'Cancelled', Sub_UpdatedAt = NOW() WHERE SubscriptionID = ? AND UserID = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->execute([$existing['SubscriptionID'], $user_id]);
+                    
+                    // Cancel pending payments for old subscription
+                    $query = "UPDATE subscription_payments SET SubPay_Status = 'Cancelled' WHERE SubscriptionID = ? AND SubPay_Status = 'Pending'";
+                    $stmt = $conn->prepare($query);
+                    $stmt->execute([$existing['SubscriptionID']]);
+                    
+                    // Create new subscription
+                    $sub_start_date = date('Y-m-d');
+                    $sub_end_date = date('Y-m-d', strtotime('+' . $new_plan['Plan_Duration'] . ' days'));
+                    $sub_status = 'Pending';
+                    $sub_auto_renew = isset($_POST['auto_renew']) ? 1 : 0;
+                    $sub_payment_method = 'Pending';
+
+                    $query = "INSERT INTO user_subscriptions (UserID, PlanID, Sub_StartDate, Sub_EndDate, Sub_Status, Sub_AutoRenew, Sub_PaymentMethod, Sub_CreatedAt, Sub_UpdatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindParam(1, $user_id);
+                    $stmt->bindParam(2, $plan_id);
+                    $stmt->bindParam(3, $sub_start_date);
+                    $stmt->bindParam(4, $sub_end_date);
+                    $stmt->bindParam(5, $sub_status);
+                    $stmt->bindParam(6, $sub_auto_renew);
+                    $stmt->bindParam(7, $sub_payment_method);
+                    
+                    if ($stmt->execute()) {
+                        $subscription_id = $conn->lastInsertId();
+                        
+                        // Create payment record
+                        $payment_amount = $new_plan['Plan_Price'];
+                        $payment_method = 'Credit Card';
+                        $payment_status = 'Pending';
+                        $payment_transaction_id = 'TXN-' . $subscription_id . '-' . time();
+                        $payment_due_date = date('Y-m-d', strtotime('+7 days'));
+                        $payment_type = 'Subscription';
+
+                        $query = "INSERT INTO subscription_payments (SubscriptionID, SubPay_Amount, SubPay_PaymentMethod, SubPay_Status, SubPay_TransactionID, SubPay_ProcessedAt, SubPay_CreatedAt, SubPay_DueDate, SubPay_Type) VALUES (?, ?, ?, ?, ?, NULL, NOW(), ?, ?)";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(1, $subscription_id);
+                        $stmt->bindParam(2, $payment_amount);
+                        $stmt->bindParam(3, $payment_method);
+                        $stmt->bindParam(4, $payment_status);
+                        $stmt->bindParam(5, $payment_transaction_id);
+                        $stmt->bindParam(6, $payment_due_date);
+                        $stmt->bindParam(7, $payment_type);
+                        
+                        if ($stmt->execute()) {
+                            $conn->commit();
+                            $message = "Plan changed successfully! Please complete your payment of ₱" . number_format($payment_amount, 0) . " to activate your " . htmlspecialchars($new_plan['Plan_Name']) . " plan.";
+                            $message_type = "success";
+                        } else {
+                            $conn->rollback();
+                            $message = "Plan change failed during payment setup. Please try again.";
+                            $message_type = "danger";
+                        }
+                    } else {
+                        $conn->rollback();
+                        $message = "Failed to change plan. Please try again.";
+                        $message_type = "danger";
+                    }
+                } else {
+                    $message = "Selected plan is not available.";
+                    $message_type = "danger";
+                }
             } else {
                 // Get plan details
                 $query = "SELECT * FROM subscription_plans WHERE PlanID = ? AND Plan_IsActive = 1";
@@ -159,19 +239,30 @@ if ($_POST) {
         $subscription_id = $_POST['subscription_id'];
         
         try {
+            // Start transaction
+            $conn->beginTransaction();
+            
+            // Cancel the subscription
             $query = "UPDATE user_subscriptions SET Sub_Status = 'Cancelled', Sub_UpdatedAt = NOW() WHERE SubscriptionID = ? AND UserID = ?";
             $stmt = $conn->prepare($query);
             $stmt->bindParam(1, $subscription_id);
             $stmt->bindParam(2, $user_id);
+            $stmt->execute();
             
-            if ($stmt->execute()) {
-                $message = "Subscription cancelled successfully!";
-                $message_type = "success";
-            } else {
-                $message = "Failed to cancel subscription.";
-                $message_type = "danger";
-            }
+            // Cancel any pending payments for this subscription
+            $query = "UPDATE subscription_payments SET SubPay_Status = 'Cancelled' WHERE SubscriptionID = ? AND SubPay_Status = 'Pending'";
+            $stmt = $conn->prepare($query);
+            $stmt->bindParam(1, $subscription_id);
+            $stmt->execute();
+            
+            // Commit transaction
+            $conn->commit();
+            
+            $message = "Subscription cancelled successfully!";
+            $message_type = "success";
         } catch (PDOException $e) {
+            // Rollback transaction on error
+            $conn->rollback();
             $message = "Error cancelling subscription: " . $e->getMessage();
             $message_type = "danger";
         }
@@ -261,13 +352,13 @@ if ($user_subscriptions_table_exists && $subscription_plans_table_exists) {
 }
 
 if ($subscription_payments_table_exists && $user_subscriptions_table_exists) {
-    // Get pending payments
+    // Get pending payments (only from active or pending subscriptions)
     try {
         $query = "SELECT spt.*, us.*, sp.Plan_Name 
                   FROM subscription_payments spt
                   JOIN user_subscriptions us ON spt.SubscriptionID = us.SubscriptionID
                   JOIN subscription_plans sp ON us.PlanID = sp.PlanID
-                  WHERE us.UserID = ? AND spt.SubPay_Status = 'Pending'
+                  WHERE us.UserID = ? AND spt.SubPay_Status = 'Pending' AND us.Sub_Status IN ('Active', 'Pending')
                   ORDER BY spt.SubPay_CreatedAt DESC";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(1, $user_id);
@@ -394,6 +485,7 @@ function getPlanType($plan_name) {
     <title>My Subscription - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -729,6 +821,34 @@ function getPlanType($plan_name) {
                 text-align: center;
             }
         }
+
+        /* Payment Modal Styles */
+        .qr-code-container {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px dashed #dee2e6;
+        }
+
+        .qr-code-container img {
+            max-width: 200px;
+            height: auto;
+        }
+
+        #paymentCompletionModal .modal-content {
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        #paymentCompletionModal .modal-header {
+            background: var(--primary-gradient);
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+
+        #paymentCompletionModal .btn-close {
+            filter: brightness(0) invert(1);
+        }
     </style>
 </head>
 <body>
@@ -853,6 +973,8 @@ function getPlanType($plan_name) {
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                            <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="../logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                         </ul>
                     </div>
@@ -1021,21 +1143,20 @@ function getPlanType($plan_name) {
                                 <small class="text-muted">Amount Due</small>
                             </div>
                             <div class="col-md-3">
-                                <form method="POST" class="d-grid">
-                                    <input type="hidden" name="payment_id" value="<?php echo $payment['SubPaymentID']; ?>">
+                                <div class="d-grid">
                                     <div class="mb-2">
-                                        <select name="payment_method" class="form-select form-select-sm" required>
+                                        <select id="payment_method_<?php echo $payment['SubPaymentID']; ?>" class="form-select form-select-sm" required>
                                             <option value="">Select Payment Method</option>
                                             <option value="Credit Card">Credit Card</option>
                                             <option value="GCash">GCash</option>
-                                            <option value="PayMaya">PayMaya</option>
+                                            <option value="Maya">Maya</option>
                                             <option value="Bank Transfer">Bank Transfer</option>
                                         </select>
                                     </div>
-                                    <button type="submit" name="complete_payment" class="btn btn-pay-now">
+                                    <button type="button" class="btn btn-pay-now" onclick="showPaymentModal(<?php echo $payment['SubPaymentID']; ?>)">
                                         <i class="fas fa-credit-card me-2"></i>Pay Now
                                     </button>
-                                </form>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1112,8 +1233,8 @@ function getPlanType($plan_name) {
                                 
                                 <form method="POST" style="display: inline;">
                                     <input type="hidden" name="subscription_id" value="<?php echo $current_subscription['SubscriptionID']; ?>">
-                                    <button type="submit" name="cancel_subscription" class="btn btn-cancel w-100"
-                                            onclick="return confirm('Are you sure you want to cancel your subscription?')">
+                                    <button type="button" name="cancel_subscription" class="btn btn-cancel w-100"
+                                            onclick="confirmCancelSubscription(<?php echo $current_subscription['SubscriptionID']; ?>)">
                                         <i class="fas fa-times me-2"></i>Cancel Subscription
                                     </button>
                                 </form>
@@ -1189,14 +1310,15 @@ function getPlanType($plan_name) {
                                 <?php else: ?>
                                     <form method="POST" style="display: inline;">
                                         <input type="hidden" name="plan_id" value="<?php echo $plan['PlanID']; ?>">
+                                        <input type="hidden" name="select_plan" value="1">
                                         <div class="form-check mb-2 text-start">
                                             <input class="form-check-input" type="checkbox" name="auto_renew" id="autoRenew_<?php echo $plan['PlanID']; ?>" value="1">
                                             <label class="form-check-label" for="autoRenew_<?php echo $plan['PlanID']; ?>">
                                                 Enable Auto-Renew for this subscription
                                             </label>
                                         </div>
-                                        <button type="submit" name="select_plan" class="btn btn-select-plan w-100"
-                                                onclick="return confirm('Subscribe to <?php echo htmlspecialchars($plan['Plan_Name']); ?> for ₱<?php echo number_format($plan['Plan_Price'], 0); ?>? You will need to complete payment to activate.')">
+                                        <button type="button" class="btn btn-select-plan w-100"
+                                                onclick="confirmSelectPlan('<?php echo htmlspecialchars($plan['Plan_Name']); ?>', <?php echo number_format($plan['Plan_Price'], 0); ?>, <?php echo $plan['PlanID']; ?>, this)">
                                             <i class="fas fa-crown me-2"></i>
                                             <?php echo $current_subscription ? 'Upgrade to This Plan' : 'Select This Plan'; ?>
                                         </button>
@@ -1291,8 +1413,114 @@ function getPlanType($plan_name) {
         </div>
     </div>
 
+    <!-- Payment Completion Modal -->
+    <div class="modal fade" id="paymentCompletionModal" tabindex="-1" aria-labelledby="paymentCompletionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paymentCompletionModalLabel">Complete Payment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="paymentCompletionForm" method="POST">
+                    <div class="modal-body">
+                        <div id="gcash-payment" style="display: none;">
+                            <div class="qr-code-container text-center mb-3">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PAYMENT-1234567890&color=0A4FA3&bgcolor=FFFFFF" alt="GCash QR Code" class="img-fluid" />
+                            </div>
+                            <p class="text-center">Scan this QR code using the GCash app to complete your payment.</p>
+                        </div>
+                        <div id="maya-payment" style="display: none;">
+                            <div class="qr-code-container text-center mb-3">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PAYMENT-1234567890&color=0A4FA3&bgcolor=FFFFFF" alt="Maya QR Code" class="img-fluid" />
+                            </div>
+                            <p class="text-center">Scan this QR code using the Maya app to complete your payment.</p>
+                        </div>
+                        <div id="card-payment" style="display: none;">
+                            <div class="mb-3">
+                                <label for="cardholder_name" class="form-label">Cardholder Name</label>
+                                <input type="text" class="form-control" id="cardholder_name" name="cardholder_name" placeholder="Your name as it appears on the card" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="card_number" class="form-label">Card Number</label>
+                                <input type="text" class="form-control" id="card_number" name="card_number" placeholder="1234 5678 9012 3456" required pattern="\d{4} \d{4} \d{4} \d{4}" maxlength="19">
+                            </div>
+                            <div class="mb-3">
+                                <label for="expiry_date" class="form-label">Expiration Date</label>
+                                <input type="text" class="form-control" id="expiry_date" name="expiry_date" placeholder="MM/YY" required pattern="(0[1-9]|1[0-2])\/\d{2}" maxlength="5">
+                            </div>
+                            <div class="mb-3">
+                                <label for="cvv" class="form-label">CVV</label>
+                                <input type="text" class="form-control" id="cvv" name="cvv" placeholder="123" required pattern="\d{3,4}" maxlength="4">
+                            </div>
+                        </div>
+                        <input type="hidden" id="payment_subscription_id" name="payment_id" />
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Note:</strong> These details are for payment simulation only and will not be saved.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success" name="complete_payment">Submit Payment</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
     <script>
+        // SweetAlert Functions
+        function confirmCancelSubscription(subscriptionId) {
+            Swal.fire({
+                title: 'Cancel Subscription?',
+                text: 'Are you sure you want to cancel your subscription?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, cancel it!',
+                cancelButtonText: 'No, keep it'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Create and submit form
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = `
+                        <input type="hidden" name="subscription_id" value="${subscriptionId}">
+                        <input type="hidden" name="cancel_subscription" value="1">
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+
+        function confirmSelectPlan(planName, planPrice, planId, buttonElement) {
+            const form = buttonElement.closest('form');
+            const autoRenewCheckbox = form.querySelector('input[name="auto_renew"]');
+            const autoRenewText = autoRenewCheckbox && autoRenewCheckbox.checked ? ' with auto-renew enabled' : '';
+            
+            Swal.fire({
+                title: 'Subscribe to ' + planName + '?',
+                html: `
+                    <p>Price: ₱${planPrice.toLocaleString()}</p>
+                    <p>You will need to complete payment to activate${autoRenewText}.</p>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Subscribe Now',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        }
+
         // Sidebar toggle for mobile
         document.getElementById('sidebarToggle')?.addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('show');
@@ -1352,6 +1580,143 @@ function getPlanType($plan_name) {
             
             card.addEventListener('mouseleave', function() {
                 this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+
+        // Format card number, expiry, and CVV inputs as user types
+        document.addEventListener('DOMContentLoaded', function() {
+            var cardNumberInput = document.getElementById('card_number');
+            if (cardNumberInput) {
+                cardNumberInput.addEventListener('input', function(e) {
+                    let value = this.value.replace(/\D/g, '');
+                    if (value.length > 16) value = value.slice(0, 16);
+                    let formatted = value.replace(/(.{4})/g, '$1 ').trim();
+                    this.value = formatted;
+                });
+            }
+
+            var expiryInput = document.getElementById('expiry_date');
+            if (expiryInput) {
+                expiryInput.addEventListener('input', function(e) {
+                    let value = this.value.replace(/[^\d]/g, '');
+                    if (value.length > 4) value = value.slice(0, 4);
+                    if (value.length > 2) {
+                        value = value.slice(0,2) + '/' + value.slice(2);
+                    }
+                    this.value = value;
+                });
+            }
+
+            var cvvInput = document.getElementById('cvv');
+            if (cvvInput) {
+                cvvInput.addEventListener('input', function(e) {
+                    let value = this.value.replace(/\D/g, '');
+                    if (value.length > 4) value = value.slice(0, 4);
+                    this.value = value;
+                });
+            }
+        });
+
+        // Payment modal handling
+        function showPaymentModal(paymentId) {
+            // Get the selected payment method for this payment
+            const paymentMethodSelect = document.getElementById('payment_method_' + paymentId);
+            const paymentMethod = paymentMethodSelect.value;
+            
+            if (!paymentMethod) {
+                alert('Please select a payment method first.');
+                return;
+            }
+
+            // Set the payment ID in the hidden input
+            document.getElementById('payment_subscription_id').value = paymentId;
+
+            // Get modal elements
+            const gcashPayment = document.getElementById('gcash-payment');
+            const mayaPayment = document.getElementById('maya-payment');
+            const cardPayment = document.getElementById('card-payment');
+            const submitButton = document.querySelector('#paymentCompletionModal .btn-success');
+
+            // Reset visibility and input requirements
+            gcashPayment.style.display = 'none';
+            mayaPayment.style.display = 'none';
+            cardPayment.style.display = 'none';
+            document.getElementById('cardholder_name').required = false;
+            document.getElementById('card_number').required = false;
+            document.getElementById('expiry_date').required = false;
+            document.getElementById('cvv').required = false;
+
+            // Show appropriate content based on payment method
+            if (paymentMethod.toLowerCase() === 'gcash') {
+                gcashPayment.style.display = 'block';
+                submitButton.disabled = false;
+            } else if (paymentMethod.toLowerCase() === 'maya') {
+                mayaPayment.style.display = 'block';
+                submitButton.disabled = false;
+            } else {
+                cardPayment.style.display = 'block';
+                document.getElementById('cardholder_name').required = true;
+                document.getElementById('card_number').required = true;
+                document.getElementById('expiry_date').required = true;
+                document.getElementById('cvv').required = true;
+                submitButton.disabled = true;
+            }
+
+            // Initialize and show the modal
+            var modalElement = document.getElementById('paymentCompletionModal');
+            var modal = new bootstrap.Modal(modalElement, {
+                backdrop: 'static', // Prevent closing by clicking outside
+                keyboard: true // Allow closing with ESC key
+            });
+            modal.show();
+        }
+
+        // Enable/disable submit button based on input validation for card payments
+        document.getElementById('paymentCompletionForm').addEventListener('input', function() {
+            const cardPayment = document.getElementById('card-payment');
+            const submitButton = document.querySelector('#paymentCompletionModal .btn-success');
+            if (cardPayment.style.display === 'block') {
+                const cardholderName = document.getElementById('cardholder_name').value.trim();
+                const cardNumber = document.getElementById('card_number').value.trim();
+                const expiryDate = document.getElementById('expiry_date').value.trim();
+                const cvv = document.getElementById('cvv').value.trim();
+                submitButton.disabled = !(cardholderName && cardNumber && expiryDate && cvv);
+            }
+        });
+
+        // Handle payment form submission
+        document.getElementById('paymentCompletionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var paymentId = document.getElementById('payment_subscription_id').value;
+            var paymentMethodSelect = document.getElementById('payment_method_' + paymentId);
+            var form = this;
+            var formData = new FormData(form);
+            formData.append('complete_payment', '1');
+            formData.append('payment_id', paymentId);
+            formData.append('payment_method', paymentMethodSelect.value);
+
+            // Add loading state to submit button
+            var submitButton = form.querySelector('.btn-success');
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+            submitButton.disabled = true;
+
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(() => {
+                var modal = bootstrap.Modal.getInstance(document.getElementById('paymentCompletionModal'));
+                modal.hide();
+                setTimeout(function() {
+                    location.reload();
+                }, 300);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                submitButton.innerHTML = 'Submit Payment';
+                submitButton.disabled = false;
+                alert('An error occurred while processing the payment. Please try again.');
             });
         });
 

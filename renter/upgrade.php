@@ -76,6 +76,7 @@ $notif_count = $notif_stmt->fetch(PDO::FETCH_ASSOC)['count'];
     <title>Become an Owner - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -414,8 +415,8 @@ $notif_count = $notif_stmt->fetch(PDO::FETCH_ASSOC)['count'];
                         <!-- Upgrade Button -->
                         <div class="text-center pt-3 border-top">
                             <form method="POST" style="display: inline;">
-                                <button type="submit" name="upgrade_to_owner" class="upgrade-btn mb-3" 
-                                        onclick="return confirm('Are you sure you want to upgrade to become an owner? This will give you access to list and rent out products.')">
+                                <button type="button" name="upgrade_to_owner" class="upgrade-btn mb-3" 
+                                        onclick="confirmUpgradeToOwner()">
                                     <i class="fas fa-arrow-up me-2"></i>Upgrade to Owner Account
                                 </button>
                             </form>
@@ -465,5 +466,38 @@ $notif_count = $notif_stmt->fetch(PDO::FETCH_ASSOC)['count'];
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
+    <script>
+        function confirmUpgradeToOwner() {
+            Swal.fire({
+                title: 'Upgrade to Owner Account?',
+                html: `
+                    <p>This will give you access to:</p>
+                    <ul style="text-align: left; display: inline-block;">
+                        <li>List and rent out products</li>
+                        <li>Manage your product inventory</li>
+                        <li>Earn income from rentals</li>
+                        <li>Access owner dashboard and analytics</li>
+                    </ul>
+                    <p><strong>This change will take effect immediately.</strong></p>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, upgrade now!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Create and submit form
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = '<input type="hidden" name="upgrade_to_owner" value="1">';
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+    </script>
 </body>
 </html>

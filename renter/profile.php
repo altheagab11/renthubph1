@@ -314,6 +314,7 @@ function getFieldValue($user_info, $field, $default = '') {
     <title>Profile Settings - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
@@ -1120,6 +1121,7 @@ function getFieldValue($user_info, $field, $default = '') {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
     <script>
         // Sidebar toggle for mobile
         document.getElementById('sidebarToggle')?.addEventListener('click', function() {
@@ -1211,9 +1213,20 @@ function getFieldValue($user_info, $field, $default = '') {
 
         // Reset form function
         function resetForm() {
-            if (confirm('Reset all changes? This will restore the original values.')) {
-                location.reload();
-            }
+            Swal.fire({
+                title: 'Reset All Changes?',
+                text: 'This will restore all fields to their original values. Any unsaved changes will be lost.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, reset all',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    location.reload();
+                }
+            });
         }
 
         // Auto-hide alerts

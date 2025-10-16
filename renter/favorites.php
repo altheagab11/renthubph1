@@ -169,6 +169,7 @@ $stats['most_expensive'] = $most_expensive;
     <title>My Favorites - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
@@ -653,8 +654,8 @@ $stats['most_expensive'] = $most_expensive;
                             <i class="fas fa-check-square me-2"></i>Select All
                         </button>
                         <form method="POST" style="display: inline;">
-                            <button type="submit" name="clear_all_favorites" class="btn action-btn remove"
-                                    onclick="return confirm('Are you sure you want to remove all favorites?')">
+                            <button type="button" name="clear_all_favorites" class="btn action-btn remove"
+                                    onclick="confirmClearAllFavorites()">
                                 <i class="fas fa-trash me-2"></i>Clear All
                             </button>
                         </form>
@@ -813,8 +814,8 @@ $stats['most_expensive'] = $most_expensive;
                                         
                                         <form method="POST" style="display: inline;">
                                             <input type="hidden" name="product_id" value="<?php echo $favorite['ProductID']; ?>">
-                                            <button type="submit" name="remove_favorite" class="btn btn-outline-danger w-100"
-                                                    onclick="return confirm('Remove this item from favorites?')"
+                                            <button type="button" name="remove_favorite" class="btn btn-outline-danger w-100"
+                                                    onclick="confirmRemoveFavorite(<?php echo $favorite['ProductID']; ?>, '<?php echo addslashes($favorite['Prod_Name']); ?>')"
                                                     style="border-radius: 15px;">
                                                 <i class="fas fa-heart-broken me-1"></i>Remove from Favorites
                                             </button>
@@ -847,7 +848,56 @@ $stats['most_expensive'] = $most_expensive;
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
     <script>
+        // SweetAlert Functions
+        function confirmClearAllFavorites() {
+            Swal.fire({
+                title: 'Remove All Favorites?',
+                text: 'This will remove all items from your favorites list. This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, clear all!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Create and submit form
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = '<input type="hidden" name="clear_all_favorites" value="1">';
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+
+        function confirmRemoveFavorite(productId, productName) {
+            Swal.fire({
+                title: 'Remove from Favorites?',
+                html: `Remove <strong>${productName}</strong> from your favorites?`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, remove it',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Create and submit form
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = `
+                        <input type="hidden" name="product_id" value="${productId}">
+                        <input type="hidden" name="remove_favorite" value="1">
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+
         // Sidebar toggle for mobile
         document.getElementById('sidebarToggle')?.addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('show');

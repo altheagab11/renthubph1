@@ -157,6 +157,7 @@ if ($payments_table_exists) {
     <title>Payment History - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
@@ -917,6 +918,7 @@ if ($payments_table_exists) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
     <script>
         // Sidebar toggle for mobile
         document.getElementById('sidebarToggle')?.addEventListener('click', function() {
@@ -934,13 +936,23 @@ if ($payments_table_exists) {
 
         // Request refund function
         function requestRefund(paymentId) {
-            if (confirm('Are you sure you want to request a refund for this payment?')) {
-                // Get product name from the row (assumes product name is available in payment object)
-                var productName = '';
-                var btn = event.target;
-                var parent = btn.closest('.actions, .row, .card');
-                if (parent) {
-                    var prodElem = parent.querySelector('.product-name');
+            Swal.fire({
+                title: 'Request Refund?',
+                text: 'Are you sure you want to request a refund for this payment? Once submitted, this request will be reviewed by our team.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, request refund',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Get product name from the row (assumes product name is available in payment object)
+                    var productName = '';
+                    var btn = event.target;
+                    var parent = btn.closest('.actions, .row, .card');
+                    if (parent) {
+                        var prodElem = parent.querySelector('.product-name');
                     if (prodElem) productName = prodElem.textContent.trim();
                 }
                 // Fallback: try to get from PHP variable if available
@@ -953,15 +965,28 @@ if ($payments_table_exists) {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Refund request sent! The owner has been notified.');
+                        Swal.fire(
+                            'Request Sent!',
+                            'Refund request sent successfully. The owner has been notified.',
+                            'success'
+                        );
                     } else {
-                        alert('Error: ' + data.message);
+                        Swal.fire(
+                            'Error!',
+                            'Error: ' + data.message,
+                            'error'
+                        );
                     }
                 })
                 .catch(() => {
-                    alert('Failed to send refund request.');
+                    Swal.fire(
+                        'Error!',
+                        'Failed to send refund request.',
+                        'error'
+                    );
                 });
-            }
+                }
+            });
         }
 
         // View payment details

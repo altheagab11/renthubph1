@@ -207,6 +207,7 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     <title>My Products - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -445,47 +446,36 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             flex-direction: row;
             justify-content: space-between;
             align-items: stretch;
-            gap: 0.5rem;
+            gap: 0.3rem;
             width: 100%;
         }
         .product-actions-row .action-col {
-            flex: 1 1 0;
+            flex: 1;
             display: flex;
             align-items: stretch;
         }
+        .product-actions-row .action-col form {
+            width: 100%;
+            display: flex;
+            align-items: stretch;
+            margin: 0 !important;
+        }
         .product-actions-row .btn {
             width: 100%;
-            border-radius: 12px;
+            border-radius: 8px;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 40px;
-            min-height: 40px;
-            max-height: 40px;
-            padding: 0;
+            height: 36px;
+            min-height: 36px;
+            max-height: 36px;
+            padding: 0 4px;
+            font-size: 0.875rem;
         }
         .product-actions-row .btn i {
-            font-size: 1.25rem;
+            font-size: 1rem;
             margin: 0;
             line-height: 1;
-        }
-        .product-actions-row .action-col {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 48px;
-            max-width: 48px;
-            width: 48px;
-            flex: 0 0 48px;
-        }
-        .product-actions-row .btn {
-            width: 48px;
-            min-width: 48px;
-            max-width: 48px;
-            height: 40px;
-            min-height: 40px;
-            max-height: 40px;
-            padding: 0;
         }
 
         /* Image Gallery Modal */
@@ -527,6 +517,22 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             
             .search-filters {
                 padding: 1rem;
+            }
+            
+            /* Mobile button adjustments */
+            .product-actions-row {
+                gap: 0.2rem;
+            }
+            
+            .product-actions-row .btn {
+                height: 32px;
+                min-height: 32px;
+                max-height: 32px;
+                padding: 0 2px;
+            }
+            
+            .product-actions-row .btn i {
+                font-size: 0.875rem;
             }
         }
     </style>
@@ -1132,6 +1138,7 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
         <script>
         // Toggle featured/unfeatured AJAX
         document.addEventListener('click', function(e) {
@@ -1153,12 +1160,22 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     if(data.success) {
                         window.location.reload();
                     } else {
-                        alert('Failed to update featured status');
+                        Swal.fire({
+                            title: 'Error!',
+                            text: 'Failed to update featured status',
+                            icon: 'error',
+                            confirmButtonColor: '#dc3545'
+                        });
                         btn.disabled = false;
                     }
                 })
                 .catch(() => {
-                    alert('Failed to update featured status');
+                    Swal.fire({
+                        title: 'Error!',
+                        text: 'Failed to update featured status',
+                        icon: 'error',
+                        confirmButtonColor: '#dc3545'
+                    });
                     btn.disabled = false;
                 });
             }
@@ -1185,13 +1202,31 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     .then(res => res.json())
                     .then(data => {
                         if (data.success) {
-                            alert('Product updated successfully!');
-                            window.location.reload();
+                            Swal.fire({
+                                title: 'Success!',
+                                text: 'Product updated successfully!',
+                                icon: 'success',
+                                confirmButtonColor: '#28a745'
+                            }).then(() => {
+                                window.location.reload();
+                            });
                         } else {
-                            alert('Error: ' + (data.message || 'Failed to update product.'));
+                            Swal.fire({
+                                title: 'Error!',
+                                text: data.message || 'Failed to update product.',
+                                icon: 'error',
+                                confirmButtonColor: '#dc3545'
+                            });
                         }
                     })
-                    .catch(() => alert('Error: Failed to update product.'));
+                    .catch(() => {
+                        Swal.fire({
+                            title: 'Error!',
+                            text: 'Failed to update product.',
+                            icon: 'error',
+                            confirmButtonColor: '#dc3545'
+                        });
+                    });
                 });
             }
         });
@@ -1308,12 +1343,22 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         if(data.success) {
                                             wrapper.remove();
                                         } else {
-                                            alert('Failed to delete image');
+                                            Swal.fire({
+                                                title: 'Error!',
+                                                text: 'Failed to delete image',
+                                                icon: 'error',
+                                                confirmButtonColor: '#dc3545'
+                                            });
                                             delBtn.disabled = false;
                                         }
                                     })
                                     .catch(() => {
-                                        alert('Failed to delete image');
+                                        Swal.fire({
+                                            title: 'Error!',
+                                            text: 'Failed to delete image',
+                                            icon: 'error',
+                                            confirmButtonColor: '#dc3545'
+                                        });
                                         delBtn.disabled = false;
                                     });
                                 };
@@ -1427,23 +1472,49 @@ $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         document.querySelectorAll('form[method="POST"]').forEach(form => {
             if (!form.querySelector('input[name="action"][value="delete_product"]')) {
                 form.addEventListener('submit', function(e) {
+                    e.preventDefault();
                     const action = this.querySelector('input[name="action"]').value;
-                    let message = '';
+                    let title = '';
+                    let text = '';
+                    let confirmButtonText = '';
                     
                     switch(action) {
                         case 'toggle_availability':
                             const currentStatus = this.querySelector('input[name="current_status"]').value;
-                            message = currentStatus == '1' ? 
-                                'Are you sure you want to make this product unavailable?' : 
-                                'Are you sure you want to make this product available?';
+                            if (currentStatus == '1') {
+                                title = 'Make Product Unavailable?';
+                                text = 'This product will no longer be available for rent.';
+                                confirmButtonText = 'Yes, make unavailable';
+                            } else {
+                                title = 'Make Product Available?';
+                                text = 'This product will be available for rent again.';
+                                confirmButtonText = 'Yes, make available';
+                            }
                             break;
                         case 'feature_product':
-                            message = 'Are you sure you want to feature this product for 30 days?';
+                            title = 'Feature Product?';
+                            text = 'This product will be featured for 30 days and appear at the top of search results.';
+                            confirmButtonText = 'Yes, feature it';
                             break;
                     }
                     
-                    if (message && !confirm(message)) {
-                        e.preventDefault();
+                    if (title) {
+                        Swal.fire({
+                            title: title,
+                            text: text,
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonColor: '#28a745',
+                            cancelButtonColor: '#6c757d',
+                            confirmButtonText: confirmButtonText,
+                            cancelButtonText: 'Cancel'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                this.submit();
+                            }
+                        });
+                    } else {
+                        this.submit();
                     }
                 });
             }

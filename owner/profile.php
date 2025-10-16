@@ -696,9 +696,6 @@ $stats['member_since'] = date('F Y', strtotime($user_profile['User_CreatedAt']))
                 <button class="tab-btn" onclick="showTab('address')" id="addressTab">
                     <i class="fas fa-map-marker-alt me-2"></i>Address
                 </button>
-                <button class="tab-btn" onclick="showTab('preferences')" id="preferencesTab">
-                    <i class="fas fa-cog me-2"></i>Preferences
-                </button>
             </div>
 
             <!-- Profile Information Tab -->
@@ -919,77 +916,6 @@ $stats['member_since'] = date('F Y', strtotime($user_profile['User_CreatedAt']))
                         this.style.display = 'none';
                     });
                     </script>
-                </div>
-            </div>
-
-            <!-- Preferences Tab -->
-            <div id="preferencesContent" class="tab-content" style="display: none;">
-                <div class="form-section">
-                    <h5><i class="fas fa-cog me-2"></i>Notification Preferences</h5>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6 class="mb-3">Email Notifications</h6>
-                            <div class="d-flex justify-content-between align-items-center p-3 mb-2" style="background: #f8f9fa; border-radius: 15px;">
-                                <div>
-                                    <div class="fw-bold">New Bookings</div>
-                                    <small class="text-muted">Get notified of new booking requests</small>
-                                </div>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" checked>
-                                </div>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between align-items-center p-3 mb-2" style="background: #f8f9fa; border-radius: 15px;">
-                                <div>
-                                    <div class="fw-bold">Messages</div>
-                                    <small class="text-muted">Get notified of new messages</small>
-                                </div>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" checked>
-                                </div>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between align-items-center p-3 mb-2" style="background: #f8f9fa; border-radius: 15px;">
-                                <div>
-                                    <div class="fw-bold">Reviews</div>
-                                    <small class="text-muted">Get notified of new reviews</small>
-                                </div>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" checked>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <h6 class="mb-3">Privacy Settings</h6>
-                            <div class="d-flex justify-content-between align-items-center p-3 mb-2" style="background: #f8f9fa; border-radius: 15px;">
-                                <div>
-                                    <div class="fw-bold">Public Profile</div>
-                                    <small class="text-muted">Show your profile to other users</small>
-                                </div>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" checked>
-                                </div>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between align-items-center p-3 mb-2" style="background: #f8f9fa; border-radius: 15px;">
-                                <div>
-                                    <div class="fw-bold">Contact Information</div>
-                                    <small class="text-muted">Allow users to see your contact info</small>
-                                </div>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" checked>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="d-flex justify-content-end mt-3">
-                        <button type="button" class="btn btn-update">
-                            <i class="fas fa-save me-2"></i>Save Preferences
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
