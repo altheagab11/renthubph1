@@ -56,6 +56,38 @@ if ($_POST) {
                     break;
             }
             
+            // Check subscription status for accept action
+            if ($action === 'accept') {
+                $sub_check_query = "SELECT us.Sub_Status, us.Sub_EndDate, sp.Plan_Name 
+                                    FROM user_subscriptions us 
+                                    LEFT JOIN subscription_plans sp ON us.PlanID = sp.PlanID 
+                                    WHERE us.UserID = ? AND us.Sub_Status = 'Active' AND us.Sub_EndDate >= NOW()";
+                $sub_check_stmt = $conn->prepare($sub_check_query);
+                $sub_check_stmt->execute([$user_id]);
+                $active_subscription = $sub_check_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$active_subscription) {
+                    echo "<script>
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Subscription Required',
+                            text: 'You need an active subscription to accept bookings. Please subscribe to continue.',
+                            confirmButtonText: 'Go to Subscription',
+                            customClass: {
+                                confirmButton: 'btn btn-primary'
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                window.location.href = 'subscription.php';
+                            } else {
+                                window.location.href = 'bookings.php';
+                            }
+                        });
+                    </script>";
+                    exit;
+                }
+            }
+            
             if ($new_status) {
                 // Update booking status and damaged flag
                 if ($action === 'complete') {
@@ -310,6 +342,15 @@ $stmt = $conn->prepare($query);
 $stmt->bindParam(1, $user_id);
 $stmt->execute();
 $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+// Check if user has active subscription
+$sub_check_query = "SELECT us.Sub_Status, us.Sub_EndDate, sp.Plan_Name 
+                    FROM user_subscriptions us 
+                    LEFT JOIN subscription_plans sp ON us.PlanID = sp.PlanID 
+                    WHERE us.UserID = ? AND us.Sub_Status = 'Active' AND us.Sub_EndDate >= NOW()";
+$sub_check_stmt = $conn->prepare($sub_check_query);
+$sub_check_stmt->execute([$user_id]);
+$user_has_active_subscription = $sub_check_stmt->fetch(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -738,6 +779,31 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                 </div>
             </div>
 
+            <!-- Subscription Warning -->
+            <?php if (!$user_has_active_subscription): ?>
+            <div class="alert alert-warning border-0 shadow-sm mb-4" style="border-radius: 15px; background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="alert-heading mb-2">
+                            <i class="fas fa-crown me-2"></i>Subscription Required
+                        </h5>
+                        <p class="mb-2">You need an active subscription to accept booking requests. Without a subscription, you can only view and reject bookings.</p>
+                        <div class="d-flex gap-2">
+                            <a href="subscription.php" class="btn btn-warning btn-sm">
+                                <i class="fas fa-crown me-2"></i>View Subscription Plans
+                            </a>
+                            <small class="text-muted align-self-center">
+                                <i class="fas fa-info-circle me-1"></i>Unlock full booking management features
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- Search and Filters -->
             <div class="search-filters">
                 <form method="GET" class="row align-items-end">
@@ -836,7 +902,6 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                         </span>
                     <?php endif; ?>
                 </div>
-                <small class="text-muted">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></small>
             </div>
                                     <div class="row">
                                         <div class="col-md-3">
@@ -917,11 +982,23 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                                 <?php endif; ?>
                                                 <div class="d-flex flex-column gap-2">
                                                     <?php if($booking['Book_Status'] == 'Pending'): ?>
-                                                        <button class="btn action-btn accept" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                                                data-action="accept" data-booking-id="<?php echo $booking['BookingID']; ?>" 
-                                                                data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
-                                                            <i class="fas fa-check me-2"></i>Accept
-                                                        </button>
+                                                        <?php if ($user_has_active_subscription): ?>
+                                                            <button class="btn action-btn accept" data-bs-toggle="modal" data-bs-target="#actionModal" 
+                                                                    data-action="accept" data-booking-id="<?php echo $booking['BookingID']; ?>" 
+                                                                    data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
+                                                                <i class="fas fa-check me-2"></i>Accept
+                                                            </button>
+                                                        <?php else: ?>
+                                                            <button class="btn action-btn accept" disabled style="opacity:0.6;cursor:not-allowed;background:#dc3545!important;border-color:#dc3545!important;"
+                                                                    title="Active subscription required to accept bookings">
+                                                                <i class="fas fa-lock me-2"></i>Accept (Subscription Required)
+                                                            </button>
+                                                            <div class="alert alert-warning small p-2 mb-2" style="font-size: 11px;">
+                                                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                                                <strong>Subscription Required:</strong> You need an active subscription to accept bookings.
+                                                                <a href="subscription.php" class="alert-link">Subscribe now</a>
+                                                            </div>
+                                                        <?php endif; ?>
                                                         <button class="btn action-btn reject" data-bs-toggle="modal" data-bs-target="#actionModal" 
                                                                 data-action="reject" data-booking-id="<?php echo $booking['BookingID']; ?>" 
                                                                 data-booking-name="<?php echo htmlspecialchars($booking['Prod_Name']); ?>">
@@ -991,7 +1068,6 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
                                         <span class="badge status-badge <?php echo strtolower(str_replace(' ', '-', $booking['Book_Status'])); ?>">
                                             <?php echo htmlspecialchars($booking['Book_Status']); ?>
                                         </span>
-                                        <small class="text-muted">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></small>
                                     </div>
                                     <div class="row">
                                         <!-- Image container removed for booking history -->
@@ -1094,6 +1170,7 @@ $stats['total_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Sidebar toggle for mobile
