@@ -188,11 +188,11 @@ $recent_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             color: white;
         }
         
-        .status-badge.pending { background: var(--primary-gradient); }
-        .status-badge.confirmed { background: var(--primary-gradient); }
-        .status-badge.in-progress { background: var(--primary-gradient); }
-        .status-badge.completed { background: var(--primary-gradient); }
-        .status-badge.cancelled { background: var(--primary-gradient); }
+        .status-badge.pending { background: #ffc107; }
+        .status-badge.confirmed { background: #198754; }
+        .status-badge.in-progress { background: #0d6efd; }
+        .status-badge.completed { background: #6c757d; }
+        .status-badge.cancelled { background: #dc3545; }
 
         .quick-action-btn {
             border-radius: 15px;
