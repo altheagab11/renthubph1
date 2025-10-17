@@ -49,7 +49,11 @@ $query = "SELECT c.*,
             WHEN c.User1ID = ? THEN c.User2ID 
             ELSE c.User1ID 
           END as Other_User_ID,
-          p.Prod_Name, pi.PI_ImagePath,
+          CASE 
+            WHEN c.User1ID = ? THEN u2.User_Photo 
+            ELSE u1.User_Photo 
+          END as Other_User_Photo,
+          p.Prod_Name,
           (SELECT COUNT(*) FROM messages WHERE ConversationID = c.ConversationID AND SenderID != ? AND Msg_IsRead = 0) as unread_count,
           (SELECT Msg_Content FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message,
           (SELECT Msg_CreatedAt FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message_time
@@ -57,11 +61,10 @@ $query = "SELECT c.*,
           LEFT JOIN user_accounts u1 ON c.User1ID = u1.UserID
           LEFT JOIN user_accounts u2 ON c.User2ID = u2.UserID
           LEFT JOIN products p ON c.ProductID = p.ProductID
-          LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
           WHERE " . implode(' AND ', $conditions) . "
           ORDER BY c.Conv_LastMessageAt DESC";
 
-array_unshift($params, $user_id, $user_id, $user_id);
+array_unshift($params, $user_id, $user_id, $user_id, $user_id);
 $stmt = $conn->prepare($query);
 $stmt->execute($params);
 $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -82,20 +85,24 @@ if ($conversation_id) {
                 WHEN c.User1ID = ? THEN u2.User_Email 
                 ELSE u1.User_Email 
               END as Other_User_Email,
-              p.Prod_Name, pi.PI_ImagePath
+              CASE 
+                WHEN c.User1ID = ? THEN u2.User_Photo 
+                ELSE u1.User_Photo 
+              END as Other_User_Photo,
+              p.Prod_Name
               FROM conversations c
               LEFT JOIN user_accounts u1 ON c.User1ID = u1.UserID
               LEFT JOIN user_accounts u2 ON c.User2ID = u2.UserID
               LEFT JOIN products p ON c.ProductID = p.ProductID
-              LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
               WHERE c.ConversationID = ? AND (c.User1ID = ? OR c.User2ID = ?)";
     
     $stmt = $conn->prepare($query);
     $stmt->bindParam(1, $user_id);
     $stmt->bindParam(2, $user_id);
-    $stmt->bindParam(3, $conversation_id);
-    $stmt->bindParam(4, $user_id);
+    $stmt->bindParam(3, $user_id);
+    $stmt->bindParam(4, $conversation_id);
     $stmt->bindParam(5, $user_id);
+    $stmt->bindParam(6, $user_id);
     $stmt->execute();
     $current_conversation = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -542,8 +549,8 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     <hr class="text-white-50">
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="../index.php">
-                        <i class="fas fa-arrow-left me-2"></i> Back to Site
+                    <a class="nav-link" href="../renter/dashboard.php" style="background-color: rgba(255,255,255,0.1);">
+                        <i class="fas fa-search me-2"></i> Switch to Renter
                     </a>
                 </li>
                 <li class="nav-item">
@@ -722,14 +729,14 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                             
                             <div class="d-flex align-items-center">
                                 <div class="me-3">
-                                    <?php if($conv['PI_ImagePath']): ?>
-                                        <img src="<?php echo htmlspecialchars($conv['PI_ImagePath']); ?>" 
-                                             class="rounded" style="width: 50px; height: 50px; object-fit: cover;" 
-                                             alt="Product">
+                                    <?php if($conv['Other_User_Photo']): ?>
+                                        <img src="../uploads/users/<?php echo htmlspecialchars($conv['Other_User_Photo']); ?>" 
+                                             class="rounded-circle" style="width: 50px; height: 50px; object-fit: cover;" 
+                                             alt="User Profile">
                                     <?php else: ?>
-                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white" 
+                                        <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center text-white" 
                                              style="width: 50px; height: 50px;">
-                                            <i class="fas fa-box"></i>
+                                            <i class="fas fa-user"></i>
                                         </div>
                                     <?php endif; ?>
                                 </div>
@@ -758,14 +765,14 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                         <div class="chat-header">
                             <div class="d-flex align-items-center">
                                 <div class="me-3">
-                                    <?php if($current_conversation['PI_ImagePath']): ?>
-                                        <img src="<?php echo htmlspecialchars($current_conversation['PI_ImagePath']); ?>" 
-                                             class="rounded" style="width: 60px; height: 60px; object-fit: cover;" 
-                                             alt="Product">
+                                    <?php if($current_conversation['Other_User_Photo']): ?>
+                                        <img src="../uploads/users/<?php echo htmlspecialchars($current_conversation['Other_User_Photo']); ?>" 
+                                             class="rounded-circle" style="width: 60px; height: 60px; object-fit: cover;" 
+                                             alt="User Profile">
                                     <?php else: ?>
-                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white" 
+                                        <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center text-white" 
                                              style="width: 60px; height: 60px;">
-                                            <i class="fas fa-box"></i>
+                                            <i class="fas fa-user"></i>
                                         </div>
                                     <?php endif; ?>
                                 </div>
