@@ -385,15 +385,14 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
         
         .response-badge {
-            position: absolute;
-            top: 15px;
-            right: 15px;
+            display: inline-block;
             background: #28a745;
             color: white;
-            border-radius: 20px;
-            padding: 0.25rem 0.75rem;
-            font-size: 0.75rem;
+            border-radius: 15px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.7rem;
             font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
         
         .pending-badge {
@@ -421,6 +420,12 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             .rating-distribution {
                 padding: 1rem;
+            }
+            
+            .response-badge {
+                padding: 0.2rem 0.4rem;
+                font-size: 0.65rem;
+                border-radius: 12px;
             }
         }
     </style>
@@ -774,12 +779,6 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php else: ?>
                 <?php foreach($reviews as $review): ?>
                 <div class="review-card card">
-                    <?php if($review['Rev_OwnerResponse']): ?>
-                        <div class="response-badge">Responded</div>
-                    <?php else: ?>
-                        <div class="response-badge pending-badge">Pending</div>
-                    <?php endif; ?>
-                    
                     <div class="card-body p-4">
                         <div class="row">
                                 <div class="col-md-12">
@@ -793,7 +792,12 @@ $top_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <span class="ms-2"><?php echo $review['Rev_Rating']; ?>/5</span>
                                         </div>
                                     </div>
-                                    <div class="text-end">
+                                    <div class="text-end d-flex flex-column align-items-end">
+                                        <?php if($review['Rev_OwnerResponse']): ?>
+                                            <div class="response-badge mb-2">Responded</div>
+                                        <?php else: ?>
+                                            <div class="response-badge pending-badge mb-2">Pending</div>
+                                        <?php endif; ?>
                                         <p class="text-muted small mb-1">
                                             <i class="fas fa-calendar me-1"></i><?php echo date('M j, Y', strtotime($review['Rev_CreatedAt'])); ?>
                                         </p>
