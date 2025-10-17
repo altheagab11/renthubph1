@@ -933,7 +933,7 @@ if ($reviews_table_exists) {
                     <i class="fas fa-star-half-alt"></i>
                     <h4 class="text-muted">No reviews yet</h4>
                     <p class="text-muted">You haven't written any reviews yet. Complete a rental and share your experience with the community!</p>
-                    <a href="../browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
+                    <a href="browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
                         <i class="fas fa-search me-2"></i>Start Renting
                     </a>
                 </div>

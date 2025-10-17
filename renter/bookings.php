@@ -971,7 +971,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                     <i class="fas fa-calendar-times"></i>
                     <h4 class="text-muted">No bookings found</h4>
                     <p class="text-muted">You haven't made any bookings yet. Start exploring products to rent!</p>
-                    <a href="../browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
+                    <a href="browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
                         <i class="fas fa-search me-2"></i>Browse Products
                     </a>
                 </div>

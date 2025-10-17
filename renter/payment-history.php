@@ -769,7 +769,7 @@ if ($payments_table_exists) {
                     <i class="fas fa-credit-card"></i>
                     <h4 class="text-muted">No payment history</h4>
                     <p class="text-muted">You haven't made any payments yet. Start renting to see your payment history here!</p>
-                    <a href="../browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
+                    <a href="browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
                         <i class="fas fa-search me-2"></i>Browse Products
                     </a>
                 </div>

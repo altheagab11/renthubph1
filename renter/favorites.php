@@ -723,7 +723,7 @@ $stats['most_expensive'] = $most_expensive;
                     <i class="fas fa-heart-broken"></i>
                     <h4 class="text-muted">No favorites yet</h4>
                     <p class="text-muted">Start adding products to your favorites to see them here. Browse our amazing collection to find items you love!</p>
-                    <a href="../browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
+                    <a href="browse.php" class="btn btn-primary btn-lg" style="border-radius: 25px;">
                         <i class="fas fa-search me-2"></i>Browse Products
                     </a>
                 </div>
