@@ -18,6 +18,7 @@ $query = "SELECT c.*,
                  CASE WHEN c.User1ID = ? THEN u2.UserID ELSE u1.UserID END as other_user_id,
                  CASE WHEN c.User1ID = ? THEN u2.User_Name ELSE u1.User_Name END as other_user_name,
                  CASE WHEN c.User1ID = ? THEN u2.User_Phone ELSE u1.User_Phone END as other_user_phone,
+                 CASE WHEN c.User1ID = ? THEN u2.User_Photo ELSE u1.User_Photo END as other_user_photo,
                  p.Prod_Name,
                  (SELECT COUNT(*) FROM messages WHERE ConversationID = c.ConversationID AND SenderID != ? AND Msg_IsRead = 0) as unread_count,
                  (SELECT Msg_Content FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message,
@@ -29,7 +30,7 @@ $query = "SELECT c.*,
           WHERE c.User1ID = ? OR c.User2ID = ?
           ORDER BY c.Conv_LastMessageAt DESC, c.ConversationID DESC";
 $stmt = $conn->prepare($query);
-$stmt->execute([$user_id, $user_id, $user_id, $user_id, $user_id, $user_id]);
+$stmt->execute([$user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $user_id]);
 $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get statistics
@@ -591,9 +592,17 @@ if ($active_conversation_id) {
                                 <?php endif; ?>
                                 
                                 <div class="d-flex align-items-center">
-                                    <div class="conversation-avatar position-relative">
-                                        <?php echo strtoupper(substr($conv['other_user_name'], 0, 1)); ?>
-                                        <div class="online-indicator"></div>
+                                    <div class="me-3">
+                                        <?php if($conv['other_user_photo']): ?>
+                                            <img src="../uploads/users/<?php echo htmlspecialchars($conv['other_user_photo']); ?>" 
+                                                 class="rounded-circle" style="width: 50px; height: 50px; object-fit: cover;" 
+                                                 alt="User Profile">
+                                        <?php else: ?>
+                                            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center text-white" 
+                                                 style="width: 50px; height: 50px;">
+                                                <i class="fas fa-user"></i>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="flex-grow-1">
                                         <div class="d-flex justify-content-between align-items-start mb-1">
@@ -627,9 +636,26 @@ if ($active_conversation_id) {
                             <!-- Chat Header -->
                             <div class="chat-header">
                                 <div class="d-flex align-items-center">
-                                    <div class="conversation-avatar me-3 position-relative">
-                                        <?php echo strtoupper(substr($other_user_name, 0, 1)); ?>
-                                        <div class="online-indicator"></div>
+                                    <div class="me-3">
+                                        <?php 
+                                        $current_conv = null;
+                                        foreach($conversations as $conv) {
+                                            if($conv['ConversationID'] == $active_conversation_id) {
+                                                $current_conv = $conv;
+                                                break;
+                                            }
+                                        }
+                                        ?>
+                                        <?php if($current_conv && $current_conv['other_user_photo']): ?>
+                                            <img src="../uploads/users/<?php echo htmlspecialchars($current_conv['other_user_photo']); ?>" 
+                                                 class="rounded-circle" style="width: 60px; height: 60px; object-fit: cover;" 
+                                                 alt="User Profile">
+                                        <?php else: ?>
+                                            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center text-white" 
+                                                 style="width: 60px; height: 60px;">
+                                                <i class="fas fa-user"></i>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="flex-grow-1">
                                         <h6 class="mb-0"><?php echo htmlspecialchars($other_user_name); ?></h6>
