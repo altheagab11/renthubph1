@@ -20,6 +20,135 @@ $notif_stmt->execute([$user_id]);
 $unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
 $notif_count = count($unread_notifications);
 
+// Get current user information
+$user_query = "SELECT User_Name, User_Email, User_Phone, User_IsVerified FROM user_accounts WHERE UserID = ?";
+$user_stmt = $conn->prepare($user_query);
+$user_stmt->execute([$user_id]);
+$current_user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+
+// Get all user addresses
+$addresses_query = "SELECT AddressID, UA_Street, UA_Barangay, UA_City,
+                           UA_Province, UA_ZipCode, UA_IsDefault, UA_AddressType
+                    FROM user_addresses
+                    WHERE UserID = ?
+                    ORDER BY UA_IsDefault DESC, AddressID DESC";
+$addresses_stmt = $conn->prepare($addresses_query);
+$addresses_stmt->execute([$user_id]);
+$user_addresses = $addresses_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Handle booking form submission
+if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') {
+    header('Content-Type: application/json');
+   
+    try {
+        // Validate required fields
+        $required_fields = ['product_id', 'rental_start_date', 'rental_end_date', 'renter_phone', 'renter_address', 'payment_method'];
+        foreach ($required_fields as $field) {
+            if (empty($_POST[$field])) {
+                throw new Exception("$field is required");
+            }
+        }
+        
+        // Get product details
+        $product_query = "SELECT p.*, p.OwnerID FROM products p WHERE p.ProductID = ?";
+        $product_stmt = $conn->prepare($product_query);
+        $product_stmt->execute([$_POST['product_id']]);
+        $product = $product_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$product) {
+            throw new Exception("Product not found");
+        }
+        
+        // Get product location details
+        $location_query = "SELECT PL_DeliveryFee, PL_PickupAvailable, PL_DeliveryAvailable FROM product_locations WHERE ProductID = ?";
+        $location_stmt = $conn->prepare($location_query);
+        $location_stmt->execute([$_POST['product_id']]);
+        $location = $location_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Calculate duration and total amount
+        $start_date = new DateTime($_POST['rental_start_date']);
+        $end_date = new DateTime($_POST['rental_end_date']);
+        $interval = $start_date->diff($end_date);
+        $duration_days = $interval->days + 1; // Include both start and end date
+        
+        $rental_price = $product['Prod_RentalPrice'];
+        $security_deposit = $product['Prod_SecurityDeposit'] ?? 0;
+        $price_type = $product['Prod_PriceType'];
+        
+        if (strpos(strtolower($price_type), 'hour') !== false) {
+            $duration_hours = $interval->days * 24 + $interval->h;
+            $rental_amount = $rental_price * $duration_hours;
+        } else {
+            $rental_amount = $rental_price * $duration_days;
+        }
+        
+        // Set delivery fee and pickup type based on user selection
+        $pickup_type = 'Pickup'; // Default
+        $delivery_fee = 0;
+        
+        if (isset($_POST['pickup_delivery'])) {
+            $pickup_delivery = strtolower(trim($_POST['pickup_delivery']));
+            if ($pickup_delivery === 'delivery') {
+                $pickup_type = 'Delivery';
+                $delivery_fee = $location['PL_DeliveryFee'] ?? 0;
+            } elseif ($pickup_delivery === 'pickup') {
+                $pickup_type = 'Pickup';
+                $delivery_fee = 0;
+            }
+        }
+        
+        $total_amount = $rental_amount + $security_deposit + $delivery_fee;
+        
+        // Insert booking record
+        $booking_query = "INSERT INTO bookings (
+            ProductID, RenterID, OwnerID,
+            Book_StartDate, Book_EndDate, Book_TotalAmount,
+            Book_SecurityDeposit, Book_DeliveryFee, Book_PickupType,
+            Book_Status, Book_Notes
+        ) VALUES (
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            'Pending', ?
+        )";
+        
+        // Prepare booking notes with all the additional details
+        $booking_notes = json_encode([
+            'payment_method' => $_POST['payment_method'],
+            'renter_name' => $_POST['renter_name'],
+            'renter_phone' => $_POST['renter_phone'],
+            'renter_email' => $_POST['renter_email'],
+            'renter_address' => $_POST['renter_address'],
+            'emergency_contact' => $_POST['emergency_contact'] ?? '',
+            'special_instructions' => $_POST['special_instructions'] ?? ''
+        ]);
+        
+        $booking_stmt = $conn->prepare($booking_query);
+        $booking_result = $booking_stmt->execute([
+            $_POST['product_id'],
+            $user_id,
+            $product['OwnerID'],
+            $_POST['rental_start_date'],
+            $_POST['rental_end_date'],
+            $total_amount,
+            $security_deposit,
+            $delivery_fee,
+            $pickup_type,
+            $booking_notes
+        ]);
+        
+        if ($booking_result) {
+            echo json_encode(['success' => true, 'message' => 'Booking request submitted successfully']);
+        } else {
+            throw new Exception("Failed to create booking");
+        }
+        
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // Handle favorite actions
 if ($_POST) {
     if (isset($_POST['remove_favorite'])) {
@@ -318,7 +447,138 @@ $stats['most_expensive'] = $most_expensive;
         
         .action-btn.remove { background: var(--secondary-gradient); color: white; }
         .action-btn.book { background: var(--secondary-gradient); color: white; }
-        .action-btn.share { background: var(--secondary-gradient); color: white; }
+
+        /* Waiver Modal Styles */
+        .waiver-modal .modal-content {
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .waiver-modal .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .waiver-modal .modal-body {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .waiver-modal .form-check-label {
+            cursor: pointer;
+        }
+
+        .waiver-modal .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+
+        .waiver-modal .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Booking Modal Styles */
+        .modal-lg {
+            max-width: 900px;
+        }
+
+        .modal-content {
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .modal-title {
+            font-weight: 600;
+        }
+
+        .btn-close {
+            filter: invert(1);
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            padding: 12px;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+
+        .payment-option {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            justify-content: center;
+        }
+
+        .payment-option:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .payment-option input:checked + label {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .payment-option:has(input:checked) {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .payment-option .form-check-input {
+            display: none;
+        }
+
+        .payment-option .form-check-label {
+            margin-bottom: 0;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        #productInfo {
+            border-left: 4px solid #667eea;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 12px 30px;
+            font-weight: 500;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-secondary {
+            border-radius: 8px;
+            padding: 12px 30px;
+            font-weight: 500;
+        }
         
         .navbar {
             border-bottom: 1px solid #e9ecef;
@@ -807,10 +1067,16 @@ $stats['most_expensive'] = $most_expensive;
                                     </div>
                                     
                                     <div class="d-flex flex-column gap-2">
-                                        <a href="../product.php?id=<?php echo $favorite['ProductID']; ?>" 
-                                           class="btn action-btn book">
+                                        <button class="btn action-btn book" 
+                                                onclick="bookProduct(<?php echo $favorite['ProductID']; ?>)"
+                                                data-product-id="<?php echo $favorite['ProductID']; ?>"
+                                                data-owner-id="<?php echo $favorite['OwnerID']; ?>"
+                                                data-security-deposit="<?php echo $favorite['Prod_SecurityDeposit'] ?? 0; ?>"
+                                                data-delivery-available="<?php echo isset($favorite['PL_DeliveryAvailable']) ? $favorite['PL_DeliveryAvailable'] : 0; ?>"
+                                                data-delivery-fee="<?php echo isset($favorite['PL_DeliveryFee']) ? $favorite['PL_DeliveryFee'] : 0; ?>"
+                                                data-pickup-available="<?php echo isset($favorite['PL_PickupAvailable']) ? $favorite['PL_PickupAvailable'] : 1; ?>">
                                             <i class="fas fa-calendar-plus me-1"></i>Book Now
-                                        </a>
+                                        </button>
                                         
                                         <form method="POST" style="display: inline;">
                                             <input type="hidden" name="product_id" value="<?php echo $favorite['ProductID']; ?>">
@@ -820,10 +1086,6 @@ $stats['most_expensive'] = $most_expensive;
                                                 <i class="fas fa-heart-broken me-1"></i>Remove from Favorites
                                             </button>
                                         </form>
-                                        
-                                        <button class="btn action-btn share" onclick="shareProduct(<?php echo $favorite['ProductID']; ?>, '<?php echo addslashes($favorite['Prod_Name']); ?>')">
-                                            <i class="fas fa-share me-1"></i>Share
-                                        </button>
                                         
                                         <a href="../product.php?id=<?php echo $favorite['ProductID']; ?>" 
                                            class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
@@ -844,6 +1106,264 @@ $stats['most_expensive'] = $most_expensive;
                 </div>
                 <?php endforeach; ?>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Waiver Modal -->
+    <div class="modal fade waiver-modal" id="waiverModal" tabindex="-1" aria-labelledby="waiverModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="waiverModalLabel">Rental Agreement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="waiverContent">
+                        <h6>Rental Agreement Terms</h6>
+                        <p>
+                            By renting this item, you agree to the following terms and conditions:
+                        </p>
+                        <ul>
+                            <li>The renter is responsible for any damage to the item during the rental period.</li>
+                            <li>The item must be returned in the same condition as received.</li>
+                            <li>A security deposit, if applicable, will be refunded upon satisfactory return of the item.</li>
+                            <li>Late returns may incur additional charges as per the owner's policy.</li>
+                            <li>The renter agrees to use the item only for its intended purpose.</li>
+                            <li>Any disputes will be resolved through RentHub PH's dispute resolution process.</li>
+                        </ul>
+                        <p>
+                            Please read the full <a href="#" class="text-primary">Terms and Conditions</a> and <a href="#" class="text-primary">Privacy Policy</a> for more details.
+                        </p>
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" id="waiver_agreement" required>
+                            <label class="form-check-label" for="waiver_agreement">
+                                I have read and agree to the Rental Agreement <span class="text-danger">*</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="proceedToBooking" disabled>Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Booking Modal -->
+    <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bookingModalLabel">Book Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="bookingForm" method="POST" action="">
+                    <div class="modal-body">
+                        <div id="productInfo" class="mb-4 p-3 bg-light rounded">
+                            <!-- Product details will be loaded here -->
+                        </div>
+                       
+                        <!-- Booking Details -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="fw-bold mb-3"><i class="fas fa-calendar-alt me-2"></i>Rental Period</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="rental_start_date" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="datetime-local" class="form-control" id="rental_start_date" name="rental_start_date" required>
+                                <div class="form-text">When do you want to start renting?</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="rental_end_date" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="datetime-local" class="form-control" id="rental_end_date" name="rental_end_date" required>
+                                <div class="form-text">When will you return the item?</div>
+                            </div>
+                        </div>
+                       
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <label for="rental_duration" class="form-label">Duration</label>
+                                <input type="text" class="form-control bg-light" id="rental_duration" name="rental_duration" readonly>
+                            </div>
+                            <div class="col-md-5">
+                                <label for="total_amount" class="form-label">Total Amount</label>
+                                <div class="bg-light p-3 rounded border">
+                                    <div class="fw-bold text-primary fs-5" id="total_amount_display">₱0</div>
+                                    <div class="text-muted small" id="amount_breakdown" style="display: none;"></div>
+                                </div>
+                                <input type="hidden" id="total_amount" name="total_amount">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="pickup_delivery" class="form-label">Pickup/Delivery <span class="text-danger">*</span></label>
+                                <select class="form-select" id="pickup_delivery" name="pickup_delivery" required>
+                                    <option value="">Choose option...</option>
+                                    <option value="pickup">I'll pickup the item</option>
+                                    <option value="delivery">Request delivery</option>
+                                </select>
+                            </div>
+                        </div>
+                       
+                        <div class="mb-4">
+                            <label for="special_instructions" class="form-label">Special Instructions</label>
+                            <textarea class="form-control" id="special_instructions" name="special_instructions" rows="3" placeholder="Any special requests, preferred pickup time, delivery address details, etc..."></textarea>
+                            <div class="form-text">Optional: Add any special requirements or instructions</div>
+                        </div>
+                       
+                        <!-- Renter Contact Details -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="fw-bold mb-3"><i class="fas fa-user me-2"></i>Your Contact Information</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="renter_name" class="form-label">Full Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="renter_name" name="renter_name" required
+                                    value="<?php echo htmlspecialchars($current_user['User_Name'] ?? ''); ?>" readonly>
+                                <div class="form-text">Your full name for the booking</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="renter_phone" class="form-label">Phone Number <span class="text-danger">*</span></label>
+                                <input type="tel" class="form-control" id="renter_phone" name="renter_phone" required
+                                    pattern="\+?[0-9]{10,15}" placeholder="+639XXXXXXXXX"
+                                    value="<?php echo htmlspecialchars($current_user['User_Phone'] ?? ''); ?>" readonly>
+                                <div class="form-text">11-digit mobile number</div>
+                            </div>
+                        </div>
+                       
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="renter_email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control" id="renter_email" name="renter_email" required
+                                    value="<?php echo htmlspecialchars($current_user['User_Email'] ?? ''); ?>" readonly>
+                                <div class="form-text">For booking confirmations</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="emergency_contact" class="form-label">Emergency Contact</label>
+                                <input type="tel" class="form-control" id="emergency_contact" name="emergency_contact"
+                                       pattern="[0-9]{11}" placeholder="09XXXXXXXXX">
+                                <div class="form-text">Optional: Alternative contact number</div>
+                            </div>
+                        </div>
+                       
+                        <div class="mb-4">
+                            <label class="form-label">Address <span class="text-danger">*</span></label>
+                           
+                            <?php if (!empty($user_addresses)): ?>
+                            <!-- Saved Addresses Selection -->
+                            <div class="mb-3">
+                                <label for="saved_addresses" class="form-label">Choose from saved addresses:</label>
+                                <select class="form-select" id="saved_addresses" onchange="populateAddress(this.value)">
+                                    <option value="">Select a saved address...</option>
+                                    <?php foreach ($user_addresses as $address): ?>
+                                        <?php
+                                        $address_parts = array_filter([
+                                            $address['UA_Street'],
+                                            $address['UA_Barangay'],
+                                            $address['UA_City'],
+                                            $address['UA_Province'],
+                                            $address['UA_ZipCode']
+                                        ]);
+                                        $formatted_address = implode(', ', $address_parts);
+                                        $address_label = $address['UA_AddressType'] ? $address['UA_AddressType'] : 'Address';
+                                        if ($address['UA_IsDefault']) $address_label .= ' (Default)';
+                                        ?>
+                                        <option value="<?php echo htmlspecialchars($formatted_address); ?>"
+                                                <?php echo $address['UA_IsDefault'] ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($address_label . ': ' . $formatted_address); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                    <option value="custom">Enter custom address...</option>
+                                </select>
+                            </div>
+                            <?php endif; ?>
+                           
+                            <!-- Address Textarea -->
+                            <div>
+                                <label for="renter_address" class="form-label">Complete Address <span class="text-danger">*</span></label>
+                                <textarea class="form-control" id="renter_address" name="renter_address" rows="2" required
+                                          placeholder="House/Unit No., Street, Barangay, City, Province"></textarea>
+                                <div class="form-text">Full address for pickup/delivery coordination</div>
+                            </div>
+                        </div>
+                       
+                        <!-- Payment Details -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="fw-bold mb-3"><i class="fas fa-credit-card me-2"></i>Payment Information</h6>
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label class="form-label">Preferred Payment Method <span class="text-danger">*</span></label>
+                                <div class="row g-2">
+                                    <div class="col-lg-3 col-md-6 col-12">
+                                        <div class="form-check payment-option">
+                                            <input class="form-check-input" type="radio" name="payment_method" id="payment_gcash" value="GCash" required>
+                                            <label class="form-check-label" for="payment_gcash">
+                                                <i class="fas fa-mobile-alt me-1"></i>GCash
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-md-6 col-12">
+                                        <div class="form-check payment-option">
+                                            <input class="form-check-input" type="radio" name="payment_method" id="payment_maya" value="Maya" required>
+                                            <label class="form-check-label" for="payment_maya">
+                                                <i class="fas fa-mobile-alt me-1"></i>Maya
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-md-6 col-12">
+                                        <div class="form-check payment-option">
+                                            <input class="form-check-input" type="radio" name="payment_method" id="payment_bank" value="Bank Transfer" required>
+                                            <label class="form-check-label" for="payment_bank">
+                                                <i class="fas fa-university me-1"></i>Bank Transfer
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-md-6 col-12">
+                                        <div class="form-check payment-option">
+                                            <input class="form-check-input" type="radio" name="payment_method" id="payment_cash" value="Cash" required>
+                                            <label class="form-check-label" for="payment_cash">
+                                                <i class="fas fa-money-bill me-1"></i>Cash
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-text">Choose your preferred payment method</div>
+                            </div>
+                        </div>
+                       
+                        <div class="row mb-2">
+                            <div class="col-12">
+                                <div class="alert alert-info p-2 mb-2" style="font-size: 0.95em;">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <strong>Note:</strong> You can only complete your payment after the owner accepts your booking request.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="terms_agreement" name="terms_agreement" required>
+                                    <label class="form-check-label" for="terms_agreement">
+                                        I agree to the <a href="#" class="text-primary">Terms and Conditions</a> and <a href="#" class="text-primary">Rental Agreement</a> <span class="text-danger">*</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                       
+                        <input type="hidden" id="product_id" name="product_id">
+                        <input type="hidden" id="owner_id" name="owner_id">
+                        <input type="hidden" id="rental_price" name="rental_price">
+                        <input type="hidden" id="price_type" name="price_type">
+                        <input type="hidden" id="security_deposit" name="security_deposit">
+                        <input type="hidden" id="delivery_available" name="delivery_available">
+                        <input type="hidden" id="delivery_fee" name="delivery_fee">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Submit Booking Request</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -914,23 +1434,6 @@ $stats['most_expensive'] = $most_expensive;
                 }
             });
         }, 5000);
-
-        // Share product function
-        function shareProduct(productId, productName) {
-            if (navigator.share) {
-                navigator.share({
-                    title: productName + ' - RentHub PH',
-                    text: 'Check out this awesome rental: ' + productName,
-                    url: window.location.origin + '/product.php?id=' + productId
-                });
-            } else {
-                // Fallback - copy to clipboard
-                const url = window.location.origin + '/product.php?id=' + productId;
-                navigator.clipboard.writeText(url).then(() => {
-                    alert('Product link copied to clipboard!');
-                });
-            }
-        }
 
         // Select all functionality
         function selectAll() {
@@ -1027,6 +1530,252 @@ $stats['most_expensive'] = $most_expensive;
             card.style.opacity = '0';
             card.style.transition = 'all 0.6s ease';
             statsObserver.observe(card);
+        });
+
+        // Booking functionality
+        function bookProduct(productId) {
+            // Find product data from the page
+            const productButton = document.querySelector(`[onclick="bookProduct(${productId})"]`);
+            
+            if (!productButton) {
+                alert('Product not found');
+                return;
+            }
+
+            // Get data from button attributes
+            const ownerId = productButton.getAttribute('data-owner-id');
+            const securityDeposit = parseFloat(productButton.getAttribute('data-security-deposit') || 0);
+            const deliveryAvailable = parseInt(productButton.getAttribute('data-delivery-available') || 0);
+            const deliveryFee = parseFloat(productButton.getAttribute('data-delivery-fee') || 0);
+            const pickupAvailable = parseInt(productButton.getAttribute('data-pickup-available') || 1);
+
+            // Find the favorite card containing this button
+            const favoriteCard = productButton.closest('.favorite-card');
+            if (!favoriteCard) {
+                alert('Product information not found');
+                return;
+            }
+
+            // Extract product information from the card
+            const productName = favoriteCard.querySelector('h5').textContent.trim();
+            const priceElement = favoriteCard.querySelector('.price-tag');
+            const priceText = priceElement.textContent.replace('₱', '').replace(',', '');
+            const productPrice = parseFloat(priceText);
+            const priceType = priceElement.querySelector('small').textContent.replace('/', '');
+            const ownerName = favoriteCard.querySelector('.text-muted').textContent.trim();
+
+            // Store product data in sessionStorage to use after waiver agreement
+            sessionStorage.setItem('bookingProduct', JSON.stringify({
+                productId,
+                productName,
+                productPrice,
+                priceType,
+                ownerName,
+                ownerId,
+                securityDeposit,
+                deliveryAvailable,
+                deliveryFee,
+                pickupAvailable
+            }));
+
+            // Show waiver modal first
+            const waiverModal = new bootstrap.Modal(document.getElementById('waiverModal'));
+            waiverModal.show();
+        }
+
+        // Handle waiver agreement checkbox
+        document.getElementById('waiver_agreement').addEventListener('change', function() {
+            document.getElementById('proceedToBooking').disabled = !this.checked;
+        });
+
+        // Handle Proceed button click
+        document.getElementById('proceedToBooking').addEventListener('click', function() {
+            if (document.getElementById('waiver_agreement').checked) {
+                // Hide waiver modal
+                const waiverModal = bootstrap.Modal.getInstance(document.getElementById('waiverModal'));
+                waiverModal.hide();
+
+                // Retrieve product data from sessionStorage
+                const productData = JSON.parse(sessionStorage.getItem('bookingProduct'));
+
+                // Populate booking modal
+                document.getElementById('product_id').value = productData.productId;
+                document.getElementById('owner_id').value = productData.ownerId;
+                document.getElementById('rental_price').value = productData.productPrice;
+                document.getElementById('price_type').value = productData.priceType;
+                document.getElementById('security_deposit').value = productData.securityDeposit;
+                document.getElementById('delivery_available').value = productData.deliveryAvailable;
+                document.getElementById('delivery_fee').value = productData.deliveryFee;
+
+                // Show product info in booking modal
+                document.getElementById('productInfo').innerHTML = `
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6 class="mb-1">${productData.productName}</h6>
+                            <p class="text-muted mb-1">Owner: ${productData.ownerName}</p>
+                            ${productData.securityDeposit > 0 ? `<p class="text-muted mb-1">Security Deposit: ₱${productData.securityDeposit.toLocaleString()}</p>` : ''}
+                            ${productData.deliveryAvailable == 1 ? `<p class="text-muted mb-1">Delivery Available: ₱${productData.deliveryFee.toLocaleString()}</p>` : '<p class="text-muted mb-1">Pickup Only</p>'}
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <h6 class="text-primary">₱${productData.productPrice.toLocaleString()}/${productData.priceType}</h6>
+                        </div>
+                    </div>
+                `;
+
+                // Dynamically update Pickup/Delivery dropdown
+                const pickupDeliverySelect = document.getElementById('pickup_delivery');
+                pickupDeliverySelect.innerHTML = '<option value="">Choose option...</option>';
+                if (productData.pickupAvailable == 1) {
+                    pickupDeliverySelect.innerHTML += '<option value="pickup">I\'ll pickup the item</option>';
+                }
+                if (productData.deliveryAvailable == 1) {
+                    pickupDeliverySelect.innerHTML += '<option value="delivery">Request delivery</option>';
+                }
+
+                // Set minimum date to today
+                setMinimumDateTime();
+
+                // Show booking modal
+                const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
+                bookingModal.show();
+
+                // Clear sessionStorage
+                sessionStorage.removeItem('bookingProduct');
+            }
+        });
+
+        // Calculate rental duration and total amount
+        document.getElementById('rental_start_date').addEventListener('change', calculateTotal);
+        document.getElementById('rental_end_date').addEventListener('change', calculateTotal);
+        document.addEventListener('change', function(e) {
+            if (e.target.name === 'pickup_delivery') {
+                calculateTotal();
+            }
+        });
+       
+        function calculateTotal() {
+            const startDate = new Date(document.getElementById('rental_start_date').value);
+            const endDate = new Date(document.getElementById('rental_end_date').value);
+            const price = parseFloat(document.getElementById('rental_price').value);
+            const priceType = document.getElementById('price_type').value;
+            const securityDeposit = parseFloat(document.getElementById('security_deposit').value || 0);
+            const deliveryFee = parseFloat(document.getElementById('delivery_fee').value || 0);
+            const deliverySelected = document.querySelector('input[name="pickup_delivery"]:checked')?.value === 'delivery';
+           
+            if (startDate && endDate && endDate >= startDate) {
+                let duration;
+                let multiplier;
+               
+                if (priceType.toLowerCase().includes('day')) {
+                    const timeDiff = endDate.getTime() - startDate.getTime();
+                    duration = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // Include both start and end date
+                    multiplier = duration;
+                    document.getElementById('rental_duration').value = duration + ' day(s)';
+                } else if (priceType.toLowerCase().includes('hour')) {
+                    const timeDiff = endDate.getTime() - startDate.getTime();
+                    duration = Math.ceil(timeDiff / (1000 * 3600));
+                    multiplier = duration;
+                    document.getElementById('rental_duration').value = duration + ' hour(s)';
+                } else {
+                    multiplier = 1;
+                    document.getElementById('rental_duration').value = '1 unit';
+                }
+               
+                const rentalAmount = price * multiplier;
+                const deliveryAmount = deliverySelected ? deliveryFee : 0;
+                const totalAmount = rentalAmount + securityDeposit + deliveryAmount;
+               
+                // Update the total amount display with breakdown
+                const totalDisplay = document.getElementById('total_amount_display');
+                const breakdownDisplay = document.getElementById('amount_breakdown');
+                const hiddenTotal = document.getElementById('total_amount');
+               
+                if (totalDisplay) {
+                    totalDisplay.textContent = `₱${totalAmount.toLocaleString()}`;
+                    hiddenTotal.value = totalAmount;
+                   
+                    // Show breakdown if there are additional fees
+                    if (securityDeposit > 0 || deliveryAmount > 0) {
+                        let breakdown = `Rental: ₱${rentalAmount.toLocaleString()}`;
+                        if (securityDeposit > 0) breakdown += ` + Deposit: ₱${securityDeposit.toLocaleString()}`;
+                        if (deliveryAmount > 0) breakdown += ` + Delivery: ₱${deliveryAmount.toLocaleString()}`;
+                       
+                        breakdownDisplay.textContent = breakdown;
+                        breakdownDisplay.style.display = 'block';
+                    } else {
+                        breakdownDisplay.style.display = 'none';
+                    }
+                }
+            } else if (endDate < startDate) {
+                alert('End date must be after start date');
+                document.getElementById('rental_end_date').value = '';
+            }
+        }
+       
+        // Set minimum datetime to current time
+        function setMinimumDateTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            const minDateTime = now.toISOString().slice(0, 16);
+            document.getElementById('rental_start_date').min = minDateTime;
+            document.getElementById('rental_end_date').min = minDateTime;
+        }
+       
+        // Phone number validation
+        document.getElementById('renter_phone').addEventListener('input', function(e) {
+            this.value = this.value.replace(/\D/g, '').substring(0, 11);
+        });
+       
+        document.getElementById('emergency_contact').addEventListener('input', function(e) {
+            this.value = this.value.replace(/\D/g, '').substring(0, 11);
+        });
+       
+        // Function to populate address from saved addresses dropdown
+        function populateAddress(selectedValue) {
+            const addressTextarea = document.getElementById('renter_address');
+            if (selectedValue === 'custom') {
+                addressTextarea.value = '';
+                addressTextarea.focus();
+            } else if (selectedValue) {
+                addressTextarea.value = selectedValue;
+            }
+        }
+       
+        // Auto-populate address on page load if default is selected
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedAddressSelect = document.getElementById('saved_addresses');
+            if (savedAddressSelect && savedAddressSelect.value) {
+                populateAddress(savedAddressSelect.value);
+            }
+        });
+       
+        // Handle booking form submission
+        document.getElementById('bookingForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+           
+            const formData = new FormData(this);
+            formData.append('action', 'create_booking');
+           
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Booking request submitted successfully! Please wait for the owner to approve your request.');
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('bookingModal'));
+                    modal.hide();
+                    // Reset form
+                    document.getElementById('bookingForm').reset();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
         });
     </script>
 
