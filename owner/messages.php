@@ -69,10 +69,90 @@ $stmt = $conn->prepare($query);
 $stmt->execute($params);
 $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Handle user_id parameter - find or create conversation with specific user about specific product
+if (isset($_GET['user_id']) && !isset($_GET['conversation'])) {
+    $target_user_id = $_GET['user_id'];
+    $product_id = isset($_GET['product_id']) ? $_GET['product_id'] : null;
+    
+    if ($product_id) {
+        // Look for existing conversation about this specific product
+        $existing_conv_query = "SELECT DISTINCT c.ConversationID 
+                               FROM conversations c
+                               WHERE ((c.User1ID = ? AND c.User2ID = ?) OR (c.User1ID = ? AND c.User2ID = ?))
+                               AND c.ProductID = ?
+                               ORDER BY c.Conv_LastMessageAt DESC
+                               LIMIT 1";
+        $existing_conv_stmt = $conn->prepare($existing_conv_query);
+        $existing_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id, $product_id]);
+        $existing_conversation = $existing_conv_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($existing_conversation) {
+            // Redirect to existing conversation about this product
+            header("Location: messages.php?conversation=" . $existing_conversation['ConversationID']);
+            exit;
+        } else {
+            // Create new conversation with product context
+            $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, ProductID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, ?, NOW(), NOW())";
+            $create_conv_stmt = $conn->prepare($create_conv_query);
+            $create_conv_stmt->execute([$user_id, $target_user_id, $product_id]);
+            $new_conversation_id = $conn->lastInsertId();
+            
+            // Redirect to new conversation
+            header("Location: messages.php?conversation=" . $new_conversation_id);
+            exit;
+        }
+    } else {
+        // No product specified, find any conversation with this user
+        $existing_conv_query = "SELECT ConversationID FROM conversations 
+                               WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)
+                               ORDER BY Conv_LastMessageAt DESC LIMIT 1";
+        $existing_conv_stmt = $conn->prepare($existing_conv_query);
+        $existing_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id]);
+        $existing_conversation = $existing_conv_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($existing_conversation) {
+            // Redirect to existing conversation
+            header("Location: messages.php?conversation=" . $existing_conversation['ConversationID']);
+            exit;
+        } else {
+            // Create new conversation without product context
+            $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, NOW(), NOW())";
+            $create_conv_stmt = $conn->prepare($create_conv_query);
+            $create_conv_stmt->execute([$user_id, $target_user_id]);
+            $new_conversation_id = $conn->lastInsertId();
+            
+            // Redirect to new conversation
+            header("Location: messages.php?conversation=" . $new_conversation_id);
+            exit;
+        }
+    }
+}
+
 // Get current conversation details if viewing one
 $current_conversation = null;
 $conversation_messages = [];
 $conversation_id = isset($_GET['conversation']) ? $_GET['conversation'] : '';
+
+// Handle direct user_id parameter (from booking messages)
+$target_user_id = isset($_GET['user_id']) ? $_GET['user_id'] : '';
+if ($target_user_id && !$conversation_id) {
+    // Find existing conversation with this user
+    $find_conv_query = "SELECT ConversationID FROM conversations 
+                        WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)";
+    $find_conv_stmt = $conn->prepare($find_conv_query);
+    $find_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id]);
+    $existing_conv = $find_conv_stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($existing_conv) {
+        $conversation_id = $existing_conv['ConversationID'];
+    } else {
+        // Create new conversation if none exists
+        $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt) VALUES (?, ?, NOW())";
+        $create_conv_stmt = $conn->prepare($create_conv_query);
+        $create_conv_stmt->execute([$user_id, $target_user_id]);
+        $conversation_id = $conn->lastInsertId();
+    }
+}
 
 if ($conversation_id) {
     // Get conversation details

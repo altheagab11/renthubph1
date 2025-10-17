@@ -1024,9 +1024,9 @@ $user_has_active_subscription = $sub_check_stmt->fetch(PDO::FETCH_ASSOC);
                                                             <i class="fas fa-check-circle me-2"></i>Complete
                                                         </button>
                                                     <?php endif; ?>
-                                                    <button class="btn action-btn message">
+                                                    <a href="messages.php?user_id=<?php echo $booking['RenterID']; ?>&product_id=<?php echo $booking['ProductID']; ?>" class="btn action-btn message">
                                                         <i class="fas fa-comment me-2"></i>Message
-                                                    </button>
+                                                    </a>
                                                 </div>
                                             </div>
                                             <div class="text-end mt-3">
