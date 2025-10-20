@@ -25,106 +25,137 @@ $notif_count = count($unread_notifications);
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 
-// Get conversations
-$conditions = ["(c.User1ID = ? OR c.User2ID = ?)"];
-$params = [$user_id, $user_id];
+// Get conversations aggregated by user pair (single thread per renter/owner pair)
+$conversations = [];
+try {
+        $search_user = "%$search%";
+        $search_prod = "%$search%";
 
-if ($search) {
-    $conditions[] = "(u.User_Name LIKE ? OR p.Prod_Name LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
+        // Build base pairs (distinct other user for current user)
+            $baseQuery = "
+                SELECT pairs.other_id AS Other_User_ID,
+                             u.User_Name AS Other_User_Name,
+                             u.User_Photo AS Other_User_Photo,
+                             -- Latest message content across all conversations with this user
+                             (
+                                 SELECT m2.Msg_Content
+                                 FROM messages m2
+                                 JOIN conversations c2 ON c2.ConversationID = m2.ConversationID
+                                 WHERE ((c2.User1ID = :uid AND c2.User2ID = pairs.other_id) OR (c2.User1ID = pairs.other_id AND c2.User2ID = :uid))
+                                 ORDER BY m2.Msg_CreatedAt DESC
+                                 LIMIT 1
+                             ) AS last_message,
+                             (
+                                 SELECT m3.Msg_CreatedAt
+                                 FROM messages m3
+                                 JOIN conversations c3 ON c3.ConversationID = m3.ConversationID
+                                 WHERE ((c3.User1ID = :uid AND c3.User2ID = pairs.other_id) OR (c3.User1ID = pairs.other_id AND c3.User2ID = :uid))
+                                 ORDER BY m3.Msg_CreatedAt DESC
+                                 LIMIT 1
+                             ) AS last_message_time,
+                             -- Unread across all conversations with this user
+                             (
+                                 SELECT COUNT(*) FROM messages m4
+                                 JOIN conversations c4 ON c4.ConversationID = m4.ConversationID
+                                 WHERE ((c4.User1ID = :uid AND c4.User2ID = pairs.other_id) OR (c4.User1ID = pairs.other_id AND c4.User2ID = :uid))
+                                     AND m4.SenderID != :uid AND m4.Msg_IsRead = 0
+                             ) AS unread_count,
+                                             -- Latest product name, prefer latest booking's product if any, fallback to latest conversation product
+                                             COALESCE(
+                                                 (
+                                                     SELECT pB.Prod_Name
+                                                     FROM bookings bB
+                                                     JOIN products pB ON pB.ProductID = bB.ProductID
+                                                     WHERE ((bB.OwnerID = :uid AND bB.RenterID = pairs.other_id) OR (bB.OwnerID = pairs.other_id AND bB.RenterID = :uid))
+                                                     ORDER BY bB.Book_CreatedAt DESC
+                                                     LIMIT 1
+                                                 ),
+                                                 (
+                                                     SELECT p.Prod_Name
+                                                     FROM conversations c5
+                                                     LEFT JOIN products p ON c5.ProductID = p.ProductID
+                                                     WHERE ((c5.User1ID = :uid AND c5.User2ID = pairs.other_id) OR (c5.User1ID = pairs.other_id AND c5.User2ID = :uid))
+                                                     ORDER BY c5.Conv_LastMessageAt DESC
+                                                     LIMIT 1
+                                                 )
+                                             ) AS Prod_Name,
+                                 -- Latest conversation id for linking
+                                 (
+                                     SELECT c6.ConversationID
+                                     FROM conversations c6
+                                     WHERE ((c6.User1ID = :uid AND c6.User2ID = pairs.other_id) OR (c6.User1ID = pairs.other_id AND c6.User2ID = :uid))
+                                     ORDER BY c6.Conv_LastMessageAt DESC
+                                     LIMIT 1
+                                 ) AS Latest_ConversationID
+                FROM (
+                    SELECT DISTINCT CASE WHEN c.User1ID = :uid THEN c.User2ID ELSE c.User1ID END AS other_id
+                    FROM conversations c
+                    WHERE (c.User1ID = :uid OR c.User2ID = :uid)
+                ) pairs
+                JOIN user_accounts u ON u.UserID = pairs.other_id
+        ";
+
+        $whereClauses = [];
+        $params = [':uid' => $user_id];
+
+        if ($search) {
+                // Search by user name OR any related product name
+                $whereClauses[] = "(u.User_Name LIKE :search_user OR EXISTS (
+                        SELECT 1 FROM conversations cs
+                        LEFT JOIN products ps ON cs.ProductID = ps.ProductID
+                        WHERE ((cs.User1ID = :uid AND cs.User2ID = pairs.other_id) OR (cs.User1ID = pairs.other_id AND cs.User2ID = :uid))
+                            AND ps.Prod_Name LIKE :search_prod
+                ))";
+                $params[':search_user'] = $search_user;
+                $params[':search_prod'] = $search_prod;
+        }
+
+        if ($status_filter === 'unread') {
+                $whereClauses[] = "((
+                        SELECT COUNT(*) FROM messages mu
+                        JOIN conversations cu ON cu.ConversationID = mu.ConversationID
+                        WHERE ((cu.User1ID = :uid AND cu.User2ID = pairs.other_id) OR (cu.User1ID = pairs.other_id AND cu.User2ID = :uid))
+                            AND mu.SenderID != :uid AND mu.Msg_IsRead = 0
+                ) > 0)";
+        }
+
+        $finalQuery = $baseQuery;
+        if (!empty($whereClauses)) {
+                $finalQuery .= " WHERE " . implode(' AND ', $whereClauses);
+        }
+        $finalQuery .= " ORDER BY COALESCE(last_message_time, '1970-01-01 00:00:00') DESC";
+
+        $stmt = $conn->prepare($finalQuery);
+        $stmt->execute($params);
+        $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+        $conversations = [];
 }
-
-if ($status_filter == 'unread') {
-    $conditions[] = "EXISTS (SELECT 1 FROM messages m WHERE m.ConversationID = c.ConversationID AND m.SenderID != ? AND m.Msg_IsRead = 0)";
-    $params[] = $user_id;
-}
-
-$query = "SELECT c.*, 
-          CASE 
-            WHEN c.User1ID = ? THEN u2.User_Name 
-            ELSE u1.User_Name 
-          END as Other_User_Name,
-          CASE 
-            WHEN c.User1ID = ? THEN c.User2ID 
-            ELSE c.User1ID 
-          END as Other_User_ID,
-          CASE 
-            WHEN c.User1ID = ? THEN u2.User_Photo 
-            ELSE u1.User_Photo 
-          END as Other_User_Photo,
-          p.Prod_Name,
-          (SELECT COUNT(*) FROM messages WHERE ConversationID = c.ConversationID AND SenderID != ? AND Msg_IsRead = 0) as unread_count,
-          (SELECT Msg_Content FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message,
-          (SELECT Msg_CreatedAt FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message_time
-          FROM conversations c
-          LEFT JOIN user_accounts u1 ON c.User1ID = u1.UserID
-          LEFT JOIN user_accounts u2 ON c.User2ID = u2.UserID
-          LEFT JOIN products p ON c.ProductID = p.ProductID
-          WHERE " . implode(' AND ', $conditions) . "
-          ORDER BY c.Conv_LastMessageAt DESC";
-
-array_unshift($params, $user_id, $user_id, $user_id, $user_id);
-$stmt = $conn->prepare($query);
-$stmt->execute($params);
-$conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Handle user_id parameter - find or create conversation with specific user about specific product
 if (isset($_GET['user_id']) && !isset($_GET['conversation'])) {
+    // Always unify by user pair; ignore product to keep a single thread
     $target_user_id = $_GET['user_id'];
-    $product_id = isset($_GET['product_id']) ? $_GET['product_id'] : null;
-    
-    if ($product_id) {
-        // Look for existing conversation about this specific product
-        $existing_conv_query = "SELECT DISTINCT c.ConversationID 
-                               FROM conversations c
-                               WHERE ((c.User1ID = ? AND c.User2ID = ?) OR (c.User1ID = ? AND c.User2ID = ?))
-                               AND c.ProductID = ?
-                               ORDER BY c.Conv_LastMessageAt DESC
-                               LIMIT 1";
-        $existing_conv_stmt = $conn->prepare($existing_conv_query);
-        $existing_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id, $product_id]);
-        $existing_conversation = $existing_conv_stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($existing_conversation) {
-            // Redirect to existing conversation about this product
-            header("Location: messages.php?conversation=" . $existing_conversation['ConversationID']);
-            exit;
-        } else {
-            // Create new conversation with product context
-            $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, ProductID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, ?, NOW(), NOW())";
-            $create_conv_stmt = $conn->prepare($create_conv_query);
-            $create_conv_stmt->execute([$user_id, $target_user_id, $product_id]);
-            $new_conversation_id = $conn->lastInsertId();
-            
-            // Redirect to new conversation
-            header("Location: messages.php?conversation=" . $new_conversation_id);
-            exit;
-        }
+
+    // Find the most recent conversation with this user regardless of product
+    $existing_conv_query = "SELECT ConversationID FROM conversations 
+                           WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)
+                           ORDER BY Conv_LastMessageAt DESC LIMIT 1";
+    $existing_conv_stmt = $conn->prepare($existing_conv_query);
+    $existing_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id]);
+    $existing_conversation = $existing_conv_stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($existing_conversation) {
+        header("Location: messages.php?conversation=" . $existing_conversation['ConversationID']);
+        exit;
     } else {
-        // No product specified, find any conversation with this user
-        $existing_conv_query = "SELECT ConversationID FROM conversations 
-                               WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)
-                               ORDER BY Conv_LastMessageAt DESC LIMIT 1";
-        $existing_conv_stmt = $conn->prepare($existing_conv_query);
-        $existing_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id]);
-        $existing_conversation = $existing_conv_stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($existing_conversation) {
-            // Redirect to existing conversation
-            header("Location: messages.php?conversation=" . $existing_conversation['ConversationID']);
-            exit;
-        } else {
-            // Create new conversation without product context
-            $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, NOW(), NOW())";
-            $create_conv_stmt = $conn->prepare($create_conv_query);
-            $create_conv_stmt->execute([$user_id, $target_user_id]);
-            $new_conversation_id = $conn->lastInsertId();
-            
-            // Redirect to new conversation
-            header("Location: messages.php?conversation=" . $new_conversation_id);
-            exit;
-        }
+        // Create new conversation without product context
+        $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, NOW(), NOW())";
+        $create_conv_stmt = $conn->prepare($create_conv_query);
+        $create_conv_stmt->execute([$user_id, $target_user_id]);
+        $new_conversation_id = $conn->lastInsertId();
+        header("Location: messages.php?conversation=" . $new_conversation_id);
+        exit;
     }
 }
 
@@ -136,9 +167,10 @@ $conversation_id = isset($_GET['conversation']) ? $_GET['conversation'] : '';
 // Handle direct user_id parameter (from booking messages)
 $target_user_id = isset($_GET['user_id']) ? $_GET['user_id'] : '';
 if ($target_user_id && !$conversation_id) {
-    // Find existing conversation with this user
+    // Find latest existing conversation with this user
     $find_conv_query = "SELECT ConversationID FROM conversations 
-                        WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)";
+                        WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)
+                        ORDER BY Conv_LastMessageAt DESC LIMIT 1";
     $find_conv_stmt = $conn->prepare($find_conv_query);
     $find_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id]);
     $existing_conv = $find_conv_stmt->fetch(PDO::FETCH_ASSOC);
@@ -146,8 +178,8 @@ if ($target_user_id && !$conversation_id) {
     if ($existing_conv) {
         $conversation_id = $existing_conv['ConversationID'];
     } else {
-        // Create new conversation if none exists
-        $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt) VALUES (?, ?, NOW())";
+        // Create new conversation if none exists (no product context)
+        $create_conv_query = "INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, NOW(), NOW())";
         $create_conv_stmt = $conn->prepare($create_conv_query);
         $create_conv_stmt->execute([$user_id, $target_user_id]);
         $conversation_id = $conn->lastInsertId();
@@ -187,44 +219,112 @@ if ($conversation_id) {
     $current_conversation = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if ($current_conversation) {
-        // Get messages
+        // Determine other user id for this conversation
+        $other_user_id = ($current_conversation['User1ID'] == $user_id) ? $current_conversation['User2ID'] : $current_conversation['User1ID'];
+
+        // Get all messages across all conversations between this user pair
         $query = "SELECT m.*, u.User_Name as Sender_Name
                   FROM messages m
+                  JOIN conversations c ON c.ConversationID = m.ConversationID
                   JOIN user_accounts u ON m.SenderID = u.UserID
-                  WHERE m.ConversationID = ?
+                  WHERE ((c.User1ID = ? AND c.User2ID = ?) OR (c.User1ID = ? AND c.User2ID = ?))
                   ORDER BY m.Msg_CreatedAt ASC";
-        
         $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $conversation_id);
-        $stmt->execute();
+        $stmt->execute([$user_id, $other_user_id, $other_user_id, $user_id]);
         $conversation_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Mark messages as read (this will be handled by the API)
-        $query = "UPDATE messages SET Msg_IsRead = 1 WHERE ConversationID = ? AND SenderID != ?";
+
+        // Mark messages as read across all conversations with this user pair
+        $query = "UPDATE messages m 
+                  JOIN conversations c ON c.ConversationID = m.ConversationID
+                  SET m.Msg_IsRead = 1
+                  WHERE ((c.User1ID = ? AND c.User2ID = ?) OR (c.User1ID = ? AND c.User2ID = ?))
+                    AND m.SenderID != ?";
         $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $conversation_id);
-        $stmt->bindParam(2, $user_id);
-        $stmt->execute();
+        $stmt->execute([$user_id, $other_user_id, $other_user_id, $user_id, $user_id]);
+
+        // Determine latest conversation id between the pair for sending new messages
+        $send_conversation_id = null;
+        $latest_stmt = $conn->prepare("SELECT ConversationID FROM conversations 
+                                       WHERE ((User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?))
+                                       ORDER BY Conv_LastMessageAt DESC LIMIT 1");
+        $latest_stmt->execute([$user_id, $other_user_id, $other_user_id, $user_id]);
+        $send_conversation_id = ($latest_stmt->fetch(PDO::FETCH_ASSOC)['ConversationID'] ?? $conversation_id);
+
+        // Get the latest booking between the pair for system message rendering
+        $latest_booking = null;
+        try {
+            $book_stmt = $conn->prepare("SELECT b.BookingID, b.ProductID, p.Prod_Name, b.Book_Status,
+                                                b.Book_TotalAmount, b.Book_StartDate, b.Book_EndDate, b.Book_PickupType,
+                                                b.Book_CreatedAt, b.Book_UpdatedAt
+                                         FROM bookings b
+                                         JOIN products p ON p.ProductID = b.ProductID
+                                         WHERE ((b.OwnerID = ? AND b.RenterID = ?) OR (b.OwnerID = ? AND b.RenterID = ?))
+                                         ORDER BY b.Book_UpdatedAt DESC, b.Book_CreatedAt DESC
+                                         LIMIT 1");
+            $book_stmt->execute([$user_id, $other_user_id, $user_id, $other_user_id]);
+            $latest_booking = $book_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (Exception $e) {
+            $latest_booking = null;
+        }
+
+        // If a latest booking exists, inject a system message representing its status
+        if ($latest_booking) {
+            $status = $latest_booking['Book_Status'];
+            $statusIcon = 'info-circle';
+            $statusText = 'Booking update';
+            $statusColorClass = 'received'; // neutral gray bubble style
+            if (in_array($status, ['Confirmed','Active','In Progress','Completed'])) {
+                $statusIcon = 'check-circle';
+                $statusText = ($status === 'Confirmed' ? 'Booking accepted' : ($status === 'In Progress' ? 'Rental started' : ($status === 'Completed' ? 'Booking completed' : 'Booking active')));
+            } elseif (in_array($status, ['Cancelled','Rejected','Declined'])) {
+                $statusIcon = 'times-circle';
+                $statusText = ($status === 'Cancelled' ? 'Booking cancelled' : 'Booking rejected');
+            }
+
+            // Compose details text
+            $details = [];
+            if (!empty($latest_booking['Prod_Name'])) $details[] = 'Product: ' . $latest_booking['Prod_Name'];
+            if (!empty($latest_booking['Book_TotalAmount'])) $details[] = 'Amount: ₱' . number_format((float)$latest_booking['Book_TotalAmount'], 2);
+            if (!empty($latest_booking['Book_StartDate'])) $details[] = 'Start: ' . date('M j, Y g:i A', strtotime($latest_booking['Book_StartDate']));
+            if (!empty($latest_booking['Book_EndDate'])) $details[] = 'End: ' . date('M j, Y g:i A', strtotime($latest_booking['Book_EndDate']));
+            if (!empty($latest_booking['Book_PickupType'])) $details[] = 'Pickup: ' . $latest_booking['Book_PickupType'];
+
+            $system_text = $statusText . "\n" . implode("\n", $details);
+
+            // Create a synthetic message object using the last update time
+            $system_msg_time = $latest_booking['Book_UpdatedAt'] ?? $latest_booking['Book_CreatedAt'];
+            $system_message = [
+                'MessageID' => 'sys_' . ($latest_booking['BookingID'] ?? '0'),
+                'ConversationID' => $conversation_id,
+                'SenderID' => 0, // system
+                'Msg_Content' => $system_text,
+                'Msg_CreatedAt' => $system_msg_time,
+                'Msg_IsRead' => 1,
+                'Sender_Name' => 'System'
+            ];
+
+            // Insert system message into the correct chronological place, but visible distinctly at the end
+            $conversation_messages[] = $system_message;
+            usort($conversation_messages, function($a, $b) {
+                return strtotime($a['Msg_CreatedAt']) <=> strtotime($b['Msg_CreatedAt']);
+            });
+        }
     }
 }
 
 // Get statistics
 $stats = [];
 
-// Total conversations
+// Total conversations (distinct user pairs)
 $stats['total_conversations'] = count($conversations);
 
-// Unread messages count
-$query = "SELECT COUNT(DISTINCT c.ConversationID) as total 
-          FROM conversations c 
-          WHERE (c.User1ID = ? OR c.User2ID = ?) 
-          AND EXISTS (SELECT 1 FROM messages m WHERE m.ConversationID = c.ConversationID AND m.SenderID != ? AND m.Msg_IsRead = 0)";
-$stmt = $conn->prepare($query);
-$stmt->bindParam(1, $user_id);
-$stmt->bindParam(2, $user_id);
-$stmt->bindParam(3, $user_id);
-$stmt->execute();
-$stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+// Unread messages count (distinct user pairs with any unread) using aggregated list
+$stats['unread_conversations'] = 0;
+foreach ($conversations as $conv) {
+        if (!empty($conv['unread_count'])) {
+                $stats['unread_conversations']++;
+        }
+}
 ?>
 
 <!DOCTYPE html>
@@ -388,6 +488,14 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             color: #333;
             border-bottom-left-radius: 5px;
         }
+        .message-bubble.system {
+            margin: 1rem auto;
+            background: #f1f3f5;
+            color: #495057;
+            border-radius: 10px;
+            border: 1px dashed #ced4da;
+            max-width: 90%;
+        }
         
         .message-time {
             font-size: 0.7rem;
@@ -495,13 +603,25 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             margin-left: 0.5rem;
         }
         
-        .product-info {
-            background: rgba(17, 153, 142, 0.1);
-            border-radius: 15px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+    /* Legacy booking chip removed; booking statuses now appear as system messages in thread */
+        .booking-chip {
+            background: rgba(17, 153, 142, 0.12);
+            border-radius: 14px;
+            padding: 0.75rem 1rem;
+            margin-top: 0.75rem;
             border-left: 4px solid #11998e;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+        .booking-chip .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-weight: 600;
+            color: #0f7a70;
+        }
+        .booking-chip .product-name { font-weight: 600; }
         
         .typing-indicator {
             display: none;
@@ -800,8 +920,8 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                         </div>
                     <?php else: ?>
                         <?php foreach($conversations as $conv): ?>
-                        <a href="?conversation=<?php echo $conv['ConversationID']; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter != 'all' ? '&status=' . urlencode($status_filter) : ''; ?>"
-                           class="conversation-item <?php echo $conv['ConversationID'] == $conversation_id ? 'active' : ''; ?>">
+                                <a href="?conversation=<?php echo $conv['Latest_ConversationID']; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter != 'all' ? '&status=' . urlencode($status_filter) : ''; ?>"
+                                    class="conversation-item <?php echo ($conv['Latest_ConversationID'] == $conversation_id) ? 'active' : ''; ?>">
                             
                             <?php if($conv['unread_count'] > 0): ?>
                                 <div class="unread-badge"><?php echo $conv['unread_count']; ?></div>
@@ -823,7 +943,6 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                 
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1"><?php echo htmlspecialchars($conv['Other_User_Name']); ?></h6>
-                                    <p class="text-muted small mb-1"><?php echo htmlspecialchars($conv['Prod_Name']); ?></p>
                                     <p class="text-muted small mb-0" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                         <?php echo htmlspecialchars(substr($conv['last_message'] ?? 'No messages yet', 0, 50)); ?>
                                         <?php echo strlen($conv['last_message'] ?? '') > 50 ? '...' : ''; ?>
@@ -875,14 +994,7 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                 </div>
                             </div>
                             
-                            <?php if($current_conversation['Prod_Name']): ?>
-                            <div class="product-info mt-3">
-                                <h6 class="mb-1">
-                                    <i class="fas fa-box me-2"></i>About: <?php echo htmlspecialchars($current_conversation['Prod_Name']); ?>
-                                </h6>
-                                <p class="text-muted small mb-0">This conversation is about your rental product</p>
-                            </div>
-                            <?php endif; ?>
+                            <!-- No booking chip here; booking will be shown as system message in the thread below -->
                         </div>
 
                         <!-- Chat Messages -->
@@ -895,8 +1007,12 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                 </div>
                             <?php else: ?>
                                 <?php foreach($conversation_messages as $msg): ?>
-                                <div class="message-bubble <?php echo $msg['SenderID'] == $user_id ? 'sent' : 'received'; ?>">
+                                <?php $bubbleClass = ($msg['SenderID'] == 0) ? 'system' : (($msg['SenderID'] == $user_id) ? 'sent' : 'received'); ?>
+                                <div class="message-bubble <?php echo $bubbleClass; ?>" data-msg-id="<?php echo htmlspecialchars($msg['MessageID']); ?>" data-time="<?php echo htmlspecialchars($msg['Msg_CreatedAt']); ?>">
                                     <div class="message-content">
+                                        <?php if($msg['SenderID'] == 0): ?>
+                                            <i class="fas fa-info-circle me-1"></i>
+                                        <?php endif; ?>
                                         <?php echo nl2br(htmlspecialchars($msg['Msg_Content'])); ?>
                                     </div>
                                     <div class="message-time">
@@ -920,7 +1036,7 @@ $stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                         <!-- Chat Input -->
                         <div class="chat-input">
                             <form method="POST" class="d-flex align-items-end gap-3">
-                                <input type="hidden" name="conversation_id" value="<?php echo $current_conversation['ConversationID']; ?>">
+                                <input type="hidden" name="conversation_id" value="<?php echo isset($send_conversation_id) ? $send_conversation_id : $current_conversation['ConversationID']; ?>">
                                 
                                 <div class="flex-grow-1">
                                     <textarea class="form-control" name="message_content" rows="2" placeholder="Type your message..." required></textarea>

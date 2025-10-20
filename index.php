@@ -7,19 +7,21 @@ $database = new Database();
 $conn = $database->getConnection();
 
 // Get featured products
-$query = "SELECT p.*, pi.PI_ImagePath, c.Cat_Name, u.User_Name 
-          FROM products p 
-          LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
+$query = "SELECT p.ProductID, p.Prod_Name, p.Prod_Description, p.Prod_RentalPrice, p.Prod_PriceType, p.Prod_Availability, 
+                 c.Cat_Name, u.User_Name, pi.PI_ImagePath
+          FROM products p
           LEFT JOIN categories c ON p.CategoryID = c.CategoryID
           LEFT JOIN user_accounts u ON p.OwnerID = u.UserID
+          LEFT JOIN product_images pi ON p.ProductID = pi.ProductID AND pi.PI_IsMain = 1
           WHERE p.Prod_Status = 'Active' AND p.Prod_Availability = 1
-          ORDER BY p.Prod_CreatedAt DESC LIMIT 8";
+          ORDER BY p.Prod_CreatedAt DESC
+          LIMIT 8";
 $stmt = $conn->prepare($query);
 $stmt->execute();
 $featured_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get parent categories with their subcategory count for homepage display
-$query = "SELECT pc.*, 
+$query = "SELECT pc.ParentCategoryID, pc.Parent_Name, pc.Parent_Description, pc.Parent_Icon, pc.Parent_Color,
                  (SELECT COUNT(*) FROM categories WHERE ParentCategoryID = pc.ParentCategoryID) as category_count
           FROM parent_categories pc 
           WHERE pc.Parent_IsActive = 1 
@@ -30,7 +32,7 @@ $stmt->execute();
 $parent_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get random subcategories for additional display
-$query = "SELECT c.*, pc.Parent_Name, pc.Parent_Icon, pc.Parent_Color
+$query = "SELECT c.CategoryID, c.Cat_Name, c.Cat_Description, pc.Parent_Name, pc.Parent_Icon, pc.Parent_Color
           FROM categories c 
           JOIN parent_categories pc ON c.ParentCategoryID = pc.ParentCategoryID 
           WHERE pc.Parent_IsActive = 1
@@ -290,6 +292,22 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             box-shadow: 0 2px 20px rgba(0,0,0,0.1);
         }
 
+                /* Navbar Sign Up button look (like homepage) */
+        .navbar .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            border-radius: 25px;
+            padding: 8px 18px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            color: #fff;
+        }
+        .navbar .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            color: #fff;
+        }
+
         .dropdown-menu {
             border: none;
             border-radius: 15px;
@@ -324,61 +342,7 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-light fixed-top" id="mainNavbar">
-        <div class="container">
-            <a class="navbar-brand" href="index.php">
-                <i class="fas fa-home me-2"></i>RentHub PH
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link fw-semibold" href="browse.php">Browse Products</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link fw-semibold" href="categories.php">Categories</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link fw-semibold" href="how-it-works.php">How it Works</a>
-                    </li>
-                </ul>
-                
-                <ul class="navbar-nav">
-                    <?php if($auth->isLoggedIn()): ?>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle fw-semibold" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="fas fa-user-circle me-1"></i><?php echo htmlspecialchars($_SESSION['user_name'] ?? 'User'); ?>
-                            </a>
-                            <ul class="dropdown-menu">
-                                <?php if(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 1): ?>
-                                    <li><a class="dropdown-item" href="admin/dashboard.php"><i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard</a></li>
-                                <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 2): ?>
-                                    <li><a class="dropdown-item" href="renter/dashboard.php"><i class="fas fa-user me-2"></i>My Dashboard</a></li>
-                                <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] == 3): ?>
-                                    <li><a class="dropdown-item" href="owner/dashboard.php"><i class="fas fa-store me-2"></i>Owner Dashboard</a></li>
-                                    <li><a class="dropdown-item" href="renter/dashboard.php"><i class="fas fa-user me-2"></i>Renter Dashboard</a></li>
-                                <?php endif; ?>
-                                <li><a class="dropdown-item" href="profile.php"><i class="fas fa-cog me-2"></i>Profile Settings</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
-                            </ul>
-                        </li>
-                    <?php else: ?>
-                        <li class="nav-item">
-                            <a class="nav-link fw-semibold" href="login.php">Login</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="btn btn-primary ms-2" href="register.php">Sign Up Free</a>
-                        </li>
-                    <?php endif; ?>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <?php include 'includes/navbar-include.php'; ?>
 
     <!-- Hero Section -->
     <section class="hero-section">
@@ -424,7 +388,9 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Popular Categories Section -->
     <section class="py-5">
         <div class="container">
-            <h2 class="text-center section-title">Popular Categories</h2>
+            <div class="row mb-4">
+            <h1 class="text-center section-title">Popular Categories</h1>
+            </div>
             <div class="row">
                 <?php if(!empty($parent_categories)): ?>
                     <?php foreach($parent_categories as $index => $category): ?>
@@ -459,7 +425,7 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php if(!empty($featured_categories)): ?>
             <div class="row mt-5">
                 <div class="col-12">
-                    <h4 class="text-center mb-4">Trending Subcategories</h4>
+                    <h1 class="text-center mb-4">Trending Subcategories</h1>
                 </div>
                 <?php foreach($featured_categories as $index => $category): ?>
                 <div class="col-lg-3 col-md-6 mb-3">
@@ -482,21 +448,23 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Featured Products -->
     <section class="py-5 search-section">
         <div class="container">
-            <h2 class="text-center section-title">Featured Rental Items</h2>
+            <div class="row mb-4">
+            <h1 class="text-center section-title">Featured Rental Items</h1>
+            </div>
             <div class="row">
                 <?php if(!empty($featured_products)): ?>
                     <?php foreach($featured_products as $index => $product): ?>
-                    <div class="col-lg-3 col-md-6 mb-4">
-                        <div class="product-card h-100 animate-on-scroll" style="animation-delay: <?php echo $index * 0.1; ?>s;">
-                            <div class="position-relative overflow-hidden" style="height: 220px;">
+                    <div class="col-lg-4 col-md-6 mb-4 gap-3">
+                        <div class="product-card h-100 animate-on-scroll border border-success border-3" style="animation-delay: <?php echo $index * 0.1; ?>s;">
+                            <div class="position-relative overflow-hidden p-3" style="height: 220px;">
                                 <img src="<?php echo ($product['PI_ImagePath'] ?? null) ? htmlspecialchars($product['PI_ImagePath']) : 'assets/images/no-image.jpg'; ?>" 
-                                     class="card-img-top w-100 h-100" style="object-fit: cover;" 
+                                     class="card-img-top w-100 h-100 p-3" style="object-fit: cover;" 
                                      alt="<?php echo htmlspecialchars($product['Prod_Name'] ?? 'Unknown Product'); ?>">
                                 <div class="position-absolute top-0 end-0 m-3">
                                     <span class="badge bg-success">Available</span>
                                 </div>
                             </div>
-                            <div class="card-body">
+                            <div class="card-body p-3">
                                 <h6 class="card-title fw-bold"><?php echo htmlspecialchars(substr($product['Prod_Name'] ?? '', 0, 40)); ?><?php echo strlen($product['Prod_Name'] ?? '') > 40 ? '...' : ''; ?></h6>
                                 <p class="text-muted small mb-2">
                                     <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($product['Cat_Name'] ?? 'Uncategorized'); ?>
@@ -512,7 +480,7 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <i class="fas fa-user me-1"></i><?php echo htmlspecialchars(substr($product['User_Name'] ?? 'Unknown Owner', 0, 12)); ?>
                                     </span>
                                     <a href="product.php?id=<?php echo ($product['ProductID'] ?? 0); ?>" class="btn btn-primary btn-sm">
-                                        <i class="fas fa-eye me-1"></i>View
+                                        <i class="fas me-1"></i>View
                                     </a>
                                 </div>
                             </div>
@@ -583,69 +551,7 @@ $featured_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </section>
 
     <!-- Footer -->
-    <footer class="footer text-white py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-lg-4 mb-4">
-                    <h4 class="mb-3">
-                        <i class="fas fa-home me-2"></i>RentHub PH
-                    </h4>
-                    <p class="mb-3">The Philippines' premier rental marketplace. Connecting item owners with renters across the archipelago. Rent anything, anytime, anywhere.</p>
-                    <div class="d-flex">
-                        <a href="#" class="text-white-50 me-4 fs-5"><i class="fab fa-facebook"></i></a>
-                        <a href="#" class="text-white-50 me-4 fs-5"><i class="fab fa-instagram"></i></a>
-                        <a href="#" class="text-white-50 me-4 fs-5"><i class="fab fa-twitter"></i></a>
-                        <a href="#" class="text-white-50 fs-5"><i class="fab fa-youtube"></i></a>
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-6 mb-4">
-                    <h6 class="mb-3">Company</h6>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><a href="about.php" class="text-white-50 text-decoration-none">About RentHub PH</a></li>
-                        <li class="mb-2"><a href="contact.php" class="text-white-50 text-decoration-none">Contact Us</a></li>
-                        <li class="mb-2"><a href="careers.php" class="text-white-50 text-decoration-none">Careers</a></li>
-                        <li class="mb-2"><a href="press.php" class="text-white-50 text-decoration-none">Press & Media</a></li>
-                    </ul>
-                </div>
-                <div class="col-lg-2 col-md-6 mb-4">
-                    <h6 class="mb-3">Support</h6>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><a href="help.php" class="text-white-50 text-decoration-none">Help Center</a></li>
-                        <li class="mb-2"><a href="safety.php" class="text-white-50 text-decoration-none">Safety Guidelines</a></li>
-                        <li class="mb-2"><a href="terms.php" class="text-white-50 text-decoration-none">Terms of Service</a></li>
-                        <li class="mb-2"><a href="privacy.php" class="text-white-50 text-decoration-none">Privacy Policy</a></li>
-                    </ul>
-                </div>
-                <div class="col-lg-2 col-md-6 mb-4">
-                    <h6 class="mb-3">Community</h6>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><a href="blog.php" class="text-white-50 text-decoration-none">RentHub Blog</a></li>
-                        <li class="mb-2"><a href="forum.php" class="text-white-50 text-decoration-none">Community Forum</a></li>
-                        <li class="mb-2"><a href="events.php" class="text-white-50 text-decoration-none">Local Events</a></li>
-                        <li class="mb-2"><a href="newsletter.php" class="text-white-50 text-decoration-none">Newsletter</a></li>
-                    </ul>
-                </div>
-                <div class="col-lg-2 col-md-6 mb-4">
-                    <h6 class="mb-3">Resources</h6>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><a href="pricing.php" class="text-white-50 text-decoration-none">Pricing Guide</a></li>
-                        <li class="mb-2"><a href="insurance.php" class="text-white-50 text-decoration-none">Insurance Info</a></li>
-                        <li class="mb-2"><a href="api.php" class="text-white-50 text-decoration-none">Developer API</a></li>
-                        <li class="mb-2"><a href="mobile.php" class="text-white-50 text-decoration-none">Mobile App</a></li>
-                    </ul>
-                </div>
-            </div>
-            <hr class="my-4 opacity-25">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <p class="mb-0">&copy; 2025 RentHub PH. All rights reserved. Made with ❤️ in the Philippines.</p>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <p class="mb-0 small">Empowering Filipino communities through sharing economy</p>
-                </div>
-            </div>
-        </div>
-    </footer>
+    <?php include 'includes/footer.php'; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>

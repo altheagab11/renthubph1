@@ -12,29 +12,6 @@ $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
-// Fetch conversations for this user
-$conversations = [];
-$query = "SELECT c.*, 
-                 CASE WHEN c.User1ID = ? THEN u2.UserID ELSE u1.UserID END as other_user_id,
-                 CASE WHEN c.User1ID = ? THEN u2.User_Name ELSE u1.User_Name END as other_user_name,
-                 CASE WHEN c.User1ID = ? THEN u2.User_Phone ELSE u1.User_Phone END as other_user_phone,
-                 CASE WHEN c.User1ID = ? THEN u2.User_Photo ELSE u1.User_Photo END as other_user_photo,
-                 p.Prod_Name,
-                 (SELECT COUNT(*) FROM messages WHERE ConversationID = c.ConversationID AND SenderID != ? AND Msg_IsRead = 0) as unread_count,
-                 (SELECT Msg_Content FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message,
-                 (SELECT Msg_CreatedAt FROM messages WHERE ConversationID = c.ConversationID ORDER BY Msg_CreatedAt DESC LIMIT 1) as last_message_time
-          FROM conversations c
-          LEFT JOIN user_accounts u1 ON c.User1ID = u1.UserID
-          LEFT JOIN user_accounts u2 ON c.User2ID = u2.UserID
-          LEFT JOIN products p ON c.ProductID = p.ProductID
-          WHERE c.User1ID = ? OR c.User2ID = ?
-          ORDER BY c.Conv_LastMessageAt DESC, c.ConversationID DESC";
-$stmt = $conn->prepare($query);
-$stmt->execute([$user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $user_id]);
-$conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Get statistics
-
 // Notification dropdown logic (copied from dashboard.php)
 $notif_count = 0;
 $unread_notifications = [];
@@ -44,50 +21,153 @@ $notif_stmt->execute([$user_id]);
 $unread_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
 $notif_count = count($unread_notifications);
 
-$stats = [];
+// Conversations aggregated by user pair (single thread per user pair)
+$conversations = [];
+try {
+    $baseQuery = "
+        SELECT pairs.other_id AS Other_User_ID,
+               u.User_Name AS Other_User_Name,
+               u.User_Photo AS Other_User_Photo,
+               (
+                   SELECT m2.Msg_Content
+                   FROM messages m2
+                   JOIN conversations c2 ON c2.ConversationID = m2.ConversationID
+                   WHERE ((c2.User1ID = :uid AND c2.User2ID = pairs.other_id) OR (c2.User1ID = pairs.other_id AND c2.User2ID = :uid))
+                   ORDER BY m2.Msg_CreatedAt DESC
+                   LIMIT 1
+               ) AS last_message,
+               (
+                   SELECT m3.Msg_CreatedAt
+                   FROM messages m3
+                   JOIN conversations c3 ON c3.ConversationID = m3.ConversationID
+                   WHERE ((c3.User1ID = :uid AND c3.User2ID = pairs.other_id) OR (c3.User1ID = pairs.other_id AND c3.User2ID = :uid))
+                   ORDER BY m3.Msg_CreatedAt DESC
+                   LIMIT 1
+               ) AS last_message_time,
+               (
+                   SELECT COUNT(*) FROM messages m4
+                   JOIN conversations c4 ON c4.ConversationID = m4.ConversationID
+                   WHERE ((c4.User1ID = :uid AND c4.User2ID = pairs.other_id) OR (c4.User1ID = pairs.other_id AND c4.User2ID = :uid))
+                     AND m4.SenderID != :uid AND m4.Msg_IsRead = 0
+               ) AS unread_count,
+               (
+                   SELECT c6.ConversationID
+                   FROM conversations c6
+                   WHERE ((c6.User1ID = :uid AND c6.User2ID = pairs.other_id) OR (c6.User1ID = pairs.other_id AND c6.User2ID = :uid))
+                   ORDER BY c6.Conv_LastMessageAt DESC
+                   LIMIT 1
+               ) AS Latest_ConversationID
+        FROM (
+            SELECT DISTINCT CASE WHEN c.User1ID = :uid THEN c.User2ID ELSE c.User1ID END AS other_id
+            FROM conversations c
+            WHERE (c.User1ID = :uid OR c.User2ID = :uid)
+        ) pairs
+        JOIN user_accounts u ON u.UserID = pairs.other_id
+        ORDER BY COALESCE(last_message_time, '1970-01-01 00:00:00') DESC, Latest_ConversationID DESC
+    ";
+    $stmt = $conn->prepare($baseQuery);
+    $stmt->execute([':uid' => $user_id]);
+    $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $conversations = [];
+}
 
-// Total conversations
-$stats['total_conversations'] = count($conversations);
+// Handle user_id parameter - ensure single thread by user pair (ignore product)
+if (isset($_GET['user_id']) && !isset($_GET['conversation'])) {
+    $target_user_id = (int)$_GET['user_id'];
+    // Find latest conversation with this user regardless of product
+    $existing_conv_stmt = $conn->prepare("SELECT ConversationID FROM conversations
+        WHERE (User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?)
+        ORDER BY Conv_LastMessageAt DESC LIMIT 1");
+    $existing_conv_stmt->execute([$user_id, $target_user_id, $target_user_id, $user_id]);
+    $existing_conversation = $existing_conv_stmt->fetch(PDO::FETCH_ASSOC);
+    if ($existing_conversation) {
+        header("Location: messages.php?conversation=" . $existing_conversation['ConversationID']);
+        exit;
+    } else {
+        // Create new conversation record without product context
+        $create_conv_stmt = $conn->prepare("INSERT INTO conversations (User1ID, User2ID, Conv_CreatedAt, Conv_LastMessageAt) VALUES (?, ?, NOW(), NOW())");
+        $create_conv_stmt->execute([$user_id, $target_user_id]);
+        $new_conversation_id = $conn->lastInsertId();
+        header("Location: messages.php?conversation=" . $new_conversation_id);
+        exit;
+    }
+}
 
-// Unread messages count
-$query = "SELECT COUNT(DISTINCT c.ConversationID) as total 
-          FROM conversations c 
-          WHERE (c.User1ID = ? OR c.User2ID = ?) 
-          AND EXISTS (SELECT 1 FROM messages m WHERE m.ConversationID = c.ConversationID AND m.SenderID != ? AND m.Msg_IsRead = 0)";
-$stmt = $conn->prepare($query);
-$stmt->bindParam(1, $user_id);
-$stmt->bindParam(2, $user_id);
-$stmt->bindParam(3, $user_id);
-$stmt->execute();
-$stats['unread_conversations'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+// Determine active conversation (use latest per pair if none specified)
+$conversation_id = isset($_GET['conversation']) ? (int)$_GET['conversation'] : 0;
+if (!$conversation_id && !empty($conversations)) {
+    $conversation_id = (int)($conversations[0]['Latest_ConversationID'] ?? 0);
+}
 
-// Figure out which conversation is active
-$active_conversation_id = isset($_GET['conversation']) ? intval($_GET['conversation']) : (isset($conversations[0]['ConversationID']) ? $conversations[0]['ConversationID'] : null);
-
-// Fetch messages for active conversation
+// Fetch messages for the active user pair conversation (aggregate across all convs between the pair)
 $messages = [];
 $other_user_name = '';
+$other_user_photo = '';
 $product_name = '';
-if ($active_conversation_id) {
-    foreach ($conversations as $conv) {
-        if ($conv['ConversationID'] == $active_conversation_id) {
-            $other_user_name = $conv['other_user_name'];
-            $product_name = $conv['Prod_Name'];
-            break;
-        }
-    }
+$send_conversation_id = $conversation_id; // default to current
 
-    $stmt = $conn->prepare("SELECT m.*, u.User_Name as sender_name
-        FROM messages m
-        LEFT JOIN user_accounts u ON m.SenderID = u.UserID
-        WHERE m.ConversationID = ?
-        ORDER BY m.Msg_CreatedAt ASC");
-    $stmt->execute([$active_conversation_id]);
-    $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Mark messages as read (this will be handled by the API)
-    $stmt = $conn->prepare("UPDATE messages SET Msg_IsRead = 1 WHERE ConversationID = ? AND SenderID != ?");
-    $stmt->execute([$active_conversation_id, $user_id]);
+if ($conversation_id) {
+    // Get conversation details and other user info for this conversation id
+    $query = "SELECT c.*, 
+                     CASE WHEN c.User1ID = ? THEN u2.User_Name ELSE u1.User_Name END AS Other_User_Name,
+                     CASE WHEN c.User1ID = ? THEN u2.User_Photo ELSE u1.User_Photo END AS Other_User_Photo,
+                     p.Prod_Name
+              FROM conversations c
+              LEFT JOIN user_accounts u1 ON c.User1ID = u1.UserID
+              LEFT JOIN user_accounts u2 ON c.User2ID = u2.UserID
+              LEFT JOIN products p ON c.ProductID = p.ProductID
+              WHERE c.ConversationID = ? AND (c.User1ID = ? OR c.User2ID = ?)";
+    $stmt = $conn->prepare($query);
+    $stmt->execute([$user_id, $user_id, $conversation_id, $user_id, $user_id]);
+    $current_conversation = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($current_conversation) {
+        $other_user_name = $current_conversation['Other_User_Name'] ?? '';
+        $other_user_photo = $current_conversation['Other_User_Photo'] ?? '';
+        $product_name = $current_conversation['Prod_Name'] ?? '';
+
+        $other_user_id = ($current_conversation['User1ID'] == $user_id) ? $current_conversation['User2ID'] : $current_conversation['User1ID'];
+
+        // Fetch all messages across all conversations between the pair
+        $msgQuery = "SELECT m.*, u.User_Name as sender_name
+                     FROM messages m
+                     JOIN conversations c ON c.ConversationID = m.ConversationID
+                     JOIN user_accounts u ON u.UserID = m.SenderID
+                     WHERE ((c.User1ID = ? AND c.User2ID = ?) OR (c.User1ID = ? AND c.User2ID = ?))
+                     ORDER BY m.Msg_CreatedAt ASC";
+        $stmt = $conn->prepare($msgQuery);
+        $stmt->execute([$user_id, $other_user_id, $other_user_id, $user_id]);
+        $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Mark all messages from other user as read across the pair
+        $markQuery = "UPDATE messages m
+                      JOIN conversations c ON c.ConversationID = m.ConversationID
+                      SET m.Msg_IsRead = 1
+                      WHERE ((c.User1ID = ? AND c.User2ID = ?) OR (c.User1ID = ? AND c.User2ID = ?))
+                        AND m.SenderID != ?";
+        $stmt = $conn->prepare($markQuery);
+        $stmt->execute([$user_id, $other_user_id, $other_user_id, $user_id, $user_id]);
+
+        // Determine latest conversation id between pair for sending new messages
+        $latestStmt = $conn->prepare("SELECT ConversationID FROM conversations
+                                      WHERE ((User1ID = ? AND User2ID = ?) OR (User1ID = ? AND User2ID = ?))
+                                      ORDER BY Conv_LastMessageAt DESC LIMIT 1");
+        $latestStmt->execute([$user_id, $other_user_id, $other_user_id, $user_id]);
+        $send_conversation_id = (int)($latestStmt->fetch(PDO::FETCH_ASSOC)['ConversationID'] ?? $conversation_id);
+    } else {
+        // Access denied or not found; reset selection
+        $messages = [];
+        $conversation_id = 0;
+    }
+}
+
+// Stats using aggregated conversations
+$stats = [];
+$stats['total_conversations'] = count($conversations);
+$stats['unread_conversations'] = 0;
+foreach ($conversations as $conv) {
+    if (!empty($conv['unread_count'])) { $stats['unread_conversations']++; }
 }
 ?>
 
@@ -585,16 +665,16 @@ if ($active_conversation_id) {
                             </div>
                         <?php else: ?>
                             <?php foreach($conversations as $conv): ?>
-                            <a href="?conversation=<?php echo $conv['ConversationID']; ?>" 
-                               class="conversation-item <?php echo ($active_conversation_id == $conv['ConversationID']) ? 'active' : ''; ?>">
-                                <?php if($conv['unread_count'] > 0): ?>
-                                    <div class="unread-badge"><?php echo $conv['unread_count']; ?></div>
+                            <a href="?conversation=<?php echo $conv['Latest_ConversationID']; ?>" 
+                               class="conversation-item <?php echo ($conversation_id == (int)$conv['Latest_ConversationID']) ? 'active' : ''; ?>">
+                                <?php if((int)$conv['unread_count'] > 0): ?>
+                                    <div class="unread-badge"><?php echo (int)$conv['unread_count']; ?></div>
                                 <?php endif; ?>
                                 
                                 <div class="d-flex align-items-center">
                                     <div class="me-3">
-                                        <?php if($conv['other_user_photo']): ?>
-                                            <img src="../uploads/users/<?php echo htmlspecialchars($conv['other_user_photo']); ?>" 
+                                        <?php if(!empty($conv['Other_User_Photo'])): ?>
+                                            <img src="../uploads/users/<?php echo htmlspecialchars($conv['Other_User_Photo']); ?>" 
                                                  class="rounded-circle" style="width: 50px; height: 50px; object-fit: cover;" 
                                                  alt="User Profile">
                                         <?php else: ?>
@@ -606,18 +686,15 @@ if ($active_conversation_id) {
                                     </div>
                                     <div class="flex-grow-1">
                                         <div class="d-flex justify-content-between align-items-start mb-1">
-                                            <h6 class="mb-0"><?php echo htmlspecialchars($conv['other_user_name']); ?></h6>
+                                            <h6 class="mb-0"><?php echo htmlspecialchars($conv['Other_User_Name']); ?></h6>
                                             <small class="text-muted">
                                                 <?php 
-                                                echo $conv['last_message_time'] 
+                                                echo !empty($conv['last_message_time'])
                                                     ? date('M j', strtotime($conv['last_message_time'])) 
                                                     : '';
                                                 ?>
                                             </small>
                                         </div>
-                                        <p class="mb-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                            <?php echo htmlspecialchars($conv['Prod_Name']); ?>
-                                        </p>
                                         <p class="mb-0 small text-muted" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                             <?php echo htmlspecialchars(substr($conv['last_message'] ?? 'No messages yet', 0, 40)); ?>
                                             <?php echo strlen($conv['last_message'] ?? '') > 40 ? '...' : ''; ?>
@@ -631,23 +708,14 @@ if ($active_conversation_id) {
 
                     <!-- Chat Area -->
                     <div class="col-md-8">
-                        <?php if($active_conversation_id): ?>
+                        <?php if($conversation_id): ?>
                         <div class="chat-area">
                             <!-- Chat Header -->
                             <div class="chat-header">
                                 <div class="d-flex align-items-center">
                                     <div class="me-3">
-                                        <?php 
-                                        $current_conv = null;
-                                        foreach($conversations as $conv) {
-                                            if($conv['ConversationID'] == $active_conversation_id) {
-                                                $current_conv = $conv;
-                                                break;
-                                            }
-                                        }
-                                        ?>
-                                        <?php if($current_conv && $current_conv['other_user_photo']): ?>
-                                            <img src="../uploads/users/<?php echo htmlspecialchars($current_conv['other_user_photo']); ?>" 
+                                        <?php if(!empty($other_user_photo)): ?>
+                                            <img src="../uploads/users/<?php echo htmlspecialchars($other_user_photo); ?>" 
                                                  class="rounded-circle" style="width: 60px; height: 60px; object-fit: cover;" 
                                                  alt="User Profile">
                                         <?php else: ?>
@@ -685,7 +753,7 @@ if ($active_conversation_id) {
                                     </div>
                                 <?php else: ?>
                                     <?php foreach($messages as $msg): ?>
-                                    <div class="message-bubble <?php echo $msg['SenderID'] == $user_id ? 'sent' : 'received'; ?>">
+                                    <div class="message-bubble <?php echo $msg['SenderID'] == $user_id ? 'sent' : 'received'; ?>" data-msg-id="<?php echo (int)$msg['MessageID']; ?>" data-time="<?php echo htmlspecialchars($msg['Msg_CreatedAt']); ?>">
                                         <div class="message-content">
                                             <?php echo nl2br(htmlspecialchars($msg['Msg_Content'])); ?>
                                         </div>
@@ -710,7 +778,7 @@ if ($active_conversation_id) {
                             <!-- Chat Input -->
                             <div class="chat-input">
                                 <form method="POST" class="d-flex gap-2">
-                                    <input type="hidden" name="conversation_id" value="<?php echo $active_conversation_id; ?>">
+                                    <input type="hidden" name="conversation_id" value="<?php echo (int)$send_conversation_id; ?>">
                                     <textarea class="form-control" name="message_content" id="messageInput"
                                             rows="2" placeholder="Type your message..." required></textarea>
                                     <button type="submit" name="send_message" class="btn-send">

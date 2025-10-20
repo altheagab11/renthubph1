@@ -57,14 +57,9 @@ class RealtimeMessaging {
         
         if (!messageContent) return;
         
-        // Get conversation ID from form
-        let conversationId = this.conversationId;
-        if (!conversationId) {
-            const hiddenInput = form.querySelector('input[name="conversation_id"]');
-            if (hiddenInput && hiddenInput.value) {
-                conversationId = hiddenInput.value;
-            }
-        }
+        // Prefer latest conversation ID from form hidden input (server-calculated latest pair convo)
+        const hiddenInput = form.querySelector('input[name="conversation_id"]');
+        let conversationId = hiddenInput && hiddenInput.value ? hiddenInput.value : this.conversationId;
         
         if (!conversationId) {
             this.showAlert('Please select a conversation first', 'warning');
@@ -100,11 +95,9 @@ class RealtimeMessaging {
                 textarea.value = '';
                 textarea.style.height = 'auto';
                 
-                // Update conversation ID if needed
-                if (!this.conversationId && conversationId) {
-                    this.conversationId = conversationId;
-                    this.startPolling();
-                    this.markMessagesRead();
+                // Update conversation ID if needed (e.g., switched to latest pair conversation)
+                if (conversationId && this.conversationId !== conversationId) {
+                    this.switchConversation(conversationId, this.userId);
                 }
                 
                 // If we got the new message, display it immediately
@@ -176,7 +169,9 @@ class RealtimeMessaging {
             if (data.new_messages && data.new_messages.length > 0) {
                 console.log('Found', data.new_messages.length, 'new messages');
                 this.displayNewMessages(data.new_messages);
-                this.scrollToBottom();
+                if (force || this.isScrolledToBottom()) {
+                    this.scrollToBottom();
+                }
             }
             
             this.updateUnreadCount(data.unread_count);
@@ -196,26 +191,44 @@ class RealtimeMessaging {
         if (!chatMessages) return;
         
         let displayedCount = 0;
-        messages.forEach(message => {
-            // Simple deduplication - check if message with this ID already exists
+        // Sort incoming by created time to keep insertion stable
+        const toInsert = [...messages].sort((a, b) => new Date(a.Msg_CreatedAt) - new Date(b.Msg_CreatedAt));
+        toInsert.forEach(message => {
             const existing = chatMessages.querySelector(`[data-msg-id="${message.Msg_ID}"]`);
-            if (existing) {
-                console.log('Message already exists, skipping:', message.Msg_ID);
-                return;
-            }
-            
+            if (existing) return;
+
             const messageElement = this.createMessageElement(message);
-            chatMessages.appendChild(messageElement);
-            
-            setTimeout(() => {
-                messageElement.style.opacity = '1';
-            }, 10);
-            
+
+            // Insert in chronological order based on data-time attributes
+            const newTime = this.parseServerTimestamp(message.Msg_CreatedAt).getTime();
+            let inserted = false;
+            const children = Array.from(chatMessages.querySelectorAll('.message-bubble'));
+            for (let i = 0; i < children.length; i++) {
+                const el = children[i];
+                const timeAttr = el.getAttribute('data-time');
+                const elTime = timeAttr ? this.parseServerTimestamp(timeAttr).getTime() : 0;
+                if (newTime < elTime) {
+                    chatMessages.insertBefore(messageElement, el);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) {
+                chatMessages.appendChild(messageElement);
+            }
+
+            setTimeout(() => { messageElement.style.opacity = '1'; }, 10);
             displayedCount++;
         });
-        
-        console.log('Displayed', displayedCount, 'new messages');
-        
+
+        // Move lastCheck forward to the newest message displayed to avoid re-fetch push-ups
+        const allBubbles = chatMessages.querySelectorAll('.message-bubble');
+        if (allBubbles.length > 0) {
+            const last = allBubbles[allBubbles.length - 1];
+            const lastTime = last.getAttribute('data-time');
+            if (lastTime) this.lastCheck = lastTime;
+        }
+
         // Remove empty state
         const emptyState = chatMessages.querySelector('.empty-state, .text-center');
         if (emptyState && emptyState.textContent.includes('No messages')) {
@@ -237,6 +250,10 @@ class RealtimeMessaging {
         timeDiv.className = 'message-time';
         timeDiv.textContent = this.formatMessageTime(message.Msg_CreatedAt);
         
+        // annotate with data attributes for ordering/dedup
+        messageDiv.setAttribute('data-time', message.Msg_CreatedAt);
+        messageDiv.setAttribute('data-msg-id', message.Msg_ID);
+
         messageDiv.appendChild(contentDiv);
         messageDiv.appendChild(timeDiv);
         
@@ -254,14 +271,34 @@ class RealtimeMessaging {
     }
     
     formatMessageTime(timestamp) {
-        const date = new Date(timestamp);
-        return date.toLocaleDateString('en-US', {
+        // Handle MySQL 'YYYY-MM-DD HH:mm:ss' consistently across browsers
+        const date = this.parseServerTimestamp(timestamp);
+        return date.toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
             hour12: true
         });
+    }
+
+    // Robust parser for 'YYYY-MM-DD HH:mm:ss' -> local Date
+    parseServerTimestamp(ts) {
+        if (!ts) return new Date();
+        // If already ISO with 'T', rely on Date parsing
+        if (ts.includes('T')) {
+            const d = new Date(ts);
+            if (!isNaN(d.getTime())) return d;
+        }
+        // Expect 'YYYY-MM-DD HH:mm:ss'
+        const m = ts.match(/(\d{4})-(\d{2})-(\d{2})[\s](\d{2}):(\d{2}):(\d{2})/);
+        if (m) {
+            const [_, y, mo, d, h, mi, s] = m;
+            return new Date(parseInt(y,10), parseInt(mo,10)-1, parseInt(d,10), parseInt(h,10), parseInt(mi,10), parseInt(s,10));
+        }
+        // Fallback
+        const dflt = new Date(ts.replace(' ', 'T'));
+        return isNaN(dflt.getTime()) ? new Date() : dflt;
     }
     
     updateUnreadCount(count) {
@@ -348,7 +385,7 @@ class RealtimeMessaging {
                     }
                 }, 500);
             }
-        }, 3000);
+        }, 10000);
     }
     
     switchConversation(conversationId, userId = null) {
@@ -375,6 +412,22 @@ class RealtimeMessaging {
 // Initialize messaging when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     let conversationId = new URLSearchParams(window.location.search).get('conversation');
+    // Fallback to the latest pair conversation ID exposed in the form (server-selected)
+    const formHiddenConv = document.querySelector('input[name="conversation_id"]');
+    const latestFormConvId = formHiddenConv && formHiddenConv.value ? formHiddenConv.value : null;
+    if (!conversationId && latestFormConvId) {
+        conversationId = latestFormConvId;
+        // Normalize URL so polling logic and reloads are in sync
+        const url = new URL(window.location.href);
+        url.searchParams.set('conversation', conversationId);
+        window.history.replaceState({}, '', url.toString());
+    } else if (conversationId && latestFormConvId && conversationId !== latestFormConvId) {
+        // Prefer latest conversation for the pair to keep both sides in sync
+        conversationId = latestFormConvId;
+        const url = new URL(window.location.href);
+        url.searchParams.set('conversation', conversationId);
+        window.history.replaceState({}, '', url.toString());
+    }
     const userIdElement = document.querySelector('meta[name="user-id"]') || 
                          document.querySelector('[data-user-id]');
     const userId = userIdElement ? 

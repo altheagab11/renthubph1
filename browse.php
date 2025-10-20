@@ -122,10 +122,42 @@ $popular_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             --warning-gradient: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
         }
         
+        /* Navbar look aligned with homepage */
         .navbar {
+            transition: all 0.3s ease;
             background: rgba(255,255,255,0.95) !important;
             backdrop-filter: blur(10px);
+        }
+        .navbar.scrolled {
             box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.8rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .dropdown-menu {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        /* Navbar Sign Up button look (like homepage) */
+        .navbar .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            border-radius: 25px;
+            padding: 8px 18px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            color: #fff;
+        }
+        .navbar .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            color: #fff;
         }
         
         .browse-header {
@@ -418,59 +450,7 @@ $popular_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-light fixed-top">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="index.php">
-                <i class="fas fa-home text-success me-2"></i>RentHub PH
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active fw-semibold" href="browse.php">Browse</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="categories.php">Categories</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="about.php">About</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="contact.php">Contact</a>
-                    </li>
-                </ul>
-                
-                <div class="d-flex align-items-center">
-                    <?php if(isset($_SESSION['user_id'])): ?>
-                        <div class="dropdown me-3">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="fas fa-user-circle me-1"></i><?php echo $_SESSION['user_name']; ?>
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="renter/dashboard.php">
-                                    <i class="fas fa-search me-2"></i>Renter Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="owner/dashboard.php">
-                                    <i class="fas fa-home me-2"></i>Owner Dashboard
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="logout.php">
-                                    <i class="fas fa-sign-out-alt me-2"></i>Logout
-                                </a></li>
-                            </ul>
-                        </div>
-                    <?php else: ?>
-                        <a href="login.php" class="btn btn-outline-primary me-2" style="border-radius: 20px;">Login</a>
-                        <a href="register.php" class="btn btn-primary" style="border-radius: 20px;">Sign Up</a>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <?php include_once __DIR__ . '/includes/navbar-include.php'; ?>
 
     <!-- Browse Header -->
     <div class="browse-header mt-5">
@@ -793,58 +773,20 @@ $popular_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <!-- Footer -->
-    <footer class="bg-dark text-white py-5 mt-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-4 mb-4">
-                    <h5 class="fw-bold mb-3">
-                        <i class="fas fa-home text-success me-2"></i>RentHub PH
-                    </h5>
-                    <p class="text-light">Your trusted platform for renting quality products across the Philippines.</p>
-                </div>
-                <div class="col-md-2 mb-4">
-                    <h6 class="fw-bold mb-3">Quick Links</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="browse.php" class="text-light">Browse</a></li>
-                        <li><a href="categories.php" class="text-light">Categories</a></li>
-                        <li><a href="about.php" class="text-light">About</a></li>
-                        <li><a href="contact.php" class="text-light">Contact</a></li>
-                    </ul>
-                </div>
-                <div class="col-md-3 mb-4">
-                    <h6 class="fw-bold mb-3">For Owners</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="owner/dashboard.php" class="text-light">Owner Dashboard</a></li>
-                        <li><a href="owner/add-product.php" class="text-light">List Your Product</a></li>
-                        <li><a href="owner/earnings.php" class="text-light">Earnings</a></li>
-                    </ul>
-                </div>
-                <div class="col-md-3 mb-4">
-                    <h6 class="fw-bold mb-3">For Renters</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="renter/dashboard.php" class="text-light">Renter Dashboard</a></li>
-                        <li><a href="renter/bookings.php" class="text-light">My Bookings</a></li>
-                        <li><a href="renter/favorites.php" class="text-light">Favorites</a></li>
-                    </ul>
-                </div>
-            </div>
-            <hr class="my-4">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <p class="mb-0">&copy; 2025 RentHub PH. All rights reserved.</p>
-                </div>
-                <div class="col-md-6 text-end">
-                    <a href="#" class="text-light me-3"><i class="fab fa-facebook"></i></a>
-                    <a href="#" class="text-light me-3"><i class="fab fa-twitter"></i></a>
-                    <a href="#" class="text-light me-3"><i class="fab fa-instagram"></i></a>
-                    <a href="#" class="text-light"><i class="fab fa-linkedin"></i></a>
-                </div>
-            </div>
-        </div>
-    </footer>
+    <?php include 'includes/footer.php'; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Navbar scroll effect to match homepage
+        window.addEventListener('scroll', function() {
+            const navbar = document.getElementById('mainNavbar');
+            if (!navbar) return;
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+        });
         // Auto-submit search form on enter
         document.querySelector('input[name="search"]').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
