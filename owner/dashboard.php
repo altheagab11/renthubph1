@@ -10,6 +10,10 @@ $conn = $database->getConnection();
 
 $user_id = $_SESSION['user_id'];
 
+// Auto-cancel expired bookings
+require_once __DIR__ . '/../includes/auto_cancel_bookings.php';
+autoCancelExpiredBookings();
+
 // Check for upgrade success message
 $upgrade_message = '';
 if (isset($_GET['upgraded']) && $_GET['upgraded'] == '1') {

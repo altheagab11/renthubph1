@@ -10,6 +10,10 @@ $conn = $database->getConnection();
 
 $user_id = $_SESSION['user_id'];
 
+// Auto-cancel expired bookings
+require_once '../includes/auto_cancel_bookings.php';
+autoCancelExpiredBookings();
+
 // Get unread notifications for the renter
 $notif_count = 0;
 $unread_notifications = [];

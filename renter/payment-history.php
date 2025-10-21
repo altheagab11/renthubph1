@@ -292,9 +292,7 @@ if ($payments_table_exists) {
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        .action-btn.download { background: var(--secondary-gradient); color: white; }
         .action-btn.view { background: var(--secondary-gradient); color: white; }
-        .action-btn.refund { background: var(--secondary-gradient); color: white; }
         
         .navbar {
             border-bottom: 1px solid #e9ecef;
@@ -775,7 +773,7 @@ if ($payments_table_exists) {
                 </div>
             <?php else: ?>
                 <?php foreach($payments as $payment): ?>
-                <div class="payment-card card <?php echo !$payments_table_exists ? 'sample' : ''; ?> <?php echo strtolower($payment['Pay_Status']); ?>">
+                <div class="payment-card card <?php echo !$payments_table_exists ? 'sample' : ''; ?> <?php echo strtolower($payment['Pay_Status']); ?>" data-payment-id="<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>">
                     <div class="payment-status">
                         <span class="badge status-badge <?php echo strtolower($payment['Pay_Status']); ?>">
                             <?php echo htmlspecialchars($payment['Pay_Status']); ?>
@@ -866,23 +864,6 @@ if ($payments_table_exists) {
                                     </div>
                                     
                                     <div class="d-flex flex-column gap-2 mt-3">
-                                        <?php if($payments_table_exists): ?>
-                                        <button class="btn action-btn download" onclick="downloadReceipt(<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>)">
-                                            <i class="fas fa-download me-1"></i>Receipt
-                                        </button>
-                                        <?php else: ?>
-                                        <button class="btn action-btn download" disabled>
-                                            <i class="fas fa-database me-1"></i>Demo Mode
-                                        </button>
-                                        <?php endif; ?>
-                                        
-                                        
-                                        <?php if($payment['Pay_Status'] == 'Completed'): ?>
-                                        <button class="btn action-btn refund" onclick="requestRefund(<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>)">
-                                            <i class="fas fa-undo me-1"></i>Request Refund
-                                        </button>
-                                        <?php endif; ?>
-                                        
                                         <button class="btn btn-outline-secondary btn-sm" onclick="viewDetails(<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>)" style="border-radius: 15px;">
                                             <i class="fas fa-info me-1"></i>Details
                                         </button>
@@ -917,6 +898,35 @@ if ($payments_table_exists) {
         </div>
     </div>
 
+    <!-- Payment Details Modal -->
+    <div class="modal fade" id="paymentDetailsModal" tabindex="-1" aria-labelledby="paymentDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paymentDetailsModalLabel">
+                        <i class="fas fa-receipt me-2"></i>Payment Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="paymentDetailsContent">
+                    <!-- Payment details will be loaded here -->
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading payment details...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="downloadReceiptFromModal()">
+                        <i class="fas fa-download me-1"></i>Download Receipt
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.all.min.js"></script>
     <script>
@@ -925,74 +935,245 @@ if ($payments_table_exists) {
             document.querySelector('.sidebar').classList.toggle('show');
         });
 
+        // Global variable to store current payment ID for receipt download
+        let currentPaymentId = null;
+
         // Download receipt function
         function downloadReceipt(paymentId) {
             if (paymentId) {
-                window.open('download-receipt.php?payment_id=' + paymentId, '_blank');
+                // Check if we're in demo mode (no real payments table)
+                <?php if (!$payments_table_exists): ?>
+                alert('Receipt download is not available in demo mode. This feature will be available when the payment system is fully configured.');
+                return;
+                <?php endif; ?>
+                
+                // Open receipt in new window
+                const receiptWindow = window.open('download-receipt.php?payment_id=' + paymentId, '_blank');
+                
+                // Check if window was blocked or failed to open
+                if (!receiptWindow || receiptWindow.closed || typeof receiptWindow.closed == 'undefined') {
+                    alert('Unable to open receipt. Please check if pop-ups are blocked in your browser.');
+                }
             } else {
-                alert('Receipt download feature will be available when payment system is fully configured.');
+                alert('Unable to download receipt. Payment ID not found.');
             }
-        }
-
-        // Request refund function
-        function requestRefund(paymentId) {
-            Swal.fire({
-                title: 'Request Refund?',
-                text: 'Are you sure you want to request a refund for this payment? Once submitted, this request will be reviewed by our team.',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Yes, request refund',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Get product name from the row (assumes product name is available in payment object)
-                    var productName = '';
-                    var btn = event.target;
-                    var parent = btn.closest('.actions, .row, .card');
-                    if (parent) {
-                        var prodElem = parent.querySelector('.product-name');
-                    if (prodElem) productName = prodElem.textContent.trim();
-                }
-                // Fallback: try to get from PHP variable if available
-                if (!productName && window.paymentProductName) productName = window.paymentProductName;
-                fetch('../api/request-refund.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'payment_id=' + encodeURIComponent(paymentId) + '&product_name=' + encodeURIComponent(productName)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        Swal.fire(
-                            'Request Sent!',
-                            'Refund request sent successfully. The owner has been notified.',
-                            'success'
-                        );
-                    } else {
-                        Swal.fire(
-                            'Error!',
-                            'Error: ' + data.message,
-                            'error'
-                        );
-                    }
-                })
-                .catch(() => {
-                    Swal.fire(
-                        'Error!',
-                        'Failed to send refund request.',
-                        'error'
-                    );
-                });
-                }
-            });
         }
 
         // View payment details
         function viewDetails(paymentId) {
-            alert('Viewing details for payment ID: ' + paymentId);
-            // Implementation for payment details modal
+            currentPaymentId = paymentId;
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('paymentDetailsModal'));
+            modal.show();
+            
+            // Reset modal content to loading state
+            document.getElementById('paymentDetailsContent').innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading payment details...</p>
+                </div>
+            `;
+            
+            // Find payment data from the existing page data
+            const paymentCard = document.querySelector(`[data-payment-id="${paymentId}"]`);
+            let paymentData = null;
+            
+            if (paymentCard) {
+                paymentData = extractPaymentDataFromCard(paymentCard);
+            }
+            
+            if (paymentData) {
+                displayPaymentDetails(paymentData);
+            } else {
+                // Fallback: show error message
+                document.getElementById('paymentDetailsContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Unable to load payment details. Please try again.
+                    </div>
+                `;
+            }
+        }
+
+        // Extract payment data from card element
+        function extractPaymentDataFromCard(card) {
+            try {
+                const productName = card.querySelector('h5')?.textContent?.trim() || 'N/A';
+                const ownerElement = card.querySelector('h6');
+                const ownerName = ownerElement ? ownerElement.textContent.replace('Paid to ', '').trim() : 'N/A';
+                const paymentAmount = card.querySelector('.amount-display h3')?.textContent?.trim() || 'N/A';
+                const paymentDateElement = card.querySelector('.payment-info small');
+                const paymentDate = paymentDateElement ? paymentDateElement.textContent.trim() : 'N/A';
+                const paymentStatus = card.querySelector('.status-badge')?.textContent?.trim() || 'N/A';
+                
+                // Extract more details from the payment details section
+                const transactionId = card.querySelector('.transaction-id')?.textContent?.trim() || 'N/A';
+                const paymentMethod = card.querySelector('.payment-method')?.textContent?.trim() || 'N/A';
+                
+                // Extract rental period and booking ID
+                const rentalPeriodElement = card.querySelector('.payment-details .row:nth-of-type(2) .col-6:first-child small');
+                const rentalPeriod = rentalPeriodElement ? rentalPeriodElement.textContent.trim() : 'N/A';
+                
+                const bookingIdElement = card.querySelector('.payment-details .row:nth-of-type(2) .col-6:last-child small');
+                const bookingId = bookingIdElement ? bookingIdElement.textContent.trim() : 'N/A';
+                
+                // Extract timeline information
+                const initiatedElement = card.querySelector('.timeline-item:first-child small:last-child');
+                const initiatedDate = initiatedElement ? initiatedElement.textContent.trim() : paymentDate;
+                
+                const completedElement = card.querySelector('.timeline-item:last-child small:last-child');
+                const completedDate = completedElement ? completedElement.textContent.trim() : (paymentStatus === 'Completed' ? paymentDate : 'N/A');
+                
+                return {
+                    productName,
+                    ownerName,
+                    paymentAmount,
+                    paymentDate,
+                    paymentStatus,
+                    transactionId,
+                    paymentMethod,
+                    rentalPeriod,
+                    bookingId,
+                    initiatedDate,
+                    completedDate
+                };
+            } catch (error) {
+                console.error('Error extracting payment data:', error);
+                return null;
+            }
+        }
+
+        // Display payment details in modal
+        function displayPaymentDetails(data) {
+            const content = `
+                <div class="payment-details-container">
+                    <!-- Payment Header -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="payment-header p-3 bg-light rounded">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <h6 class="mb-1 fw-bold">${data.productName}</h6>
+                                        <p class="mb-0 text-muted">
+                                            <i class="fas fa-user me-1"></i>Paid to: ${data.ownerName}
+                                        </p>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <h4 class="mb-0 text-primary">${data.paymentAmount}</h4>
+                                        <span class="badge bg-success">${data.paymentStatus}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Information -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title text-primary">
+                                        <i class="fas fa-credit-card me-2"></i>Payment Information
+                                    </h6>
+                                    <div class="payment-info">
+                                        <div class="info-row">
+                                            <strong>Transaction ID:</strong>
+                                            <span class="text-muted">${data.transactionId}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <strong>Payment Method:</strong>
+                                            <span class="text-muted">${data.paymentMethod}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <strong>Initiated:</strong>
+                                            <span class="text-muted">${data.initiatedDate}</span>
+                                        </div>
+                                        ${data.completedDate !== 'N/A' ? `
+                                        <div class="info-row">
+                                            <strong>Completed:</strong>
+                                            <span class="text-muted">${data.completedDate}</span>
+                                        </div>
+                                        ` : ''}
+                                        <div class="info-row">
+                                            <strong>Status:</strong>
+                                            <span class="badge bg-success">${data.paymentStatus}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title text-primary">
+                                        <i class="fas fa-calendar me-2"></i>Booking Information
+                                    </h6>
+                                    <div class="booking-info">
+                                        <div class="info-row">
+                                            <strong>Booking ID:</strong>
+                                            <span class="text-muted">${data.bookingId}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <strong>Rental Period:</strong>
+                                            <span class="text-muted">${data.rentalPeriod}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <strong>Product:</strong>
+                                            <span class="text-muted">${data.productName}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <strong>Owner:</strong>
+                                            <span class="text-muted">${data.ownerName}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Notes -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Note:</strong> This payment has been successfully processed. 
+                                If you have any questions or concerns, please contact our support team.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                    .payment-details-container .info-row {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 0.5rem 0;
+                        border-bottom: 1px solid #f1f3f4;
+                    }
+                    .payment-details-container .info-row:last-child {
+                        border-bottom: none;
+                    }
+                    .payment-header {
+                        border-left: 4px solid #007bff;
+                    }
+                </style>
+            `;
+            
+            document.getElementById('paymentDetailsContent').innerHTML = content;
+        }
+
+        // Download receipt from modal
+        function downloadReceiptFromModal() {
+            if (currentPaymentId) {
+                downloadReceipt(currentPaymentId);
+            } else {
+                alert('Unable to download receipt. Please try again.');
+            }
         }
 
         // Export functions

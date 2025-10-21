@@ -282,6 +282,66 @@ $sort_options = [
 
 $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'b.Book_CreatedAt DESC';
 
+// Auto-cancel expired pending bookings for this owner's products
+$current_date = date('Y-m-d H:i:s');
+$auto_cancel_query = "UPDATE bookings b
+                      JOIN products p ON b.ProductID = p.ProductID
+                      SET b.Book_Status = 'Cancelled', 
+                          b.Book_UpdatedAt = NOW() 
+                      WHERE b.Book_Status = 'Pending' 
+                      AND b.Book_StartDate < ? 
+                      AND p.OwnerID = ?";
+$auto_cancel_stmt = $conn->prepare($auto_cancel_query);
+$auto_cancel_stmt->execute([$current_date, $user_id]);
+
+// Check if any bookings were auto-cancelled and create notifications
+$cancelled_count = $auto_cancel_stmt->rowCount();
+if ($cancelled_count > 0) {
+    // Get the cancelled bookings to create notifications
+    $cancelled_bookings_query = "SELECT b.BookingID, b.ProductID, b.RenterID, p.Prod_Name, u.User_Name as Renter_Name
+                                FROM bookings b 
+                                JOIN products p ON b.ProductID = p.ProductID 
+                                JOIN user_accounts u ON b.RenterID = u.UserID
+                                WHERE b.Book_Status = 'Cancelled' 
+                                AND b.Book_StartDate < ? 
+                                AND p.OwnerID = ? 
+                                AND b.Book_UpdatedAt >= DATE_SUB(NOW(), INTERVAL 1 MINUTE)";
+    $cancelled_stmt = $conn->prepare($cancelled_bookings_query);
+    $cancelled_stmt->execute([$current_date, $user_id]);
+    $cancelled_bookings = $cancelled_stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Create notifications for each cancelled booking
+    foreach ($cancelled_bookings as $cancelled_booking) {
+        // Notification for renter
+        $renter_notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_CreatedAt) 
+                               VALUES (?, 'booking_cancelled', ?, ?, NOW())";
+        $renter_notif_stmt = $conn->prepare($renter_notif_query);
+        $renter_notif_stmt->execute([
+            $cancelled_booking['RenterID'],
+            'Booking Automatically Cancelled',
+            'Your booking for "' . $cancelled_booking['Prod_Name'] . '" was automatically cancelled because the start date has passed without approval.'
+        ]);
+        
+        // Notification for owner
+        $owner_notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_CreatedAt) 
+                              VALUES (?, 'booking_expired', ?, ?, NOW())";
+        $owner_notif_stmt = $conn->prepare($owner_notif_query);
+        $owner_notif_stmt->execute([
+            $user_id,
+            'Booking Request Expired',
+            'A booking request from ' . $cancelled_booking['Renter_Name'] . ' for "' . $cancelled_booking['Prod_Name'] . '" has been automatically cancelled due to expired start date.'
+        ]);
+    }
+    
+    // Set message for user
+    if ($cancelled_count == 1) {
+        $message = "1 booking request was automatically cancelled because the start date has passed.";
+    } else {
+        $message = "$cancelled_count booking requests were automatically cancelled because their start dates have passed.";
+    }
+    $message_type = "warning";
+}
+
 // Get bookings
 $query = "SELECT b.*, p.Prod_Name, p.Prod_RentalPrice, p.Prod_PriceType, 
           pi.PI_ImagePath, u.User_Name as Renter_Name, u.User_Phone as Renter_Phone,
