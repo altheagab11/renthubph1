@@ -130,11 +130,10 @@ class Auth {
     }
     
     private function getBaseUrl() {
-        // Determine the base URL based on current script location
-        $scriptName = $_SERVER['SCRIPT_NAME'];
-        $baseUrl = '';
-// (Removed duplicate standalone functions; now handled inside Auth class)
-
+        // For local development, return the project root
+        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'];
+        return $protocol . '://' . $host . '/renthub_ph';
     }
 }
 ?> 
