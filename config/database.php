@@ -1,8 +1,8 @@
 <?php
 class Database {
     private $host = "mysql.hostinger.com";
-    private $db_name = "renthub";
-    private $username = "renthub";
+    private $db_name = "u689218423_renthub";
+    private $username = "u689218423_renthub";
     private $password = "@Renthub12345";
     public $conn;
 
