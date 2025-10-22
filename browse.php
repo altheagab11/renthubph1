@@ -163,7 +163,7 @@ $popular_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .browse-header {
             background: var(--primary-gradient);
             color: white;
-            padding: 4rem 0 2rem;
+            padding: 4rem 0 5rem;
             position: relative;
             overflow: hidden;
         }
@@ -446,6 +446,106 @@ $popular_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 height: 200px;
             }
         }
+        
+        /* Featured Products Styles */
+        .featured-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 30px;
+            padding: 4rem 2rem;
+            margin: 3rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .featured-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            background: linear-gradient(45deg, rgba(17, 153, 142, 0.1), rgba(38, 198, 218, 0.1));
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .featured-card {
+            position: relative;
+            z-index: 2;
+            background: white;
+            border: none;
+            border-radius: 25px;
+            overflow: hidden;
+            transition: all 0.4s ease;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .featured-card:hover {
+            transform: translateY(-15px);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.2);
+        }
+        
+        .featured-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #ffd700, #ffb347);
+            color: #333;
+            border-radius: 25px;
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            z-index: 3;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+        }
+        
+        .featured-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(17, 153, 142, 0.1), rgba(38, 198, 218, 0.1));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .featured-card:hover .featured-overlay {
+            opacity: 1;
+        }
+        
+        .featured-card .card-img-top {
+            height: 280px;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+        }
+        
+        .featured-card:hover .card-img-top {
+            transform: scale(1.05);
+        }
+        
+        .featured-card .price-tag {
+            background: linear-gradient(135deg, #11998e, #26c6da);
+            border-radius: 20px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+        }
+        
+        .featured-card .owner-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -532,31 +632,40 @@ $popular_categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <!-- Featured Products -->
     <?php if(!empty($featured_products) && empty($search) && empty($category_filter)): ?>
-    <div class="container">
+    <div class="container my-5">
         <div class="featured-section">
-            <h3 class="text-center mb-4">
-                <i class="fas fa-star text-warning me-2"></i>Featured Products
-            </h3>
-            <div class="row">
-                <?php foreach(array_slice($featured_products, 0, 6) as $product): ?>
-                <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
-                    <div class="card product-card h-100">
+            <div class="text-center mb-5">
+                <h2 class="display-6 fw-bold mb-3">
+                    <i class="fas fa-star text-warning me-2"></i>Featured Products
+                </h2>
+                <p class="text-muted fs-5">Discover our handpicked premium rental items</p>
+            </div>
+            <div class="row g-4">
+                <?php foreach(array_slice($featured_products, 0, 6) as $index => $product): ?>
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="card product-card h-100 featured-card">
                         <div class="position-relative">
                             <img src="<?php echo $product['PI_ImagePath'] ? htmlspecialchars($product['PI_ImagePath']) : 'assets/images/no-image.jpg'; ?>" 
                                  class="card-img-top" alt="<?php echo htmlspecialchars($product['Prod_Name']); ?>">
-                            <div class="product-badge">Featured</div>
-                        </div>
-                        <div class="card-body p-3">
-                            <h6 class="card-title mb-2"><?php echo htmlspecialchars(substr($product['Prod_Name'], 0, 30)); ?>...</h6>
-                            <div class="price-tag mb-2">
-                                ₱<?php echo number_format($product['Prod_RentalPrice'], 0); ?>
-                                <small>/<?php echo htmlspecialchars($product['Prod_PriceType']); ?></small>
+                            <div class="product-badge featured-badge">
+                                <i class="fas fa-crown me-1"></i>Featured
                             </div>
-                            <div class="owner-info">
-                                <div class="owner-avatar">
+                            <div class="featured-overlay"></div>
+                        </div>
+                        <div class="card-body p-4">
+                            <h5 class="card-title mb-2 fw-bold"><?php echo htmlspecialchars($product['Prod_Name']); ?></h5>
+                            <div class="price-tag mb-3">
+                                ₱<?php echo number_format($product['Prod_RentalPrice'], 0); ?>
+                                <small class="text-white-50">/<?php echo htmlspecialchars($product['Prod_PriceType']); ?></small>
+                            </div>
+                            <div class="owner-info d-flex align-items-center">
+                                <div class="owner-avatar me-2">
                                     <?php echo strtoupper(substr($product['Owner_Name'], 0, 1)); ?>
                                 </div>
-                                <small class="text-muted"><?php echo htmlspecialchars($product['Owner_Name']); ?></small>
+                                <div>
+                                    <small class="text-muted d-block">Owner</small>
+                                    <small class="fw-semibold"><?php echo htmlspecialchars($product['Owner_Name']); ?></small>
+                                </div>
                             </div>
                         </div>
                     </div>

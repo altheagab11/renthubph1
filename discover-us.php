@@ -34,43 +34,27 @@ $stmt = $conn->prepare($query);
 $stmt->execute();
 $stats['cities_served'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Get recent testimonials (if reviews table exists)
-$testimonials = [];
-try {
-    $query = "SELECT r.Rev_Comment, r.Rev_Rating, u.User_Name, p.Prod_Name
-              FROM reviews r
-              JOIN bookings b ON r.BookingID = b.BookingID
-              JOIN user_accounts u ON b.RenterID = u.UserID
-              JOIN products prod ON b.ProductID = prod.ProductID
-              WHERE r.Rev_Rating >= 4 AND LENGTH(r.Rev_Comment) > 50
-              ORDER BY r.Rev_CreatedAt DESC
-              LIMIT 6";
-    $stmt = $conn->prepare($query);
-    $stmt->execute();
-    $testimonials = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    // Reviews table might not exist, use sample testimonials
-    $testimonials = [
-        [
-            'Rev_Comment' => 'Amazing platform! Found exactly what I needed for my event. The owner was very helpful and the product was in perfect condition.',
-            'Rev_Rating' => 5,
-            'User_Name' => 'Maria Santos',
-            'Prod_Name' => 'Professional Camera'
-        ],
-        [
-            'Rev_Comment' => 'Great experience renting sports equipment. Easy booking process and fair pricing. Will definitely use again!',
-            'Rev_Rating' => 5,
-            'User_Name' => 'John Dela Cruz',
-            'Prod_Name' => 'Mountain Bike'
-        ],
-        [
-            'Rev_Comment' => 'RentHub PH made it so convenient to find tools for my home project. Saved me money instead of buying expensive equipment.',
-            'Rev_Rating' => 4,
-            'User_Name' => 'Ana Reyes',
-            'Prod_Name' => 'Power Tools Set'
-        ]
-    ];
-}
+// Sample testimonials - can be replaced with real database reviews later
+$testimonials = [
+    [
+        'Rev_Comment' => 'Amazing platform! Found exactly what I needed for my event. The owner was very helpful and the product was in perfect condition.',
+        'Rev_Rating' => 5,
+        'User_Name' => 'Maria Santos',
+        'Prod_Name' => 'Professional Camera'
+    ],
+    [
+        'Rev_Comment' => 'Great experience renting sports equipment. Easy booking process and fair pricing. Will definitely use again!',
+        'Rev_Rating' => 5,
+        'User_Name' => 'John Dela Cruz',
+        'Prod_Name' => 'Mountain Bike'
+    ],
+    [
+        'Rev_Comment' => 'RentHub PH made it so convenient to find tools for my home project. Saved me money instead of buying expensive equipment.',
+        'Rev_Rating' => 4,
+        'User_Name' => 'Ana Reyes',
+        'Prod_Name' => 'Power Tools Set'
+    ]
+];
 
 // Handle contact form submission from contact.php
 $message = '';
@@ -755,15 +739,6 @@ $contact_info = [
             color: white;
         }
         
-        .emergency-contact {
-            background: var(--accent-gradient);
-            color: white;
-            border-radius: 20px;
-            padding: 2rem;
-            text-align: center;
-            margin-top: 2rem;
-        }
-        
         .map-section {
             background: white;
             border-radius: 20px;
@@ -1190,152 +1165,6 @@ $contact_info = [
                 </div>
             </div>
         </section>
-
-        <!-- Contact Section from contact.php -->
-        <div id="contact" class="contact-header border rounded-4 mt-5">
-            <div class="container">
-                <div class="contact-content text-center">
-                    <h1 class="display-5 fw-bold mb-4">Get in Touch</h1>
-                    <p class="lead mb-5 opacity-90">
-                        Have questions or need assistance? We're here to help you with all your rental needs.
-                    </p>
-                    <div class="row justify-content-center">
-                        <div class="col-md-8">
-                            <div class="response-guarantee">
-                                <h5 class="mb-2">
-                                    <i class="fas fa-clock me-2"></i>24-Hour Response Guarantee
-                                </h5>
-                                <p class="mb-0 opacity-90">We respond to all inquiries within 24 hours, guaranteed!</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="container">
-            <div class="contact-form-section">
-                <?php if($message): ?>
-                <div class="alert alert-<?php echo $message_type; ?> alert-dismissible fade show" role="alert" style="border-radius: 15px;">
-                    <i class="fas fa-<?php echo $message_type == 'success' ? 'check-circle' : ($message_type == 'danger' ? 'exclamation-triangle' : 'info-circle'); ?> me-2"></i>
-                    <?php echo $message; ?>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-                <?php endif; ?>
-
-                <div class="row">
-                    <div class="col-lg-8">
-                        <div class="section-header text-start">
-                            <h2 class="h3 fw-bold">Send us a Message</h2>
-                            <p class="text-muted">Fill out the form below and we'll get back to you as soon as possible.</p>
-                        </div>
-
-                        <form method="POST">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="name" class="form-label">
-                                        Full Name <span class="text-danger">*</span>
-                                    </label>
-                                    <input type="text" class="form-control" id="name" name="name" required
-                                           value="<?php echo isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : ''; ?>">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="email" class="form-label">
-                                        Email Address <span class="text-danger">*</span>
-                                    </label>
-                                    <input type="email" class="form-control" id="email" name="email" required>
-                                </div>
-                            </div>
-
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="contact_type" class="form-label">
-                                        Type of Inquiry <span class="text-danger">*</span>
-                                    </label>
-                                    <select class="form-select" id="contact_type" name="contact_type" required>
-                                        <option value="">Select inquiry type</option>
-                                        <option value="general">General Question</option>
-                                        <option value="support">Technical Support</option>
-                                        <option value="billing">Billing & Payments</option>
-                                        <option value="partnership">Business Partnership</option>
-                                        <option value="report">Report an Issue</option>
-                                        <option value="feedback">Feedback & Suggestions</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="subject" class="form-label">
-                                        Subject <span class="text-danger">*</span>
-                                    </label>
-                                    <input type="text" class="form-control" id="subject" name="subject" required
-                                           placeholder="Brief description of your inquiry">
-                                </div>
-                            </div>
-
-                            <div class="mb-4">
-                                <label for="message" class="form-label">
-                                    Message <span class="text-danger">*</span>
-                                </label>
-                                <textarea class="form-control form-textarea" id="message" name="message" rows="6" required
-                                          placeholder="Please provide detailed information about your inquiry..."></textarea>
-                                <div class="form-text">Minimum 10 characters required</div>
-                            </div>
-
-                            <div class="text-center">
-                                <button type="submit" name="send_message" class="btn btn-send btn-lg">
-                                    <i class="fas fa-paper-plane me-2"></i>Send Message
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <div class="col-lg-4">
-                        <div class="contact-info-card">
-                            <h5 class="fw-bold mb-3 text-primary">
-                                <i class="fas fa-info-circle me-2"></i>Contact Information
-                            </h5>
-
-                            <div class="mb-3">
-                                <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-phone text-primary me-2"></i>
-                                    <strong>Phone:</strong>
-                                </div>
-                                <a href="tel:<?php echo $contact_info['phone']; ?>" class="text-decoration-none">
-                                    <?php echo $contact_info['phone']; ?>
-                                </a>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-envelope text-primary me-2"></i>
-                                    <strong>Email:</strong>
-                                </div>
-                                <a href="mailto:<?php echo $contact_info['email']; ?>" class="text-decoration-none">
-                                    <?php echo $contact_info['email']; ?>
-                                </a>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-map-marker-alt text-primary me-2"></i>
-                                    <strong>Location:</strong>
-                                </div>
-                                <p class="mb-0"><?php echo $contact_info['address']; ?></p>
-                            </div>
-                        </div>
-
-                        <div class="emergency-contact">
-                            <h6 class="fw-bold mb-2">
-                                <i class="fas fa-exclamation-triangle me-2"></i>Emergency Support
-                            </h6>
-                            <p class="mb-2 opacity-90">For urgent issues outside business hours:</p>
-                            <a href="tel:+639171234567" class="text-white fw-bold text-decoration-none">
-                                +63 917 123 4567
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <div class="section-header mt-5">
             <h2 class="display-6 fw-bold">Multiple Ways to Reach Us</h2>

@@ -1,9 +1,9 @@
 <?php
 class Database {
-    private $host = "localhost";
-    private $db_name = "renthubph";
-    private $username = "root";
-    private $password = "";
+    private $host = "mysql.hostinger.com";
+    private $db_name = "renthub";
+    private $username = "renthub";
+    private $password = "@Renthub12345";
     public $conn;
 
     public function getConnection() {

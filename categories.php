@@ -117,7 +117,7 @@ $most_popular = !empty($categories) ? $categories[0] : null;
         .categories-header {
             background: var(--secondary-gradient);
             color: white;
-            padding: 4rem 0 2rem;
+            padding: 4rem 0 5rem;
             position: relative;
             overflow: hidden;
         }
