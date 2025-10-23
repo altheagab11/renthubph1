@@ -81,6 +81,29 @@ if ($_POST && isset($_POST['action']) && $_POST['action'] === 'create_booking') 
             }
         }
         $total_amount = $rental_amount + $security_deposit + $delivery_fee;
+        
+        // Check for date conflicts with existing bookings (excluding cancelled bookings)
+        $conflict_query = "SELECT COUNT(*) as conflict_count FROM bookings 
+                          WHERE ProductID = ? 
+                          AND Book_Status NOT IN ('Cancelled', 'Completed')
+                          AND (
+                              (Book_StartDate <= ? AND Book_EndDate >= ?) OR
+                              (Book_StartDate <= ? AND Book_EndDate >= ?) OR
+                              (Book_StartDate >= ? AND Book_EndDate <= ?)
+                          )";
+        $conflict_stmt = $conn->prepare($conflict_query);
+        $conflict_stmt->execute([
+            $_POST['product_id'],
+            $_POST['rental_start_date'], $_POST['rental_start_date'], // Check if start date conflicts
+            $_POST['rental_end_date'], $_POST['rental_end_date'],     // Check if end date conflicts
+            $_POST['rental_start_date'], $_POST['rental_end_date']    // Check if booking is within existing range
+        ]);
+        $conflict_result = $conflict_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($conflict_result['conflict_count'] > 0) {
+            throw new Exception("The selected dates are already booked. Please choose different dates.");
+        }
+        
         // Insert booking record
         $booking_query = "INSERT INTO bookings (
             ProductID, RenterID, OwnerID,
@@ -471,6 +494,17 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
        
         /* Booking Modal Styles */
+        .booked-dates-warning {
+            border-left: 4px solid #ff6b6b;
+            background-color: #fff5f5;
+            border-color: #ff6b6b;
+            font-size: 0.9em;
+        }
+        
+        .booked-dates-warning .text-danger {
+            font-weight: 600;
+        }
+        
         .payment-option {
             border: 2px solid #e9ecef;
             border-radius: 8px;
@@ -1542,6 +1576,10 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                         <div class="row mb-4">
                             <div class="col-12">
                                 <h6 class="fw-bold mb-3"><i class="fas fa-calendar-alt me-2"></i>Rental Period</h6>
+                                <div id="availability-status" class="alert alert-info" style="display: none;">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <span id="availability-text"></span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label for="rental_start_date" class="form-label">Start Date <span class="text-danger">*</span></label>
@@ -1552,6 +1590,16 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <label for="rental_end_date" class="form-label">End Date <span class="text-danger">*</span></label>
                                 <input type="datetime-local" class="form-control" id="rental_end_date" name="rental_end_date" required>
                                 <div class="form-text">When will you return the item?</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Quick Date Suggestions -->
+                        <div class="row mb-3" id="date-suggestions" style="display: none;">
+                            <div class="col-12">
+                                <div class="alert alert-info py-2">
+                                    <small><strong>Quick suggestions:</strong></small>
+                                    <div class="mt-1" id="suggested-dates"></div>
+                                </div>
                             </div>
                         </div>
                        
@@ -2217,6 +2265,9 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
                 // Set minimum date to today
                 setMinimumDateTime();
 
+                // Load booked dates for this product
+                loadBookedDates(productData.productId);
+
                 // Show booking modal
                 const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
                 bookingModal.show();
@@ -2299,6 +2350,282 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
             }
         }
        
+        // Store booked dates globally
+        let bookedDatesArray = [];
+        
+        // Load booked dates for a specific product
+        function loadBookedDates(productId) {
+            fetch(`../api/get-booked-dates.php?product_id=${productId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        bookedDatesArray = data.booked_dates;
+                        updateDateInputs();
+                        addBookedDatesInfo();
+                    } else {
+                        console.error('Failed to load booked dates:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading booked dates:', error);
+                });
+        }
+        
+        // Function to check if a date is booked
+        function isDateBooked(date) {
+            const dateStr = date.toISOString().split('T')[0];
+            return bookedDatesArray.includes(dateStr);
+        }
+        
+        // Function to check if date range conflicts with booked dates
+        function hasDateConflict(startDate, endDate) {
+            const current = new Date(startDate);
+            while (current <= endDate) {
+                if (isDateBooked(current)) {
+                    return true;
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            return false;
+        }
+        
+        // Add visual indication of booked dates
+        function addBookedDatesInfo() {
+            const availabilityStatus = document.getElementById('availability-status');
+            const availabilityText = document.getElementById('availability-text');
+            
+            if (bookedDatesArray.length > 0) {
+                availabilityStatus.className = 'alert alert-warning';
+                availabilityStatus.style.display = 'block';
+                
+                const formattedDates = bookedDatesArray
+                    .map(date => new Date(date).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        year: 'numeric' 
+                    }))
+                    .join(', ');
+                
+                availabilityText.innerHTML = `
+                    <strong>Unavailable Dates:</strong> ${formattedDates}
+                    <br><small>Please select different dates for your booking.</small>
+                `;
+            } else {
+                availabilityStatus.className = 'alert alert-success';
+                availabilityStatus.style.display = 'block';
+                availabilityText.innerHTML = `
+                    <strong>Great!</strong> This item is available for booking.
+                    <br><small>Select your preferred dates below.</small>
+                `;
+            }
+        }
+        
+        // Update date inputs with validation
+        function updateDateInputs() {
+            const startDateInput = document.getElementById('rental_start_date');
+            const endDateInput = document.getElementById('rental_end_date');
+            
+            // Add change listeners for validation
+            startDateInput.addEventListener('change', function() {
+                validateDateSelection();
+                updateDateAvailabilityFeedback();
+            });
+            endDateInput.addEventListener('change', function() {
+                validateDateSelection();
+                updateDateAvailabilityFeedback();
+            });
+        }
+        
+        // Real-time feedback for date selection
+        function updateDateAvailabilityFeedback() {
+            const startDateInput = document.getElementById('rental_start_date');
+            const endDateInput = document.getElementById('rental_end_date');
+            
+            // Remove existing feedback
+            const existingFeedback = document.querySelector('.date-feedback');
+            if (existingFeedback) {
+                existingFeedback.remove();
+            }
+            
+            if (startDateInput.value && endDateInput.value) {
+                const startDate = new Date(startDateInput.value);
+                const endDate = new Date(endDateInput.value);
+                
+                // Check if dates are valid (end after start)
+                if (endDate >= startDate) {
+                    const conflictDates = [];
+                    const current = new Date(startDate);
+                    while (current <= endDate) {
+                        if (isDateBooked(current)) {
+                            conflictDates.push(new Date(current));
+                        }
+                        current.setDate(current.getDate() + 1);
+                    }
+                    
+                    // Only show feedback if there are conflicts
+                    if (conflictDates.length > 0) {
+                        const feedbackDiv = document.createElement('div');
+                        feedbackDiv.className = 'date-feedback mt-2';
+                        
+                        const conflictDatesFormatted = conflictDates.map(date => 
+                            date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        ).join(', ');
+                        
+                        feedbackDiv.innerHTML = `
+                            <div class="alert alert-danger py-2">
+                                <i class="fas fa-times-circle me-2"></i>
+                                <strong>Conflict:</strong> ${conflictDatesFormatted} already booked.
+                            </div>
+                        `;
+                        
+                        endDateInput.parentElement.appendChild(feedbackDiv);
+                    }
+                    
+                    // Show suggestions if there are conflicts
+                    if (conflictDates.length > 0) {
+                        showDateSuggestions();
+                    } else {
+                        hideDataSuggestions();
+                    }
+                } else {
+                    hideDataSuggestions();
+                }
+            }
+        }
+        
+        // Show available date suggestions
+        function showDateSuggestions() {
+            const suggestionsDiv = document.getElementById('date-suggestions');
+            const suggestedDatesDiv = document.getElementById('suggested-dates');
+            
+            // Find next 3 available periods
+            const suggestions = findAvailableDateSuggestions();
+            
+            if (suggestions.length > 0) {
+                suggestedDatesDiv.innerHTML = suggestions.map(suggestion => 
+                    `<button type="button" class="btn btn-outline-primary btn-sm me-2 mb-1" 
+                             onclick="applySuggestedDates('${suggestion.start}', '${suggestion.end}')">
+                        ${suggestion.display}
+                    </button>`
+                ).join('');
+                
+                suggestionsDiv.style.display = 'block';
+            }
+        }
+        
+        // Hide date suggestions
+        function hideDataSuggestions() {
+            const suggestionsDiv = document.getElementById('date-suggestions');
+            suggestionsDiv.style.display = 'none';
+        }
+        
+        // Find available date periods
+        function findAvailableDateSuggestions() {
+            const suggestions = [];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            for (let i = 0; i < 30 && suggestions.length < 3; i++) {
+                const checkDate = new Date(today);
+                checkDate.setDate(today.getDate() + i);
+                
+                if (!isDateBooked(checkDate)) {
+                    // Check if we can get at least 1-2 days from this date
+                    const endDate1Day = new Date(checkDate);
+                    endDate1Day.setDate(checkDate.getDate() + 1);
+                    
+                    const endDate2Day = new Date(checkDate);
+                    endDate2Day.setDate(checkDate.getDate() + 2);
+                    
+                    if (!isDateBooked(endDate1Day)) {
+                        const endToUse = !isDateBooked(endDate2Day) ? endDate2Day : endDate1Day;
+                        const startFormatted = checkDate.toISOString().slice(0, 16);
+                        const endFormatted = endToUse.toISOString().slice(0, 16);
+                        
+                        suggestions.push({
+                            start: startFormatted,
+                            end: endFormatted,
+                            display: `${checkDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endToUse.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                        });
+                        
+                        // Skip ahead to avoid overlapping suggestions
+                        i += 2;
+                    }
+                }
+            }
+            
+            return suggestions;
+        }
+        
+        // Apply suggested dates
+        function applySuggestedDates(startDateTime, endDateTime) {
+            document.getElementById('rental_start_date').value = startDateTime;
+            document.getElementById('rental_end_date').value = endDateTime;
+            
+            // Trigger validation and calculation
+            validateDateSelection();
+            updateDateAvailabilityFeedback();
+            calculateTotal();
+            
+            hideDataSuggestions();
+        }
+        
+        // Validate date selection against booked dates
+        function validateDateSelection() {
+            const startDateInput = document.getElementById('rental_start_date');
+            const endDateInput = document.getElementById('rental_end_date');
+            
+            if (startDateInput.value && endDateInput.value) {
+                const startDate = new Date(startDateInput.value);
+                const endDate = new Date(endDateInput.value);
+                
+                // Check if end date is before start date
+                if (endDate < startDate) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Invalid Date Range',
+                        text: 'End date must be after start date.',
+                        confirmButtonColor: '#667eea'
+                    });
+                    endDateInput.value = '';
+                    return false;
+                }
+                
+                // Check for booking conflicts
+                const conflictDates = [];
+                const current = new Date(startDate);
+                while (current <= endDate) {
+                    if (isDateBooked(current)) {
+                        conflictDates.push(new Date(current).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                        }));
+                    }
+                    current.setDate(current.getDate() + 1);
+                }
+                
+                if (conflictDates.length > 0) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Date Conflict Detected',
+                        html: `The following dates in your selection are already booked:<br><br>
+                               <strong class="text-danger">${conflictDates.join(', ')}</strong><br><br>
+                               Please choose different dates for your booking.`,
+                        confirmButtonColor: '#667eea',
+                        confirmButtonText: 'Choose Different Dates'
+                    });
+                    
+                    // Clear both inputs to force user to select new dates
+                    startDateInput.value = '';
+                    endDateInput.value = '';
+                    
+                    return false;
+                }
+            }
+            return true;
+        }
+        
         // Set minimum datetime to current time
         function setMinimumDateTime() {
             const now = new Date();
@@ -2358,6 +2685,11 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
         // Handle booking form submission
         document.getElementById('bookingForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            
+            // Validate dates before submission
+            if (!validateDateSelection()) {
+                return;
+            }
            
             const formData = new FormData(this);
             formData.append('action', 'create_booking');
