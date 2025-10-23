@@ -245,14 +245,14 @@ if ($_POST) {
             $payment_method = $notes['payment_method'] ?? 'Cash';
 
             if (!$existing_payment) {
-                // Create payment record as PENDING first
+                // Create payment record as COMPLETED directly
                 $user_id = $_SESSION['user_id'];
                 $now = date('YmdHis');
                 $random = mt_rand(1000, 9999);
                 $pay_transaction_id = "TXN{$now}-USER{$user_id}-{$random}";
 
-                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt) 
-                                  VALUES (?, ?, 'Rental Payment', ?, 'Pending', ?, NOW())";
+                $create_payment = "INSERT INTO payments (BookingID, Pay_Amount, Pay_Type, Pay_Method, Pay_Status, Pay_TransactionID, Pay_CreatedAt, Pay_ProcessedAt) 
+                                  VALUES (?, ?, 'Rental Payment', ?, 'Completed', ?, NOW(), NOW())";
                 $create_payment_stmt = $conn->prepare($create_payment);
                 $create_payment_stmt->execute([
                     $booking_id,
@@ -261,14 +261,20 @@ if ($_POST) {
                     $pay_transaction_id
                 ]);
 
-                // Notify owner about payment initiation
+                // Update booking status to Active immediately
+                $booking_update_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
+                                        WHERE BookingID = ? AND RenterID = ?";
+                $booking_update_stmt = $conn->prepare($booking_update_query);
+                $booking_update_stmt->execute([$booking_id, $user_id]);
+
+                // Notify owner about payment completion
                 $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
                 $owner_stmt = $conn->prepare($owner_query);
                 $owner_stmt->execute([$booking_id]);
                 $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
                 if ($owner) {
-                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'payment_pending', 'Payment Pending', ?, ?, 0, NOW())";
-                    $notif_msg = 'A renter has initiated payment for your product: ' . $owner['Prod_Name'] . '. Payment is now pending verification.';
+                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'payment_completed', 'Payment Completed', ?, ?, 0, NOW())";
+                    $notif_msg = 'Payment has been completed for your product: ' . $owner['Prod_Name'] . '. The rental is now active.';
                     $notif_stmt = $conn->prepare($notif_query);
                     $notif_stmt->execute([
                         $owner['OwnerID'],
@@ -277,11 +283,44 @@ if ($_POST) {
                     ]);
                 }
 
-                $message = "Payment initiated successfully! Your payment is now pending. Please wait for verification.";
-                $message_type = "info";
+                $message = "Payment completed successfully! Your rental is now active.";
+                $message_type = "success";
             } else {
-                $message = "Payment already exists for this booking.";
-                $message_type = "warning";
+                // If payment exists and is pending, complete it
+                if ($existing_payment['Pay_Status'] == 'Pending') {
+                    $complete_payment = "UPDATE payments SET Pay_Status = 'Completed', Pay_ProcessedAt = NOW() 
+                                        WHERE BookingID = ? AND Pay_Status = 'Pending'";
+                    $complete_payment_stmt = $conn->prepare($complete_payment);
+                    $complete_payment_stmt->execute([$booking_id]);
+
+                    // Update booking status to Active
+                    $booking_update_query = "UPDATE bookings SET Book_Status = 'Active', Book_UpdatedAt = NOW() 
+                                            WHERE BookingID = ? AND RenterID = ?";
+                    $booking_update_stmt = $conn->prepare($booking_update_query);
+                    $booking_update_stmt->execute([$booking_id, $user_id]);
+
+                    // Notify owner about payment completion
+                    $owner_query = "SELECT p.OwnerID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                    $owner_stmt = $conn->prepare($owner_query);
+                    $owner_stmt->execute([$booking_id]);
+                    $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($owner) {
+                        $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'payment_completed', 'Payment Completed', ?, ?, 0, NOW())";
+                        $notif_msg = 'Payment has been completed for your product: ' . $owner['Prod_Name'] . '. The rental is now active.';
+                        $notif_stmt = $conn->prepare($notif_query);
+                        $notif_stmt->execute([
+                            $owner['OwnerID'],
+                            $notif_msg,
+                            $booking_id
+                        ]);
+                    }
+
+                    $message = "Payment completed successfully! Your rental is now active.";
+                    $message_type = "success";
+                } else {
+                    $message = "Payment already completed for this booking.";
+                    $message_type = "info";
+                }
             }
         } else {
             $message = "Cannot process payment. Booking must be approved by owner first.";
@@ -1164,13 +1203,13 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         </button>
                                         
                                         <!-- Payment options based on payment status -->
-                                        <?php if(!$booking['PaymentID']): ?>
+                                        <?php if(!$booking['PaymentID'] || $booking['Pay_Status'] == 'Pending'): ?>
                                             <!-- No payment record yet - show initiate payment -->
-                                            <button type="button" class="btn btn-primary btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
-                                                <i class="fas fa-credit-card me-1"></i>Initiate Payment
+                                            <button type="button" class="btn btn-success btn-sm" onclick="showPaymentModal(<?php echo (int)$booking['BookingID']; ?>, '<?php echo htmlspecialchars($booking_notes['payment_method']); ?>'); return false;">
+                                                <i class="fas fa-check me-1"></i>Complete Payment
                                             </button>
                                             <div class="text-info small mt-2">
-                                                <i class="fas fa-info-circle me-1"></i>Click to start payment process
+                                                <i class="fas fa-info-circle me-1"></i>Click to complete payment process
                                             </div>
                                         <?php elseif($booking['Pay_Status'] == 'Pending'): ?>
                                             <!-- Payment is pending - show complete payment -->
@@ -1224,11 +1263,6 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                             <i class="fas fa-star me-1"></i>Review
                                         </a>
                                     <?php endif; ?>
-                                    
-                                    <a href="../product.php?id=<?php echo $booking['ProductID']; ?>" 
-                                       class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
-                                        <i class="fas fa-eye me-1"></i>View Product
-                                    </a>
                                 </div>
                             </div>
                         </div>

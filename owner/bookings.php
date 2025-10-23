@@ -203,15 +203,20 @@ if ($_POST) {
                         }
                     }
 
-                    // Send notification to renter if completed
+                    // Send notification to renter and process security deposit refund if completed
                     if ($action === 'complete') {
-                        // Get renter ID and product name
-                        $info_query = "SELECT b.RenterID, p.Prod_Name FROM bookings b JOIN products p ON b.ProductID = p.ProductID WHERE b.BookingID = ?";
+                        // Get booking details for refund processing
+                        $info_query = "SELECT b.RenterID, b.Book_SecurityDeposit, p.Prod_Name 
+                                      FROM bookings b 
+                                      JOIN products p ON b.ProductID = p.ProductID 
+                                      WHERE b.BookingID = ?";
                         $info_stmt = $conn->prepare($info_query);
                         $info_stmt->execute([$booking_id]);
                         $info = $info_stmt->fetch(PDO::FETCH_ASSOC);
+                        
                         if ($info) {
                             if ($isDamaged) {
+                                // Product was damaged - no security deposit refund
                                 $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_completed', 'Booking Completed (With Damage)', ?, ?, 0, NOW())";
                                 $notif_stmt = $conn->prepare($notif_query);
                                 $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been marked as completed by the owner.<br>Please note: The owner reported damage to the product.<br>The security deposit will NOT be refunded.<br>Thank you for using RentHub!";
@@ -221,14 +226,38 @@ if ($_POST) {
                                     $booking_id
                                 ]);
                             } else {
-                                $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_completed', 'Booking Completed', ?, ?, 0, NOW())";
-                                $notif_stmt = $conn->prepare($notif_query);
-                                $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been marked as completed by the owner.<br>Your security deposit will be refunded within 2-3 working days.<br>Thank you for using RentHub!";
-                                $notif_stmt->execute([
-                                    $info['RenterID'],
-                                    $notif_message,
-                                    $booking_id
-                                ]);
+                                // Product was not damaged - process security deposit refund
+                                if ($info['Book_SecurityDeposit'] > 0) {
+                                    // Create automatic refund record for security deposit
+                                    $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_Method, Refund_ProcessedBy, Refund_ProcessedAt) 
+                                                    VALUES (?, ?, 'Completed', 'Security deposit refund - no damage reported', 'Automatic', ?, NOW())";
+                                    $refund_stmt = $conn->prepare($refund_query);
+                                    $refund_stmt->execute([
+                                        $booking_id,
+                                        $info['Book_SecurityDeposit'],
+                                        $user_id
+                                    ]);
+                                    
+                                    // Send notification with refund confirmation
+                                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_completed', 'Booking Completed - Security Deposit Refunded', ?, ?, 0, NOW())";
+                                    $notif_stmt = $conn->prepare($notif_query);
+                                    $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been completed successfully!<br>Your security deposit of ₱" . number_format($info['Book_SecurityDeposit'], 2) . " has been automatically refunded.<br>Thank you for using RentHub!";
+                                    $notif_stmt->execute([
+                                        $info['RenterID'],
+                                        $notif_message,
+                                        $booking_id
+                                    ]);
+                                } else {
+                                    // No security deposit to refund
+                                    $notif_query = "INSERT INTO notifications (UserID, Not_Type, Not_Title, Not_Message, Not_RelatedID, Not_IsRead, Not_CreatedAt) VALUES (?, 'booking_completed', 'Booking Completed', ?, ?, 0, NOW())";
+                                    $notif_stmt = $conn->prepare($notif_query);
+                                    $notif_message = "Your booking for product: " . htmlspecialchars($info['Prod_Name']) . " has been completed successfully!<br>Thank you for using RentHub!";
+                                    $notif_stmt->execute([
+                                        $info['RenterID'],
+                                        $notif_message,
+                                        $booking_id
+                                    ]);
+                                }
                             }
                         }
                     }

@@ -85,31 +85,112 @@ if ($payments_table_exists) {
 
     $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'p.Pay_CreatedAt DESC';
 
-    // Get payments
-    $query = "SELECT p.*, b.BookingID, b.Book_StartDate, b.Book_EndDate, b.Book_TotalAmount,
-              prod.Prod_Name, prod.ProductID, pi.PI_ImagePath, u.User_Name as Owner_Name
-              FROM payments p
-              JOIN bookings b ON p.BookingID = b.BookingID
-              JOIN products prod ON b.ProductID = prod.ProductID
-              LEFT JOIN product_images pi ON prod.ProductID = pi.ProductID AND pi.PI_IsMain = 1
-              JOIN user_accounts u ON prod.OwnerID = u.UserID
-              WHERE " . implode(' AND ', $conditions) . "
-              ORDER BY " . $order_by;
+    // First get payments, then get refunds separately
+    $payments_query = "SELECT p.PaymentID as ID, 'payment' as type, p.Pay_Amount as amount, 
+                       p.Pay_Status as status, p.Pay_Method as method, p.Pay_TransactionID as transaction_id,
+                       p.Pay_CreatedAt as created_at, p.Pay_UpdatedAt as updated_at,
+                       b.BookingID, b.Book_StartDate, b.Book_EndDate, b.Book_TotalAmount,
+                       prod.Prod_Name, prod.ProductID, pi.PI_ImagePath, u.User_Name as Owner_Name,
+                       NULL as refund_reason
+                FROM payments p
+                JOIN bookings b ON p.BookingID = b.BookingID
+                JOIN products prod ON b.ProductID = prod.ProductID
+                LEFT JOIN product_images pi ON prod.ProductID = pi.ProductID AND pi.PI_IsMain = 1
+                JOIN user_accounts u ON prod.OwnerID = u.UserID
+                WHERE " . implode(' AND ', $conditions) . "
+                ORDER BY " . $order_by;
+
+    $refunds_query = "SELECT r.RefundID as ID, 'refund' as type, r.Refund_Amount as amount,
+                      r.Refund_Status as status, r.Refund_Method as method, r.Refund_TransactionID as transaction_id,
+                      r.Refund_CreatedAt as created_at, r.Refund_ProcessedAt as updated_at,
+                      b.BookingID, b.Book_StartDate, b.Book_EndDate, b.Book_TotalAmount,
+                      prod.Prod_Name, prod.ProductID, pi.PI_ImagePath, u.User_Name as Owner_Name,
+                      r.Refund_Reason as refund_reason
+               FROM refunds r
+               JOIN bookings b ON r.BookingID = b.BookingID
+               JOIN products prod ON b.ProductID = prod.ProductID
+               LEFT JOIN product_images pi ON prod.ProductID = pi.ProductID AND pi.PI_IsMain = 1
+               JOIN user_accounts u ON prod.OwnerID = u.UserID
+               WHERE b.RenterID = ?
+               ORDER BY r.Refund_CreatedAt DESC";
 
     try {
-        $stmt = $conn->prepare($query);
+        // Get payments
+        $payments = [];
+        
+        $stmt = $conn->prepare($payments_query);
         $stmt->execute($params);
-        $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $payment_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Get refunds
+        $stmt = $conn->prepare($refunds_query);
+        $stmt->execute([$user_id]);
+        $refund_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Combine and sort by date
+        $payments = array_merge($payment_records, $refund_records);
+        
+        // Sort by created_at DESC
+        usort($payments, function($a, $b) {
+            return strtotime($b['created_at']) - strtotime($a['created_at']);
+        });
+        
     } catch (PDOException $e) {
         $payments = [];
+        error_log("Payment history error: " . $e->getMessage());
+    }
+    
+    // Debug: Add some logging to check what's happening
+    error_log("Debug - Total payments found: " . count($payments));
+    if (!empty($payments)) {
+        error_log("Debug - First payment: " . print_r($payments[0], true));
+    }
+    
+    // If no payments found but there might be completed bookings, show those
+    if (empty($payments)) {
+        try {
+            $fallback_query = "SELECT b.BookingID as ID, 'booking' as type, b.Book_TotalAmount as amount,
+                              'Completed' as status, 'Cash' as method, CONCAT('TXN', LPAD(b.BookingID, 6, '0')) as transaction_id,
+                              b.Book_CreatedAt as created_at, b.Book_UpdatedAt as updated_at,
+                              b.BookingID, b.Book_StartDate, b.Book_EndDate, b.Book_TotalAmount,
+                              prod.Prod_Name, prod.ProductID, pi.PI_ImagePath, u.User_Name as Owner_Name,
+                              NULL as refund_reason
+                       FROM bookings b
+                       JOIN products prod ON b.ProductID = prod.ProductID
+                       LEFT JOIN product_images pi ON prod.ProductID = pi.ProductID AND pi.PI_IsMain = 1
+                       JOIN user_accounts u ON prod.OwnerID = u.UserID
+                       WHERE b.RenterID = ? AND b.Book_Status = 'Completed'
+                       ORDER BY b.Book_CreatedAt DESC";
+            
+            $stmt = $conn->prepare($fallback_query);
+            $stmt->execute([$user_id]);
+            $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+        } catch (PDOException $e) {
+            $payments = [];
+        }
     }
 
-    // Calculate statistics
+    // Calculate statistics including refunds
     $stats['total_payments'] = count($payments);
-    $stats['total_amount'] = array_sum(array_column($payments, 'Pay_Amount'));
-    $stats['successful_payments'] = count(array_filter($payments, function($p) { return $p['Pay_Status'] == 'Completed'; }));
+    
+    // Calculate net amount (payments - refunds)
+    $total_paid = 0;
+    $total_refunded = 0;
+    foreach($payments as $p) {
+        if(isset($p['type']) && $p['type'] === 'refund') {
+            $total_refunded += $p['amount'];
+        } else {
+            $total_paid += $p['amount'];
+        }
+    }
+    $stats['total_amount'] = $total_paid - $total_refunded;
+    $stats['total_paid'] = $total_paid;
+    $stats['total_refunded'] = $total_refunded;
+    
+    $stats['successful_payments'] = count(array_filter($payments, function($p) { return $p['status'] == 'Completed'; }));
     // Count pending payments: payments with status 'Pending' plus confirmed bookings with no payment record
-    $pending_payments = count(array_filter($payments, function($p) { return $p['Pay_Status'] == 'Pending'; }));
+    $pending_payments = count(array_filter($payments, function($p) { return $p['status'] == 'Pending'; }));
 
     // Add confirmed bookings with no payment record
     $query = "SELECT COUNT(*) as total FROM bookings b LEFT JOIN payments p ON b.BookingID = p.BookingID WHERE b.RenterID = ? AND b.Book_Status = 'Confirmed' AND p.PaymentID IS NULL";
@@ -253,6 +334,17 @@ if ($payments_table_exists) {
         .status-badge.pending { background: #ffc107; color: #000; }
         .status-badge.failed { background: #dc3545; }
         .status-badge.cancelled { background: #6c757d; }
+        
+        /* Refund badge styles */
+        .status-badge.refund-badge { 
+            background: linear-gradient(135deg, #28a745, #20c997); 
+            color: white;
+        }
+        .refund-completed .payment-status { border-color: #28a745; }
+        .refund-pending .payment-status { border-color: #ffc107; }
+        
+        /* Refund amount display */
+        .text-success h3 { color: #28a745 !important; }
         
         .search-filters {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -773,11 +865,27 @@ if ($payments_table_exists) {
                 </div>
             <?php else: ?>
                 <?php foreach($payments as $payment): ?>
-                <div class="payment-card card <?php echo !$payments_table_exists ? 'sample' : ''; ?> <?php echo strtolower($payment['Pay_Status']); ?>" data-payment-id="<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>">
+                    <?php 
+                    $isRefund = isset($payment['type']) && $payment['type'] === 'refund';
+                    
+                    // Skip security deposit refunds as they're shown as deductions from payments
+                    if ($isRefund && stripos($payment['refund_reason'], 'security deposit') !== false) {
+                        continue;
+                    }
+                    
+                    $statusClass = $isRefund ? 'refund-' . strtolower($payment['status']) : strtolower($payment['status']);
+                    ?>
+                <div class="payment-card card <?php echo !$payments_table_exists ? 'sample' : ''; ?> <?php echo $statusClass; ?>" data-payment-id="<?php echo $payment['ID']; ?>">
                     <div class="payment-status">
-                        <span class="badge status-badge <?php echo strtolower($payment['Pay_Status']); ?>">
-                            <?php echo htmlspecialchars($payment['Pay_Status']); ?>
-                        </span>
+                        <?php if($isRefund): ?>
+                            <span class="badge status-badge refund-badge">
+                                <i class="fas fa-undo me-1"></i>Refund - <?php echo htmlspecialchars($payment['status']); ?>
+                            </span>
+                        <?php else: ?>
+                            <span class="badge status-badge <?php echo strtolower($payment['status']); ?>">
+                                <?php echo htmlspecialchars($payment['status']); ?>
+                            </span>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="card-body p-4">
@@ -801,10 +909,16 @@ if ($payments_table_exists) {
                                             <?php echo strtoupper(substr($payment['Owner_Name'], 0, 1)); ?>
                                         </div>
                                         <div>
-                                            <h6 class="mb-0">Paid to <?php echo htmlspecialchars($payment['Owner_Name']); ?></h6>
+                                            <h6 class="mb-0">
+                                                <?php if($isRefund): ?>
+                                                    Security Deposit Refund from <?php echo htmlspecialchars($payment['Owner_Name']); ?>
+                                                <?php else: ?>
+                                                    Paid to <?php echo htmlspecialchars($payment['Owner_Name']); ?>
+                                                <?php endif; ?>
+                                            </h6>
                                             <small class="text-muted">
                                                 <i class="fas fa-calendar me-1"></i>
-                                                <?php echo date('M j, Y - g:i A', strtotime($payment['Pay_CreatedAt'])); ?>
+                                                <?php echo date('M j, Y - g:i A', strtotime($payment['created_at'])); ?>
                                             </small>
                                         </div>
                                     </div>
@@ -812,22 +926,34 @@ if ($payments_table_exists) {
                                 
                                 <div class="payment-details">
                                     <h6 class="mb-2">
-                                        <i class="fas fa-receipt me-2"></i>Payment Details
+                                        <?php if($isRefund): ?>
+                                            <i class="fas fa-undo me-2"></i>Refund Details
+                                        <?php else: ?>
+                                            <i class="fas fa-receipt me-2"></i>Payment Details
+                                        <?php endif; ?>
                                     </h6>
                                     <div class="row">
                                         <div class="col-6">
                                             <p class="mb-1 small"><strong>Transaction ID:</strong></p>
                                             <span class="transaction-id">
-                                                <?php echo isset($payment['Pay_TransactionID']) ? htmlspecialchars($payment['Pay_TransactionID']) : 'TXN' . str_pad($payment['BookingID'], 6, '0', STR_PAD_LEFT); ?>
+                                                <?php echo $payment['transaction_id'] ? htmlspecialchars($payment['transaction_id']) : ($isRefund ? 'REF' : 'TXN') . str_pad($payment['BookingID'], 6, '0', STR_PAD_LEFT); ?>
                                             </span>
                                         </div>
                                         <div class="col-6">
-                                            <p class="mb-1 small"><strong>Payment Method:</strong></p>
+                                            <p class="mb-1 small"><strong><?php echo $isRefund ? 'Refund' : 'Payment'; ?> Method:</strong></p>
                                             <span class="payment-method">
-                                                <?php echo isset($payment['Pay_Method']) ? htmlspecialchars($payment['Pay_Method']) : 'Credit Card'; ?>
+                                                <?php echo $payment['method'] ? htmlspecialchars($payment['method']) : ($isRefund ? 'Automatic' : 'Credit Card'); ?>
                                             </span>
                                         </div>
                                     </div>
+                                    <?php if($isRefund && !empty($payment['refund_reason'])): ?>
+                                    <div class="row mt-2">
+                                        <div class="col-12">
+                                            <p class="mb-1 small"><strong>Refund Reason:</strong></p>
+                                            <small class="text-muted"><?php echo htmlspecialchars($payment['refund_reason']); ?></small>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
                                     <?php if(isset($payment['Book_StartDate'])): ?>
                                     <div class="row mt-2">
                                         <div class="col-6">
@@ -845,26 +971,65 @@ if ($payments_table_exists) {
                             
                             <div class="col-md-3">
                                 <div class="text-end">
+                                    <?php
+                                    // For payments, check if there's a corresponding security deposit refund
+                                    $hasSecurityRefund = false;
+                                    $securityRefundAmount = 0;
+                                    $displayAmount = $payment['amount'];
+                                    
+                                    if (!$isRefund) {
+                                        // Look for security deposit refund for this booking
+                                        foreach($payments as $p) {
+                                            if (isset($p['type']) && $p['type'] === 'refund' && 
+                                                $p['BookingID'] == $payment['BookingID'] && 
+                                                stripos($p['refund_reason'], 'security deposit') !== false) {
+                                                $hasSecurityRefund = true;
+                                                $securityRefundAmount = $p['amount'];
+                                                $displayAmount = $payment['amount'] - $securityRefundAmount;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    ?>
+                                    
                                     <div class="amount-display mb-3">
-                                        <h3 class="mb-1">₱<?php echo number_format($payment['Pay_Amount'], 2); ?></h3>
-                                        <small class="opacity-75">Payment Amount</small>
+                                        <h3 class="mb-1 <?php echo $isRefund ? 'text-success' : ''; ?>">
+                                            <?php echo $isRefund ? '+' : ''; ?>₱<?php echo number_format($displayAmount, 2); ?>
+                                        </h3>
+                                        <small class="opacity-75"><?php echo $isRefund ? 'Refund Amount' : 'Net Payment'; ?></small>
+                                        
+                                        <?php if (!$isRefund && $hasSecurityRefund): ?>
+                                            <div class="mt-2 p-2 bg-light rounded">
+                                                <small class="text-muted d-block">Original: ₱<?php echo number_format($payment['amount'], 2); ?></small>
+                                                <small class="text-success d-block">
+                                                    <i class="fas fa-minus me-1"></i>Security Deposit Refunded: ₱<?php echo number_format($securityRefundAmount, 2); ?>
+                                                </small>
+                                                <hr class="my-1">
+                                                <small class="fw-bold">Net Amount: ₱<?php echo number_format($displayAmount, 2); ?></small>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                     
                                     <div class="payment-timeline">
                                         <div class="timeline-item">
-                                            <small class="text-muted">Initiated:</small><br>
-                                            <small><?php echo date('M j, g:i A', strtotime($payment['Pay_CreatedAt'])); ?></small>
+                                            <small class="text-muted"><?php echo $isRefund ? 'Initiated:' : 'Initiated:'; ?></small><br>
+                                            <small><?php echo date('M j, g:i A', strtotime($payment['created_at'])); ?></small>
                                         </div>
-                                        <?php if($payment['Pay_Status'] == 'Completed'): ?>
+                                        <?php if($payment['status'] == 'Completed'): ?>
                                         <div class="timeline-item">
                                             <small class="text-muted">Completed:</small><br>
-                                            <small><?php echo date('M j, g:i A', strtotime($payment['Pay_CreatedAt'])); ?></small>
+                                            <small>
+                                                <?php 
+                                                $completedDate = $isRefund && $payment['updated_at'] ? $payment['updated_at'] : $payment['created_at'];
+                                                echo date('M j, g:i A', strtotime($completedDate)); 
+                                                ?>
+                                            </small>
                                         </div>
                                         <?php endif; ?>
                                     </div>
                                     
                                     <div class="d-flex flex-column gap-2 mt-3">
-                                        <button class="btn btn-outline-secondary btn-sm" onclick="viewDetails(<?php echo $payment['PaymentID'] ?? $payment['BookingID']; ?>)" style="border-radius: 15px;">
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="viewDetails(<?php echo $payment['ID']; ?>, '<?php echo $isRefund ? 'refund' : 'payment'; ?>')" style="border-radius: 15px;">
                                             <i class="fas fa-info me-1"></i>Details
                                         </button>
                                     </div>

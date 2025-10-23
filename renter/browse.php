@@ -1499,14 +1499,6 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                         </div>
                     </div>
-                    <div class="row mt-3">
-                        <div class="col-12">
-                            <h6 class="fw-bold text-primary">Product Images</h6>
-                            <div id="detailsImages" class="d-flex flex-wrap">
-                                <!-- Images will be loaded here -->
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -2004,21 +1996,6 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
                             document.getElementById('detailsAvailability').textContent = availabilityText;
                         } else {
                             document.getElementById('detailsAvailability').textContent = 'Available';
-                        }
-                        
-                        // Show images if available
-                        const detailsImages = document.getElementById('detailsImages');
-                        if (data.images && data.images.length > 0) {
-                            detailsImages.innerHTML = data.images.map(image => `
-                                <img src="../${image.PI_ImagePath}" 
-                                     class="img-thumbnail me-2 mb-2" 
-                                     style="width: 100px; height: 100px; object-fit: cover; cursor: pointer;"
-                                     onclick="enlargeImage('../${image.PI_ImagePath}')"
-                                     alt="Product Image"
-                                     onerror="this.src='../assets/images/no-image.jpg'">
-                            `).join('');
-                        } else {
-                            detailsImages.innerHTML = '<p class="text-muted">No images available</p>';
                         }
                         
                         // Update Book button in modal

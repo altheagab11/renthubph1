@@ -1087,10 +1087,10 @@ $stats['most_expensive'] = $most_expensive;
                                             </button>
                                         </form>
                                         
-                                        <a href="../product.php?id=<?php echo $favorite['ProductID']; ?>" 
-                                           class="btn btn-outline-primary btn-sm" style="border-radius: 15px;">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" style="border-radius: 15px;"
+                                                onclick="viewProductDetails(<?php echo $favorite['ProductID']; ?>)">
                                             <i class="fas fa-eye me-1"></i>View Details
-                                        </a>
+                                        </button>
                                     </div>
                                 </div>
                                 
@@ -1778,6 +1778,190 @@ $stats['most_expensive'] = $most_expensive;
             });
         });
     </script>
+
+<!-- Product Details Modal -->
+<div class="modal fade" id="productDetailsModal" tabindex="-1" aria-labelledby="productDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="productDetailsModalLabel">Product Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-12">
+                        <h5 id="detailsProductName">Loading...</h5>
+                        <p class="text-muted mb-2">Category: <span id="detailsProductCategory">-</span></p>
+                        <p class="text-muted mb-2">Brand: <span id="detailsProductBrand">-</span></p>
+                        <p class="text-muted mb-2">Condition: <span id="detailsProductCondition">-</span></p>
+                        
+                        <div class="bg-light p-3 rounded mb-3">
+                            <h6 class="text-primary mb-1">Rental Price</h6>
+                            <h4 class="text-success mb-0">
+                                <span id="detailsProductPrice">₱0</span>
+                                <small class="text-muted">/<span id="detailsPriceType">day</span></small>
+                            </h4>
+                            <p class="text-muted mb-0">Security Deposit: <span id="detailsSecurityDeposit">₱0</span></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6>Owner Information</h6>
+                            <p class="text-muted mb-1">Name: <span id="detailsOwnerName">-</span></p>
+                            <p class="text-muted mb-1">Location: <span id="detailsLocation">-</span></p>
+                            <p class="text-muted mb-1">Delivery Options: <span id="detailsDeliveryOptions">-</span></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6>Availability</h6>
+                            <p class="text-muted mb-0" id="detailsAvailability">-</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Description</h6>
+                        <p id="detailsProductDescription">Loading...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="modalBookButton">Book Now</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function viewProductDetails(productId) {
+    // Fetch product details via AJAX
+    fetch('../api/get-product-details.php?id=' + productId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const product = data.product;
+                
+                // Populate modal with product details
+                document.getElementById('detailsProductName').textContent = product.Prod_Name || 'N/A';
+                document.getElementById('detailsProductDescription').textContent = product.Prod_Description || 'No description available';
+                document.getElementById('detailsProductBrand').textContent = product.Prod_Brand || 'N/A';
+                document.getElementById('detailsProductCategory').textContent = product.Cat_Name || 'Uncategorized';
+                document.getElementById('detailsProductCondition').textContent = product.Prod_Condition || 'N/A';
+                document.getElementById('detailsProductPrice').textContent = '₱' + parseFloat(product.Prod_RentalPrice || 0).toLocaleString();
+                document.getElementById('detailsPriceType').textContent = product.Prod_PriceType || 'N/A';
+                document.getElementById('detailsSecurityDeposit').textContent = '₱' + parseFloat(product.Prod_SecurityDeposit || 0).toLocaleString();
+                
+                // Owner information
+                document.getElementById('detailsOwnerName').textContent = product.Owner_Name || 'Unknown';
+                
+                // Location information
+                if (data.location && (data.location.UA_Street || data.location.UA_City)) {
+                    const address = [
+                        data.location.UA_Street,
+                        data.location.UA_Barangay,
+                        data.location.UA_City,
+                        data.location.UA_Province
+                    ].filter(Boolean).join(', ');
+                    
+                    document.getElementById('detailsLocation').textContent = address || 'No location set';
+                    
+                    // Delivery/Pickup options
+                    let deliveryOptions = [];
+                    if (data.location.PL_PickupAvailable == 1) {
+                        deliveryOptions.push('Pickup Available');
+                    }
+                    if (data.location.PL_DeliveryAvailable == 1) {
+                        let deliveryText = 'Delivery Available';
+                        if (data.location.PL_DeliveryFee && data.location.PL_DeliveryFee > 0) {
+                            deliveryText += ` (₱${parseFloat(data.location.PL_DeliveryFee).toLocaleString()})`;
+                        }
+                        if (data.location.PL_DeliveryRadius && data.location.PL_DeliveryRadius > 0) {
+                            deliveryText += ` - ${data.location.PL_DeliveryRadius}km radius`;
+                        }
+                        deliveryOptions.push(deliveryText);
+                    }
+                    document.getElementById('detailsDeliveryOptions').textContent = deliveryOptions.length > 0 ? deliveryOptions.join(', ') : 'No delivery options';
+                } else {
+                    document.getElementById('detailsLocation').textContent = 'No location set';
+                    document.getElementById('detailsDeliveryOptions').textContent = 'Pickup Available';
+                }
+                
+                // Availability information
+                if (data.availability && data.availability.AvailabilityStatus) {
+                    let availabilityText = data.availability.AvailabilityStatus;
+                    if (data.availability.PA_DateFrom && data.availability.PA_DateTo) {
+                        const fromDate = new Date(data.availability.PA_DateFrom).toLocaleDateString();
+                        const toDate = new Date(data.availability.PA_DateTo).toLocaleDateString();
+                        availabilityText += ` (${fromDate} - ${toDate})`;
+                    }
+                    if (data.availability.PA_Reason) {
+                        availabilityText += ` - ${data.availability.PA_Reason}`;
+                    }
+                    document.getElementById('detailsAvailability').textContent = availabilityText;
+                } else {
+                    document.getElementById('detailsAvailability').textContent = 'Available';
+                }
+                
+                // Update Book button in modal
+                const modalBookBtn = document.getElementById('modalBookButton');
+                modalBookBtn.onclick = () => {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('productDetailsModal'));
+                    modal.hide();
+                    bookProduct(productId);
+                };
+                
+                // Show the modal
+                const modal = new bootstrap.Modal(document.getElementById('productDetailsModal'));
+                modal.show();
+                
+            } else {
+                alert('Failed to load product details: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while loading product details.');
+        });
+}
+
+function enlargeImage(imagePath) {
+    // Create modal for enlarged image
+    const imageModal = `
+        <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Product Image</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <img src="${imagePath}" class="img-fluid" alt="Product Image" onerror="this.src='../assets/images/no-image.jpg'">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing image modal if any
+    const existingModal = document.getElementById('imageModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add new modal to body
+    document.body.insertAdjacentHTML('beforeend', imageModal);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+    modal.show();
+    
+    // Remove modal from DOM when hidden
+    document.getElementById('imageModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
