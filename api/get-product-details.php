@@ -23,11 +23,17 @@ try {
     $database = new Database();
     $conn = $database->getConnection();
     
-    // First, get basic product details
-    $query = "SELECT * FROM products WHERE ProductID = ?";
+    // Start with basic product query and build up
+    $query = "SELECT p.*,
+                     COALESCE(c.Cat_Name, 'Uncategorized') as Cat_Name,
+                     COALESCE(u.User_Name, 'Unknown Owner') as Owner_Name
+              FROM products p
+              LEFT JOIN categories c ON p.CategoryID = c.CategoryID
+              LEFT JOIN user_accounts u ON p.OwnerID = u.UserID
+              WHERE p.ProductID = ?";
+    
     $stmt = $conn->prepare($query);
-    $stmt->bindParam(1, $product_id);
-    $stmt->execute();
+    $stmt->execute([$product_id]);
     
     $product = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -36,94 +42,77 @@ try {
         exit;
     }
     
-    // Try to get owner details
-    try {
-        $owner_query = "SELECT User_Name as owner_name FROM users WHERE UserID = ?";
-        $owner_stmt = $conn->prepare($owner_query);
-        $owner_stmt->bindParam(1, $product['OwnerID']);
-        $owner_stmt->execute();
-        $owner = $owner_stmt->fetch(PDO::FETCH_ASSOC);
-        if ($owner) {
-            $product['owner_name'] = $owner['owner_name'];
-        } else {
-            $product['owner_name'] = 'Unknown Owner';
-        }
-    } catch (PDOException $e) {
-        $product['owner_name'] = 'Unknown Owner';
-    }
-    
-    // Try to get owner address (city)
-    try {
-        $address_query = "SELECT UA_City as owner_city FROM user_addresses WHERE UserID = ? AND UA_IsDefault = 1 LIMIT 1";
-        $address_stmt = $conn->prepare($address_query);
-        $address_stmt->bindParam(1, $product['OwnerID']);
-        $address_stmt->execute();
-        $address = $address_stmt->fetch(PDO::FETCH_ASSOC);
-        if ($address) {
-            $product['owner_city'] = $address['owner_city'];
-        } else {
-            $product['owner_city'] = 'Not specified';
-        }
-    } catch (PDOException $e) {
-        $product['owner_city'] = 'Not specified';
-    }
-    
-    // Try to get category name
-    try {
-        $category_query = "SELECT Cat_Name as category_name FROM categories WHERE CategoryID = ?";
-        $category_stmt = $conn->prepare($category_query);
-        $category_stmt->bindParam(1, $product['CategoryID']);
-        $category_stmt->execute();
-        $category = $category_stmt->fetch(PDO::FETCH_ASSOC);
-        if ($category) {
-            $product['category_name'] = $category['category_name'];
-        } else {
-            $product['category_name'] = 'Uncategorized';
-        }
-    } catch (PDOException $e) {
-        $product['category_name'] = 'Uncategorized';
-    }
-    
     // Try to get product images
+    $images = [];
     try {
         $images_query = "SELECT * FROM product_images WHERE ProductID = ? ORDER BY PI_IsMain DESC, PI_CreatedAt ASC";
         $images_stmt = $conn->prepare($images_query);
-        $images_stmt->bindParam(1, $product_id);
-        $images_stmt->execute();
-        $product_images = $images_stmt->fetchAll(PDO::FETCH_ASSOC);
-        $product['images'] = $product_images;
+        $images_stmt->execute([$product_id]);
+        $images = $images_stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
-        // If product_images table doesn't exist, set empty array
-        $product['images'] = [];
+        // Table might not exist, continue with empty array
+        $images = [];
     }
     
-    // Try to get product location details
+    // Try to get location data
+    $location = null;
     try {
-        $location_query = "SELECT * FROM product_locations WHERE ProductID = ?";
+        $location_query = "SELECT pl.*, ua.UA_Street, ua.UA_Barangay, ua.UA_City, ua.UA_Province, ua.UA_ZipCode
+                          FROM product_locations pl
+                          LEFT JOIN user_addresses ua ON pl.AddressID = ua.AddressID
+                          WHERE pl.ProductID = ?";
         $location_stmt = $conn->prepare($location_query);
-        $location_stmt->bindParam(1, $product_id);
-        $location_stmt->execute();
-        $product_location = $location_stmt->fetch(PDO::FETCH_ASSOC);
-        $product['location'] = $product_location;
+        $location_stmt->execute([$product_id]);
+        $location = $location_stmt->fetch(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
-        // If product_locations table doesn't exist, set default values
-        $product['location'] = [
+        // Tables might not exist, set default values
+        $location = [
             'PL_PickupAvailable' => 1,
             'PL_DeliveryAvailable' => 0,
-            'PL_DeliveryFee' => 0
+            'PL_DeliveryFee' => 0,
+            'PL_DeliveryRadius' => 0
+        ];
+    }
+    
+    // Try to get availability data
+    $availability = null;
+    try {
+        $availability_query = "SELECT pa.*,
+                                     CASE
+                                         WHEN pa.PA_IsAvailable = 1 AND CURDATE() BETWEEN pa.PA_DateFrom AND pa.PA_DateTo THEN 'Available'
+                                         WHEN pa.PA_IsAvailable = 0 AND CURDATE() BETWEEN pa.PA_DateFrom AND pa.PA_DateTo THEN 'Unavailable'
+                                         WHEN pa.PA_DateTo < CURDATE() THEN 'Expired'
+                                         WHEN pa.PA_DateFrom > CURDATE() THEN 'Scheduled'
+                                         ELSE 'No Schedule'
+                                     END as AvailabilityStatus
+                              FROM product_availability pa
+                              WHERE pa.ProductID = ?
+                              ORDER BY pa.PA_CreatedAt DESC
+                              LIMIT 1";
+        $availability_stmt = $conn->prepare($availability_query);
+        $availability_stmt->execute([$product_id]);
+        $availability = $availability_stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        // Table might not exist
+        $availability = [
+            'AvailabilityStatus' => 'Available',
+            'PA_Reason' => null
         ];
     }
     
     echo json_encode([
         'success' => true,
-        'product' => $product
+        'product' => $product,
+        'images' => $images,
+        'location' => $location,
+        'availability' => $availability
     ]);
 
 } catch (PDOException $e) {
     error_log("Database error in get-product-details.php: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'Database error occurred']);
 } catch (Exception $e) {
     error_log("Error in get-product-details.php: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'An error occurred']);
 }
 ?>

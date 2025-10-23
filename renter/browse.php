@@ -252,6 +252,8 @@ $query = "SELECT p.*,
                       (SELECT COUNT(*) FROM product_images pi WHERE pi.ProductID = p.ProductID) as total_images,
                       (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID) as booking_count,
                       (SELECT AVG(Rev_Rating) FROM reviews r JOIN bookings b ON r.BookingID = b.BookingID WHERE b.ProductID = p.ProductID) as avg_rating,
+                      (SELECT COUNT(*) FROM flag_reports fr WHERE fr.ProductID = p.ProductID AND fr.FlagType = 'product') as product_flag_count,
+                      (SELECT COUNT(*) FROM flag_reports fr WHERE fr.OwnerID = p.OwnerID AND fr.FlagType = 'owner') as owner_flag_count,
                       pa.PA_DateFrom,
                       pa.PA_DateTo,
                       pa.PA_IsAvailable,
@@ -797,6 +799,139 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         white-space: nowrap;
     }
 
+    /* SweetAlert2 Custom Styles */
+    .custom-swal-popup {
+        border-radius: 15px;
+    }
+    
+    .swal2-popup {
+        border-radius: 15px !important;
+        font-family: inherit;
+    }
+    
+    .swal2-title {
+        color: #667eea !important;
+        font-weight: 600;
+    }
+    
+    .swal2-content {
+        color: #6c757d;
+    }
+    
+    .swal2-confirm {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.5rem !important;
+        font-weight: 600 !important;
+    }
+    
+    .swal2-confirm:hover {
+        background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%) !important;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+    }
+
+    /* Flag Indicator Styles */
+    .flag-indicator {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        background: rgba(220, 53, 69, 0.95);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 15px;
+        font-size: 0.65em;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        z-index: 5;
+        max-width: calc(100% - 50px);
+        white-space: nowrap;
+    }
+    
+    /* Owner flagged positioning - moves up if no product flag */
+    .flag-indicator.owner-flagged.has-product-flag {
+        background: rgba(255, 193, 7, 0.95);
+        color: #212529;
+        bottom: 38px;
+        left: 8px;
+    }
+    
+    .flag-indicator.owner-flagged.no-product-flag {
+        background: rgba(255, 193, 7, 0.95);
+        color: #212529;
+        bottom: 8px;
+        left: 8px;
+    }
+    
+    .flag-indicator .flag-text {
+        font-size: 1em;
+        font-weight: 600;
+    }
+    
+    .flag-indicator .flag-count {
+        font-size: 0.9em;
+        font-weight: bold;
+        opacity: 0.9;
+    }
+    
+    .flag-indicator i {
+        font-size: 0.9em;
+    }
+    
+    /* Grid view flag positioning */
+    .card .flag-indicator {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+    }
+    
+    .card .flag-indicator.owner-flagged.has-product-flag {
+        bottom: 38px;
+        left: 8px;
+    }
+    
+    .card .flag-indicator.owner-flagged.no-product-flag {
+        bottom: 8px;
+        left: 8px;
+    }
+    
+    /* Favorite button positioning adjustment */
+    .favorite-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 6;
+    }
+    
+    /* Availability indicator positioning adjustment */
+    .availability-indicator {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 4;
+    }
+    
+    /* Table view flag styles */
+    .flag-indicator-table {
+        display: flex;
+        align-items: center;
+        margin: 2px 0;
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.05);
+    }
+    
+    .flag-indicator-table.product-flagged {
+        background: rgba(220, 53, 69, 0.1);
+    }
+    
+    .flag-indicator-table.owner-flagged {
+        background: rgba(255, 193, 7, 0.1);
+    }
+
     </style>
 </head>
 <body>
@@ -1047,6 +1182,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <th>Availability</th>
                                 <th>Status</th>
                                 <th>Schedule</th>
+                                <th>Flags</th>
                                 <th>Images</th>
                                 <th>Actions</th>
                             </tr>
@@ -1054,7 +1190,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                         <tbody>
                             <?php if(empty($products)): ?>
                             <tr>
-                                <td colspan="14" class="text-center py-4">
+                                <td colspan="15" class="text-center py-4">
                                     <i class="fas fa-search fa-3x text-muted mb-3"></i>
                                     <h5 class="text-muted">No items found</h5>
                                     <p class="text-muted">Try adjusting your search filters or browse all categories.</p>
@@ -1149,6 +1285,28 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <i class="fas fa-calendar-alt"></i>
                                         </button>
                                         <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <!-- Flag Indicators for Table View -->
+                                        <div class="d-flex flex-column align-items-start">
+                                            <?php if($product['product_flag_count'] > 0): ?>
+                                            <div class="flag-indicator-table product-flagged mb-1" title="This product has been flagged <?php echo $product['product_flag_count']; ?> time(s)">
+                                                <i class="fas fa-flag text-danger me-1"></i>
+                                                <span class="text-danger small fw-bold">Product Flagged (<?php echo $product['product_flag_count']; ?>)</span>
+                                            </div>
+                                            <?php endif; ?>
+                                            
+                                            <?php if($product['owner_flag_count'] > 0): ?>
+                                            <div class="flag-indicator-table owner-flagged" title="This owner has been flagged <?php echo $product['owner_flag_count']; ?> time(s)">
+                                                <i class="fas fa-user-times text-warning me-1"></i>
+                                                <span class="text-warning small fw-bold">Owner Flagged (<?php echo $product['owner_flag_count']; ?>)</span>
+                                            </div>
+                                            <?php endif; ?>
+                                            
+                                            <?php if($product['product_flag_count'] == 0 && $product['owner_flag_count'] == 0): ?>
+                                            <span class="text-muted small">No flags</span>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                     <td>
                                         <span class="badge bg-secondary">
@@ -1248,6 +1406,23 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <div class="availability-indicator availability-<?php echo strtolower(str_replace(' ', '-', $product['AvailabilityStatus'])); ?>">
                                     <?php echo htmlspecialchars($product['AvailabilityStatus']); ?>
                                 </div>
+                                
+                                <!-- Flag Indicators -->
+                                <?php if($product['product_flag_count'] > 0): ?>
+                                <div class="flag-indicator product-flagged" title="This product has been flagged <?php echo $product['product_flag_count']; ?> time(s)">
+                                    <i class="fas fa-flag"></i>
+                                    <span class="flag-text">Product Flagged</span>
+                                    <span class="flag-count">(<?php echo $product['product_flag_count']; ?>)</span>
+                                </div>
+                                <?php endif; ?>
+                                
+                                <?php if($product['owner_flag_count'] > 0): ?>
+                                <div class="flag-indicator owner-flagged <?php echo $product['product_flag_count'] > 0 ? 'has-product-flag' : 'no-product-flag'; ?>" title="This owner has been flagged <?php echo $product['owner_flag_count']; ?> time(s)">
+                                    <i class="fas fa-user-times"></i>
+                                    <span class="flag-text">Owner Flagged</span>
+                                    <span class="flag-count">(<?php echo $product['owner_flag_count']; ?>)</span>
+                                </div>
+                                <?php endif; ?>
                             </div>
                             <div class="card-body p-3 d-flex flex-column">
                                 <h6 class="card-title mb-1"><?php echo htmlspecialchars($product['Prod_Name']); ?></h6>
@@ -1420,6 +1595,99 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                         <button type="submit" class="btn btn-danger">Submit Flag</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Product Details Modal -->
+    <div class="modal fade" id="productDetailsModal" tabindex="-1" aria-labelledby="productDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="productDetailsModalLabel">Product Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-primary">Product Information</h6>
+                            <div class="mb-3">
+                                <label class="fw-bold">Product Name:</label>
+                                <p id="detailsProductName" class="mb-1">-</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold">Description:</label>
+                                <p id="detailsProductDescription" class="mb-1">-</p>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="fw-bold">Brand:</label>
+                                        <p id="detailsProductBrand" class="mb-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="fw-bold">Category:</label>
+                                        <p id="detailsProductCategory" class="mb-1">-</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="fw-bold">Condition:</label>
+                                        <p id="detailsProductCondition" class="mb-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="fw-bold">Price:</label>
+                                        <p id="detailsProductPrice" class="mb-1 text-primary fw-bold">-</p>
+                                        <small class="text-muted">Per <span id="detailsPriceType">-</span></small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold">Security Deposit:</label>
+                                <p id="detailsSecurityDeposit" class="mb-1 text-warning fw-bold">-</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-primary">Owner & Location</h6>
+                            <div class="mb-3">
+                                <label class="fw-bold">Owner:</label>
+                                <p id="detailsOwnerName" class="mb-1">-</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold">Location:</label>
+                                <p id="detailsLocation" class="mb-1">-</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold">Delivery Options:</label>
+                                <p id="detailsDeliveryOptions" class="mb-1">-</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="fw-bold">Availability:</label>
+                                <p id="detailsAvailability" class="mb-1">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="fw-bold text-primary">Product Images</h6>
+                            <div id="detailsImages" class="d-flex flex-wrap">
+                                <!-- Images will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="modalBookButton">
+                        <i class="fas fa-calendar-check"></i> Book This Item
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1692,6 +1960,8 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
     // Flag modal logic
@@ -1713,16 +1983,31 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Flag report submitted successfully.');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Report Submitted',
+                    text: 'Flag report submitted successfully.',
+                    confirmButtonColor: '#667eea'
+                });
                 bootstrap.Modal.getInstance(document.getElementById('flagModal')).hide();
             } else {
                 // Show the actual error from backend
-                alert('Error: ' + data.message);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Error: ' + data.message,
+                    confirmButtonColor: '#667eea'
+                });
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('An error occurred: ' + error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'An error occurred: ' + error,
+                confirmButtonColor: '#667eea'
+            });
         });
     });
 window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && $current_user['User_IsVerified'] == 1 ? 'true' : 'false'; ?>;
@@ -1810,6 +2095,122 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
            
             const modal = new bootstrap.Modal(document.getElementById('imageGalleryModal'));
             modal.show();
+        }
+
+        function viewProductDetails(productId) {
+            // Fetch product details via AJAX
+            fetch('../api/get-product-details.php?id=' + productId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const product = data.product;
+                        
+                        // Populate modal with product details
+                        document.getElementById('detailsProductName').textContent = product.Prod_Name || 'N/A';
+                        document.getElementById('detailsProductDescription').textContent = product.Prod_Description || 'No description available';
+                        document.getElementById('detailsProductBrand').textContent = product.Prod_Brand || 'N/A';
+                        document.getElementById('detailsProductCategory').textContent = product.Cat_Name || 'Uncategorized';
+                        document.getElementById('detailsProductCondition').textContent = product.Prod_Condition || 'N/A';
+                        document.getElementById('detailsProductPrice').textContent = '₱' + parseFloat(product.Prod_RentalPrice || 0).toLocaleString();
+                        document.getElementById('detailsPriceType').textContent = product.Prod_PriceType || 'N/A';
+                        document.getElementById('detailsSecurityDeposit').textContent = '₱' + parseFloat(product.Prod_SecurityDeposit || 0).toLocaleString();
+                        
+                        // Owner information
+                        document.getElementById('detailsOwnerName').textContent = product.Owner_Name || 'Unknown';
+                        
+                        // Location information
+                        if (data.location && (data.location.UA_Street || data.location.UA_City)) {
+                            const address = [
+                                data.location.UA_Street,
+                                data.location.UA_Barangay,
+                                data.location.UA_City,
+                                data.location.UA_Province
+                            ].filter(Boolean).join(', ');
+                            
+                            document.getElementById('detailsLocation').textContent = address || 'No location set';
+                            
+                            // Delivery/Pickup options
+                            let deliveryOptions = [];
+                            if (data.location.PL_PickupAvailable == 1) {
+                                deliveryOptions.push('Pickup Available');
+                            }
+                            if (data.location.PL_DeliveryAvailable == 1) {
+                                let deliveryText = 'Delivery Available';
+                                if (data.location.PL_DeliveryFee && data.location.PL_DeliveryFee > 0) {
+                                    deliveryText += ` (₱${parseFloat(data.location.PL_DeliveryFee).toLocaleString()})`;
+                                }
+                                if (data.location.PL_DeliveryRadius && data.location.PL_DeliveryRadius > 0) {
+                                    deliveryText += ` - ${data.location.PL_DeliveryRadius}km radius`;
+                                }
+                                deliveryOptions.push(deliveryText);
+                            }
+                            document.getElementById('detailsDeliveryOptions').textContent = deliveryOptions.length > 0 ? deliveryOptions.join(', ') : 'No delivery options';
+                        } else {
+                            document.getElementById('detailsLocation').textContent = 'No location set';
+                            document.getElementById('detailsDeliveryOptions').textContent = 'Pickup Available';
+                        }
+                        
+                        // Availability information
+                        if (data.availability && data.availability.AvailabilityStatus) {
+                            let availabilityText = data.availability.AvailabilityStatus;
+                            if (data.availability.PA_DateFrom && data.availability.PA_DateTo) {
+                                const fromDate = new Date(data.availability.PA_DateFrom).toLocaleDateString();
+                                const toDate = new Date(data.availability.PA_DateTo).toLocaleDateString();
+                                availabilityText += ` (${fromDate} - ${toDate})`;
+                            }
+                            if (data.availability.PA_Reason) {
+                                availabilityText += ` - ${data.availability.PA_Reason}`;
+                            }
+                            document.getElementById('detailsAvailability').textContent = availabilityText;
+                        } else {
+                            document.getElementById('detailsAvailability').textContent = 'Available';
+                        }
+                        
+                        // Show images if available
+                        const detailsImages = document.getElementById('detailsImages');
+                        if (data.images && data.images.length > 0) {
+                            detailsImages.innerHTML = data.images.map(image => `
+                                <img src="../${image.PI_ImagePath}" 
+                                     class="img-thumbnail me-2 mb-2" 
+                                     style="width: 100px; height: 100px; object-fit: cover; cursor: pointer;"
+                                     onclick="enlargeImage('../${image.PI_ImagePath}')"
+                                     alt="Product Image"
+                                     onerror="this.src='../assets/images/no-image.jpg'">
+                            `).join('');
+                        } else {
+                            detailsImages.innerHTML = '<p class="text-muted">No images available</p>';
+                        }
+                        
+                        // Update Book button in modal
+                        const modalBookBtn = document.getElementById('modalBookButton');
+                        modalBookBtn.onclick = () => {
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('productDetailsModal'));
+                            modal.hide();
+                            bookProduct(productId);
+                        };
+                        
+                        // Show the modal
+                        const modal = new bootstrap.Modal(document.getElementById('productDetailsModal'));
+                        modal.show();
+                        
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'Failed to load product details: ' + (data.message || 'Unknown error'),
+                            confirmButtonColor: '#667eea'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to load product details. Please try again.',
+                        confirmButtonColor: '#667eea'
+                    });
+                });
         }
        
         function enlargeImage(imageSrc) {
@@ -1914,12 +2315,21 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
         function bookProduct(productId) {
 
             if (typeof window.renterIsVerified !== 'undefined' && window.renterIsVerified === false) {
-                // Show a modal if you have one, or use alert as fallback
+                // Show a modal if you have one, or use SweetAlert as fallback
                 if (document.getElementById('notVerifiedModal')) {
                     var notVerifiedModal = new bootstrap.Modal(document.getElementById('notVerifiedModal'));
                     notVerifiedModal.show();
                 } else {
-                    alert('Your account is not yet verified. You cannot book until your account is verified by the admin.');
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Account Not Verified',
+                        text: 'Your account is not yet verified. You cannot book until your account is verified by the admin.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#667eea',
+                        customClass: {
+                            popup: 'custom-swal-popup'
+                        }
+                    });
                 }
                 return;
             }
@@ -2099,7 +2509,12 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
                     }
                 }
             } else if (endDate < startDate) {
-                alert('End date must be after start date');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Invalid Date Range',
+                    text: 'End date must be after start date',
+                    confirmButtonColor: '#667eea'
+                });
                 document.getElementById('rental_end_date').value = '';
             }
         }
@@ -2174,18 +2589,33 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Booking request submitted successfully! Please wait for the owner to approve your request.');
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Booking Submitted!',
+                        text: 'Booking request submitted successfully! Please wait for the owner to approve your request.',
+                        confirmButtonColor: '#667eea'
+                    });
                     const modal = bootstrap.Modal.getInstance(document.getElementById('bookingModal'));
                     modal.hide();
                     // Reset form
                     document.getElementById('bookingForm').reset();
                 } else {
-                    alert('Error: ' + data.message);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Booking Error',
+                        text: 'Error: ' + data.message,
+                        confirmButtonColor: '#667eea'
+                    });
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred. Please try again.');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'An error occurred. Please try again.',
+                    confirmButtonColor: '#667eea'
+                });
             });
         });
     </script>
