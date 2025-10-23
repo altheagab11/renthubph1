@@ -296,6 +296,7 @@ if ($reviews_table_exists) {
     <title>My Reviews - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="../css/sidebar-scrollbar.css" rel="stylesheet">
     <link href="../css/renter-theme.css" rel="stylesheet">
     <style>
@@ -874,9 +875,9 @@ if ($reviews_table_exists) {
                                             <button type="submit" name="add_review" class="btn action-btn submit">
                                                 <i class="fas fa-star me-1"></i>Submit Review
                                             </button>
-                                                <a href="../product.php?id=<?php echo $pending['ProductID']; ?>" class="btn action-btn view-product" style="border-radius: 20px; background: linear-gradient(90deg, #6a82fb 0%, #fc5c7d 100%); color: #fff; font-weight: 500;">
+                                                <button type="button" class="btn action-btn view-product" style="border-radius: 20px; background: linear-gradient(90deg, #6a82fb 0%, #fc5c7d 100%); color: #fff; font-weight: 500;" onclick="viewProductDetails(<?php echo $pending['ProductID']; ?>)">
                                                     <i class="fas fa-eye me-1"></i>View Product
-                                                </a>
+                                                </button>
                                         </div>
                                     </form>
                                 </div>
@@ -1016,9 +1017,9 @@ if ($reviews_table_exists) {
                                         </button>
                                         <?php endif; ?>
                                         
-                                        <a href="../product.php?id=<?php echo $review['ProductID']; ?>" class="btn action-btn edit" style="border-radius: 20px; background: var(--secondary-gradient); color: #fff;">
+                                        <button type="button" class="btn action-btn edit" style="border-radius: 20px; background: var(--secondary-gradient); color: #fff;" onclick="viewProductDetails(<?php echo $review['ProductID']; ?>)">
                                             <i class="fas fa-eye me-1"></i>View Product
-                                        </a>
+                                        </button>
                                         
                                     </div>
                                 </div>
@@ -1028,6 +1029,50 @@ if ($reviews_table_exists) {
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Product Details Modal -->
+    <div class="modal fade" id="productDetailsModal" tabindex="-1" aria-labelledby="productDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="productDetailsModalLabel">Product Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <h5 id="detailsProductName">Loading...</h5>
+                            <p class="text-muted mb-2">Category: <span id="detailsProductCategory">-</span></p>
+                            <p class="text-muted mb-2">Brand: <span id="detailsProductBrand">-</span></p>
+                            <p class="text-muted mb-2">Condition: <span id="detailsProductCondition">-</span></p>
+                            
+                            <div class="bg-light p-3 rounded mb-3">
+                                <h6 class="text-primary mb-1">Rental Price</h6>
+                                <h4 class="text-success mb-0">
+                                    <span id="detailsProductPrice">₱0</span>
+                                    <small class="text-muted">/<span id="detailsPriceType">day</span></small>
+                                </h4>
+                                <p class="text-muted mb-0">Security Deposit: <span id="detailsSecurityDeposit">₱0</span></p>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <h6>Owner Information</h6>
+                                <p class="text-muted mb-1">Name: <span id="detailsOwnerName">-</span></p>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <h6>Description</h6>
+                                <p id="detailsProductDescription">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1109,7 +1154,13 @@ if ($reviews_table_exists) {
             } else {
                 const url = window.location.origin + '/product.php?id=' + productId;
                 navigator.clipboard.writeText(url).then(() => {
-                    alert('Product link copied to clipboard!');
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Product link copied to clipboard!',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
                 });
             }
         }
@@ -1135,13 +1186,23 @@ if ($reviews_table_exists) {
                 
                 if (ratingInput && !ratingInput.value) {
                     e.preventDefault();
-                    alert('Please select a rating before submitting your review.');
+                    Swal.fire({
+                        title: 'Rating Required',
+                        text: 'Please select a rating before submitting your review.',
+                        icon: 'warning',
+                        confirmButtonText: 'OK'
+                    });
                     return false;
                 }
                 
                 if (commentInput && commentInput.value.trim().length < 10) {
                     e.preventDefault();
-                    alert('Please write at least 10 characters in your review.');
+                    Swal.fire({
+                        title: 'Review Too Short',
+                        text: 'Please write at least 10 characters in your review.',
+                        icon: 'warning',
+                        confirmButtonText: 'OK'
+                    });
                     commentInput.focus();
                     return false;
                 }
@@ -1182,11 +1243,54 @@ if ($reviews_table_exists) {
                 } else {
                     counter.className = 'form-text text-muted';
                 }
-            });
         });
-    </script>
+    });
 
-<script>
+    // Function to view product details
+    function viewProductDetails(productId) {
+        // Fetch product details via AJAX
+        fetch('../api/get-product-details.php?id=' + productId)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const product = data.product;
+                    
+                    // Populate modal with product details
+                    document.getElementById('detailsProductName').textContent = product.Prod_Name || 'N/A';
+                    document.getElementById('detailsProductDescription').textContent = product.Prod_Description || 'No description available';
+                    document.getElementById('detailsProductBrand').textContent = product.Prod_Brand || 'N/A';
+                    document.getElementById('detailsProductCategory').textContent = product.Cat_Name || 'Uncategorized';
+                    document.getElementById('detailsProductCondition').textContent = product.Prod_Condition || 'N/A';
+                    document.getElementById('detailsProductPrice').textContent = '₱' + parseFloat(product.Prod_RentalPrice || 0).toLocaleString();
+                    document.getElementById('detailsPriceType').textContent = product.Prod_PriceType || 'N/A';
+                    document.getElementById('detailsSecurityDeposit').textContent = '₱' + parseFloat(product.Prod_SecurityDeposit || 0).toLocaleString();
+                    
+                    // Owner information
+                    document.getElementById('detailsOwnerName').textContent = product.Owner_Name || 'Unknown';
+                    
+                    // Show the modal
+                    const modal = new bootstrap.Modal(document.getElementById('productDetailsModal'));
+                    modal.show();
+                } else {
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to load product details: ' + data.message,
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    title: 'Connection Error',
+                    text: 'Failed to load product details. Please try again.',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+            });
+    }
+    </script><script>
 document.addEventListener('DOMContentLoaded', function() {
     const notifDropdown = document.querySelector('.nav-link.dropdown-toggle[role="button"]');
     notifDropdown?.addEventListener('show.bs.dropdown', function() {
