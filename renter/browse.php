@@ -166,8 +166,8 @@ $price_min = isset($_GET['price_min']) ? $_GET['price_min'] : '';
 $price_max = isset($_GET['price_max']) ? $_GET['price_max'] : '';
 $sort_by = isset($_GET['sort']) ? $_GET['sort'] : 'newest';
 $show_all = isset($_GET['show_all']) ? $_GET['show_all'] : false;
-// Check if table view is requested
-$view_mode = isset($_GET['view']) ? $_GET['view'] : 'grid';
+// Always use grid view
+$view_mode = 'grid';
 // Build the WHERE clause for filters
 $where_conditions = [];
 $params = [];
@@ -225,7 +225,7 @@ switch ($sort_by) {
 }
 // Get products with pagination
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$items_per_page = $view_mode == 'table' ? 20 : 12;
+$items_per_page = 12;
 $offset = ($page - 1) * $items_per_page;
 // Always hide deleted/inactive products from renters
 $where_conditions[] = "p.Prod_Status = 'Active'";
@@ -630,12 +630,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
             border: 2px solid #667eea;
         }
        
-        .table-view {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
+
        
         .status-badge {
             padding: 0.25rem 0.5rem;
@@ -914,23 +909,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
         z-index: 4;
     }
     
-    /* Table view flag styles */
-    .flag-indicator-table {
-        display: flex;
-        align-items: center;
-        margin: 2px 0;
-        padding: 2px 6px;
-        border-radius: 8px;
-        background: rgba(0,0,0,0.05);
-    }
-    
-    .flag-indicator-table.product-flagged {
-        background: rgba(220, 53, 69, 0.1);
-    }
-    
-    .flag-indicator-table.owner-flagged {
-        background: rgba(255, 193, 7, 0.1);
-    }
+
 
     </style>
 </head>
@@ -1126,16 +1105,6 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="d-flex align-items-center">
                             <h6 class="mb-0 me-3">Showing <?php echo count($products); ?> of <?php echo $total_products; ?> items</h6>
-                            <div class="btn-group" role="group">
-                                <a href="?<?php echo http_build_query(array_merge($_GET, ['view' => 'grid'])); ?>"
-                                   class="btn view-toggle <?php echo $view_mode == 'grid' ? 'active' : ''; ?>">
-                                    <i class="fas fa-th"></i> Grid
-                                </a>
-                                <a href="?<?php echo http_build_query(array_merge($_GET, ['view' => 'table'])); ?>"
-                                   class="btn view-toggle <?php echo $view_mode == 'table' ? 'active' : ''; ?>">
-                                    <i class="fas fa-list"></i> Table
-                                </a>
-                            </div>
                         </div>
                         <?php if($total_pages > 1): ?>
                         <nav>
@@ -1163,183 +1132,7 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                     </div>
                 </div>
             </div>
-            <?php if($view_mode == 'table'): ?>
-            <!-- Table View -->
-            <div class="table-view">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Image</th>
-                                <th>Product Name</th>
-                                <th>Brand</th>
-                                <th>Category</th>
-                                <th>Owner</th>
-                                <th>Location</th>
-                                <th>Condition</th>
-                                <th>Price</th>
-                                <th>Type</th>
-                                <th>Availability</th>
-                                <th>Status</th>
-                                <th>Schedule</th>
-                                <th>Flags</th>
-                                <th>Images</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if(empty($products)): ?>
-                            <tr>
-                                <td colspan="15" class="text-center py-4">
-                                    <i class="fas fa-search fa-3x text-muted mb-3"></i>
-                                    <h5 class="text-muted">No items found</h5>
-                                    <p class="text-muted">Try adjusting your search filters or browse all categories.</p>
-                                    <?php if(!$show_all && $total_all_products > 0): ?>
-                                    <a href="?show_all=1" class="btn btn-warning">Show All Products</a>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                            <?php else: ?>
-                                <?php foreach($products as $product): ?>
-                                <tr data-security-deposit="<?php echo $product['Prod_SecurityDeposit'] ?? 0; ?>"
-                                    data-delivery-available="<?php echo $product['PL_DeliveryAvailable'] ?? 0; ?>"
-                                    data-delivery-fee="<?php echo $product['PL_DeliveryFee'] ?? 0; ?>">
-                                    <td>
-                                        <div class="position-relative d-inline-block">
-                                            <?php if($product['MainImage']): ?>
-                                                <img src="../<?php echo htmlspecialchars($product['MainImage']); ?>"
-                                                     class="product-image-small"
-                                                     alt="<?php echo htmlspecialchars($product['Prod_Name']); ?>"
-                                                     onclick="showImageGallery(<?php echo $product['ProductID']; ?>)"
-                                                     onerror="this.src='../assets/images/no-image.jpg'">
-                                                <?php if($product['total_images'] > 1): ?>
-                                                <span class="position-absolute top-0 end-0 badge bg-primary rounded-pill" style="font-size: 0.6em; transform: translate(50%, -50%);">
-                                                    <?php echo $product['total_images']; ?>
-                                                </span>
-                                                <?php endif; ?>
-                                            <?php else: ?>
-                                                <div class="product-image-small no-image-placeholder">
-                                                    <i class="fas fa-image"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <strong><?php echo htmlspecialchars($product['Prod_Name']); ?></strong>
-                                        <br><small class="text-muted"><?php echo htmlspecialchars(substr($product['Prod_Description'], 0, 50)) . (strlen($product['Prod_Description']) > 50 ? '...' : ''); ?></small>
-                                    </td>
-                                    <td><?php echo htmlspecialchars($product['Prod_Brand'] ?? 'N/A'); ?></td>
-                                    <td>
-                                        <span class="badge bg-info"><?php echo htmlspecialchars($product['Cat_Name']); ?></span>
-                                    </td>
-                                    <td><?php echo htmlspecialchars($product['Owner_Name']); ?></td>
-                                    <td>
-                                        <?php if(!empty($product['FullAddress'])): ?>
-                                            <div class="small">
-                                                <i class="fas fa-map-marker-alt text-primary"></i>
-                                                <?php echo htmlspecialchars($product['FullAddress']); ?>
-                                            </div>
-                                            <?php if($product['PL_PickupAvailable'] == 1 || $product['PL_DeliveryAvailable'] == 1): ?>
-                                            <div class="mt-1">
-                                                <?php if($product['PL_PickupAvailable'] == 1): ?>
-                                                <span class="badge bg-success me-1" style="font-size: 0.7em;"><i class="fas fa-hand-holding"></i> Pickup</span>
-                                                <?php endif; ?>
-                                                <?php if($product['PL_DeliveryAvailable'] == 1): ?>
-                                                <span class="badge bg-info" style="font-size: 0.7em;"><i class="fas fa-truck"></i> Delivery
-                                                <?php if($product['PL_DeliveryRadius'] > 0): ?>
-                                                (<?php echo $product['PL_DeliveryRadius']; ?>km)
-                                                <?php endif; ?>
-                                                </span>
-                                                <?php endif; ?>
-                                            </div>
-                                            <?php endif; ?>
-                                        <?php else: ?>
-                                            <span class="text-muted">No location set</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-secondary"><?php echo htmlspecialchars($product['Prod_Condition'] ?? 'N/A'); ?></span>
-                                    </td>
-                                    <td class="price-display">₱<?php echo number_format($product['Prod_RentalPrice'], 2); ?></td>
-                                    <td><?php echo htmlspecialchars($product['Prod_PriceType'] ?? 'N/A'); ?></td>
-                                    <td>
-                                        <span class="status-badge status-<?php echo strtolower($product['Prod_Availability'] ?? 'unknown'); ?>">
-                                            <?php echo htmlspecialchars($product['Prod_Availability'] ?? 'Unknown'); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge status-<?php echo strtolower($product['Prod_Status'] ?? 'unknown'); ?>">
-                                            <?php echo htmlspecialchars($product['Prod_Status'] ?? 'Unknown'); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge availability-<?php echo strtolower(str_replace(' ', '-', $product['AvailabilityStatus'])); ?>">
-                                            <?php echo htmlspecialchars($product['AvailabilityStatus']); ?>
-                                        </span>
-                                        <?php if($product['PA_DateFrom']): ?>
-                                        <br><small class="text-muted">
-                                            <?php echo date('M j', strtotime($product['PA_DateFrom'])); ?> -
-                                            <?php echo date('M j', strtotime($product['PA_DateTo'])); ?>
-                                        </small>
-                                        <button class="btn btn-sm btn-outline-info ms-1" onclick="showAvailabilityDetails(<?php echo $product['ProductID']; ?>)">
-                                            <i class="fas fa-calendar-alt"></i>
-                                        </button>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <!-- Flag Indicators for Table View -->
-                                        <div class="d-flex flex-column align-items-start">
-                                            <?php if($product['product_flag_count'] > 0): ?>
-                                            <div class="flag-indicator-table product-flagged mb-1" title="This product has been flagged <?php echo $product['product_flag_count']; ?> time(s)">
-                                                <i class="fas fa-flag text-danger me-1"></i>
-                                                <span class="text-danger small fw-bold">Product Flagged (<?php echo $product['product_flag_count']; ?>)</span>
-                                            </div>
-                                            <?php endif; ?>
-                                            
-                                            <?php if($product['owner_flag_count'] > 0): ?>
-                                            <div class="flag-indicator-table owner-flagged" title="This owner has been flagged <?php echo $product['owner_flag_count']; ?> time(s)">
-                                                <i class="fas fa-user-times text-warning me-1"></i>
-                                                <span class="text-warning small fw-bold">Owner Flagged (<?php echo $product['owner_flag_count']; ?>)</span>
-                                            </div>
-                                            <?php endif; ?>
-                                            
-                                            <?php if($product['product_flag_count'] == 0 && $product['owner_flag_count'] == 0): ?>
-                                            <span class="text-muted small">No flags</span>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-secondary">
-                                            <i class="fas fa-images"></i> <?php echo $product['total_images']; ?>
-                                        </span>
-                                        <?php if($product['total_images'] > 0): ?>
-                                        <button class="btn btn-sm btn-outline-primary ms-1" onclick="showImageGallery(<?php echo $product['ProductID']; ?>)">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm me-1 <?php echo $product['is_favorited'] > 0 ? 'btn-danger' : 'btn-outline-danger'; ?>"
-                                                onclick="toggleFavorite(<?php echo $product['ProductID']; ?>, this)"
-                                                title="Add to Favorites">
-                                            <i class="fas fa-heart"></i>
-                                        </button>
-                                        <button class="btn btn-sm book-btn <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?>"
-                                                onclick="bookProduct(<?php echo $product['ProductID']; ?>)"
-                                                data-pickup-available="<?php echo $product['PL_PickupAvailable'] ?? 1; ?>"
-                                                data-delivery-available="<?php echo $product['PL_DeliveryAvailable'] ?? 0; ?>"
-                                                <?php echo $product['AvailabilityStatus'] != 'Available' ? 'disabled' : ''; ?> >
-                                            <i class="fas fa-calendar-plus"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <?php else: ?>
+
             <!-- Grid View -->
             <div class="row">
                 <?php if(empty($products)): ?>
@@ -1494,7 +1287,6 @@ $sample_products = $sample_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
-            <?php endif; ?>
             <!-- Pagination (same as before) -->
             <?php if($total_pages > 1): ?>
             <div class="row mt-4">
@@ -2350,18 +2142,6 @@ window.renterIsVerified = <?php echo isset($current_user['User_IsVerified']) && 
                 productPrice = parseFloat(priceText);
                 priceType = productCard.querySelector('.price-display small').textContent.replace('/', '');
                 ownerName = productCard.querySelector('.fa-user').parentElement.textContent.trim();
-                securityDeposit = parseFloat(productCard.dataset.securityDeposit || 0);
-                deliveryAvailable = parseInt(productCard.dataset.deliveryAvailable || 0);
-                deliveryFee = parseFloat(productCard.dataset.deliveryFee || 0);
-                pickupAvailable = productCard.getAttribute('data-pickup-available') !== null ? parseInt(productCard.getAttribute('data-pickup-available')) : 1;
-            } else {
-                // Table view
-                const cells = productCard.querySelectorAll('td');
-                productName = cells[1].querySelector('strong').textContent;
-                const priceText = cells[7].textContent.replace('₱', '').replace(',', '');
-                productPrice = parseFloat(priceText);
-                priceType = cells[8].textContent;
-                ownerName = cells[4].textContent;
                 securityDeposit = parseFloat(productCard.dataset.securityDeposit || 0);
                 deliveryAvailable = parseInt(productCard.dataset.deliveryAvailable || 0);
                 deliveryFee = parseFloat(productCard.dataset.deliveryFee || 0);
