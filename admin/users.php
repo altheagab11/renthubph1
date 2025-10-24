@@ -42,7 +42,7 @@ if ($_POST) {
             $stmt->bindParam(2, $user_id);
             $stmt->execute();
             
-            if ($new_status === 'Inactive') {
+            if ($new_status === 'Inactive' || $new_status === 'Suspended') {
                 // Get user info to check if they are an owner
                 $user_check = $conn->prepare("SELECT User_Role, User_Name, User_Email FROM user_accounts WHERE UserID = ?");
                 $user_check->execute([$user_id]);
@@ -70,24 +70,27 @@ if ($_POST) {
                     // 3. Cancel all pending bookings
                     if (!empty($pending_bookings)) {
                         $cancel_pending = $conn->prepare("UPDATE bookings SET Book_Status = 'Cancelled', 
-                                                         Book_CancelReason = 'Owner account suspended by administrator', 
+                                                         Book_CancelReason = ?, 
                                                          Book_UpdatedAt = NOW() 
                                                          WHERE OwnerID = ? AND Book_Status = 'Pending'");
-                        $cancel_pending->execute([$user_id]);
+                        $cancel_reason = $new_status === 'Suspended' ? 'Owner account suspended by administrator' : 'Owner account deactivated by administrator';
+                        $cancel_pending->execute([$cancel_reason, $user_id]);
                         
                         // 4. Create notifications for affected renters and handle refunds
                         foreach ($pending_bookings as $booking) {
                             // Create notification for renter
-                            $notification_msg = "Your booking for '{$booking['Prod_Name']}' has been cancelled due to owner account suspension. ";
+                            $action_text = $new_status === 'Suspended' ? 'suspension' : 'deactivation';
+                            $notification_msg = "Your booking for '{$booking['Prod_Name']}' has been cancelled due to owner account {$action_text}. ";
                             
                             // Handle refunds for paid bookings
                             if ($booking['PaymentID'] && $booking['Pay_Status'] == 'Completed') {
                                 // Create refund record
                                 $refund_amount = $booking['Pay_Amount'];
                                 $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
-                                               VALUES (?, ?, 'Pending', 'Owner account suspended', NOW())";
+                                               VALUES (?, ?, 'Pending', ?, NOW())";
+                                $refund_reason = $new_status === 'Suspended' ? 'Owner account suspended' : 'Owner account deactivated';
                                 $refund_stmt = $conn->prepare($refund_query);
-                                $refund_stmt->execute([$booking['BookingID'], $refund_amount]);
+                                $refund_stmt->execute([$booking['BookingID'], $refund_amount, $refund_reason]);
                                 
                                 $notification_msg .= "A refund of ₱" . number_format($refund_amount, 2) . " will be processed within 3-5 business days.";
                             } else {
@@ -97,10 +100,11 @@ if ($_POST) {
                             // Insert notification
                             $notif_query = "INSERT INTO notifications (UserID, Not_Title, Not_Message, Not_Type, Not_CreatedAt) 
                                           VALUES (?, ?, ?, 'booking', NOW())";
+                            $notif_title = $new_status === 'Suspended' ? 'Booking Cancelled - Owner Suspended' : 'Booking Cancelled - Owner Deactivated';
                             $notif_stmt = $conn->prepare($notif_query);
                             $notif_stmt->execute([
                                 $booking['RenterID'], 
-                                'Booking Cancelled - Owner Suspended',
+                                $notif_title,
                                 $notification_msg
                             ]);
                         }
@@ -114,7 +118,8 @@ if ($_POST) {
                     $active_count = $active_stmt->fetch(PDO::FETCH_ASSOC)['count'];
                     
                     $cancelled_count = count($pending_bookings);
-                    $message = "User deactivated successfully! ";
+                    $action_text = $new_status === 'Suspended' ? 'suspended' : 'deactivated';
+                    $message = "User {$action_text} successfully! ";
                     $message .= "Products deactivated. ";
                     if ($cancelled_count > 0) {
                         $message .= "{$cancelled_count} pending booking(s) cancelled with renter notifications sent. ";
@@ -123,7 +128,8 @@ if ($_POST) {
                         $message .= "{$active_count} active booking(s) require manual review.";
                     }
                 } else {
-                    $message = "User deactivated successfully!";
+                    $action_text = $new_status === 'Suspended' ? 'suspended' : 'deactivated';
+                    $message = "User {$action_text} successfully!";
                 }
             } else {
                 // Reactivating user
@@ -181,12 +187,13 @@ $sort_options = [
 
 $order_by = isset($sort_options[$sort_by]) ? $sort_options[$sort_by] : 'User_CreatedAt DESC';
 
-// Get users (with flag count added)
+// Get users (with flag count and recent flag info added)
 $query = "SELECT u.*, 
           (SELECT COUNT(*) FROM bookings WHERE RenterID = u.UserID) as total_bookings,
           (SELECT COUNT(*) FROM products WHERE OwnerID = u.UserID) as total_products,
           (SELECT SUM(Book_TotalAmount) FROM bookings WHERE RenterID = u.UserID AND Book_Status IN ('Active', 'Completed')) as total_spent,
-          (SELECT COUNT(*) FROM flag_reports WHERE OwnerID = u.UserID AND FlagType = 'owner') as flag_count
+          (SELECT COUNT(*) FROM flag_reports WHERE OwnerID = u.UserID AND FlagType = 'owner') as flag_count,
+          (SELECT Reason FROM flag_reports WHERE OwnerID = u.UserID AND FlagType = 'owner' ORDER BY FlagID DESC LIMIT 1) as recent_flag_reason
           FROM user_accounts u 
           WHERE " . implode(' AND ', $conditions) . " 
           ORDER BY " . $order_by;
@@ -215,6 +222,12 @@ $query = "SELECT COUNT(DISTINCT OwnerID) as total FROM flag_reports WHERE FlagTy
 $stmt = $conn->prepare($query);
 $stmt->execute();
 $stats['flagged_users'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+// Suspended users (excluding admins)
+$query = "SELECT COUNT(*) as total FROM user_accounts WHERE User_Status = 'Suspended' AND User_Role != 1";
+$stmt = $conn->prepare($query);
+$stmt->execute();
+$stats['suspended_users'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
 // Users by role (excluding admins)
 $query = "SELECT User_Role, COUNT(*) as count FROM user_accounts WHERE User_Status != 'Deleted' AND User_Role != 1 GROUP BY User_Role";
@@ -251,6 +264,7 @@ function getRoleName($role_id) {
     <title>User Management - RentHub PH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .dropdown-menu {
             z-index: 2000 !important;
@@ -556,20 +570,17 @@ function getRoleName($role_id) {
                 </div>
 
                 <div class="col-xl-3 col-md-6 d-flex">
-                    <div class="card stat-card roles w-100">
+                    <div class="card stat-card suspended w-100">
                         <div class="card-body">
                             <div class="row align-items-center">
                                 <div class="col">
-                                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                                        User Roles
+                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                        Suspended Users
                                     </div>
-                                    <div class="small">
-                                        Owner: <?php echo $stats['owners']; ?> | 
-                                        Renter: <?php echo $stats['renters']; ?>
-                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold"><?php echo number_format($stats['suspended_users']); ?></div>
                                 </div>
                                 <div class="col-auto">
-                                    <i class="fas fa-user-tag fa-2x text-danger"></i>
+                                    <i class="fas fa-user-slash fa-2x text-warning"></i>
                                 </div>
                             </div>
                         </div>
@@ -590,6 +601,7 @@ function getRoleName($role_id) {
                             <option value="all" <?php echo $status_filter == 'all' ? 'selected' : ''; ?>>All Status</option>
                             <option value="active" <?php echo $status_filter == 'active' ? 'selected' : ''; ?>>Active</option>
                             <option value="inactive" <?php echo $status_filter == 'inactive' ? 'selected' : ''; ?>>Inactive</option>
+                            <option value="suspended" <?php echo $status_filter == 'suspended' ? 'selected' : ''; ?>>Suspended</option>
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -641,8 +653,6 @@ function getRoleName($role_id) {
                                         <div class="card-body py-3 px-4">
                                             <div class="actions-top">
                                                 <div class="d-flex flex-wrap gap-1">
-                                                    <button class="btn btn-outline-primary btn-sm" title="View Details" onclick="viewUserDetails(<?php echo $user['UserID']; ?>)"><i class="fas fa-eye"></i></button>
-                                                    <button class="btn btn-outline-secondary btn-sm" title="Edit User" onclick="editUser(<?php echo $user['UserID']; ?>)"><i class="fas fa-edit"></i></button>
                                                     <?php if(!$user['User_IsVerified']): ?>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
@@ -660,6 +670,18 @@ function getRoleName($role_id) {
                                                             <input type="hidden" name="new_status" value="Inactive">
                                                             <button type="submit" name="update_user_status" class="btn btn-outline-warning btn-sm" title="Deactivate"><i class="fas fa-ban"></i></button>
                                                         </form>
+                                                        <form method="POST" style="display:inline;" id="suspendForm_<?php echo $user['UserID']; ?>">
+                                                            <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Suspended">
+                                                            <input type="hidden" name="update_user_status" value="1">
+                                                            <button type="button" class="btn btn-outline-danger btn-sm" title="Suspend" onclick="confirmSuspend(<?php echo $user['UserID']; ?>, '<?php echo htmlspecialchars($user['User_Name'], ENT_QUOTES); ?>')"><i class="fas fa-user-slash"></i></button>
+                                                        </form>
+                                                    <?php elseif($user['User_Status'] == 'Suspended'): ?>
+                                                        <form method="POST" style="display:inline;">
+                                                            <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
+                                                            <input type="hidden" name="new_status" value="Active">
+                                                            <button type="submit" name="update_user_status" class="btn btn-outline-success btn-sm" title="Reactivate"><i class="fas fa-user-check"></i></button>
+                                                        </form>
                                                     <?php else: ?>
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
@@ -667,9 +689,10 @@ function getRoleName($role_id) {
                                                             <button type="submit" name="update_user_status" class="btn btn-outline-success btn-sm" title="Activate"><i class="fas fa-check-circle"></i></button>
                                                         </form>
                                                     <?php endif; ?>
-                                                    <form method="POST" style="display:inline;">
+                                                    <form method="POST" style="display:inline;" id="deleteForm_<?php echo $user['UserID']; ?>">
                                                         <input type="hidden" name="user_id" value="<?php echo $user['UserID']; ?>">
-                                                        <button type="submit" name="delete_user" class="btn btn-outline-danger btn-sm" title="Delete" onclick="return confirm('Delete this user?')"><i class="fas fa-trash"></i></button>
+                                                        <input type="hidden" name="delete_user" value="1">
+                                                        <button type="button" class="btn btn-outline-danger btn-sm" title="Delete" onclick="confirmDelete(<?php echo $user['UserID']; ?>, '<?php echo htmlspecialchars($user['User_Name'], ENT_QUOTES); ?>')"><i class="fas fa-trash"></i></button>
                                                     </form>
                                                 </div>
                                             </div>
@@ -682,7 +705,10 @@ function getRoleName($role_id) {
                                                 </div>
                                                 <div class="col ps-3">
                                                     <div class="d-flex align-items-center mb-2">
-                                                        <span class="badge bg-<?php echo $user['User_Status'] == 'Active' ? 'success' : 'secondary'; ?> status-badge me-2">
+                                                        <span class="badge bg-<?php 
+                                                            echo $user['User_Status'] == 'Active' ? 'success' : 
+                                                                ($user['User_Status'] == 'Suspended' ? 'danger' : 'secondary'); 
+                                                        ?> status-badge me-2">
                                                             <?php echo $user['User_Status']; ?>
                                                         </span>
                                                         <span class="role-badge me-2"><?php echo $user['User_Role'] == 2 ? 'Renter' : 'Owner'; ?></span>
@@ -692,7 +718,17 @@ function getRoleName($role_id) {
                                                             <span class="badge bg-secondary">Unverified</span>
                                                         <?php endif; ?>
                                                         <?php if(($user['flag_count'] ?? 0) > 0): ?>
-                                                            <span class="badge bg-danger ms-2" title="This user has been flagged <?php echo $user['flag_count']; ?> time(s)">
+                                                            <?php 
+                                                            $tooltip = "Click to view all flag details\n";
+                                                            $tooltip .= "Total flags: " . $user['flag_count'];
+                                                            if ($user['recent_flag_reason']) {
+                                                                $tooltip .= "\nRecent reason: " . substr($user['recent_flag_reason'], 0, 50) . (strlen($user['recent_flag_reason']) > 50 ? '...' : '');
+                                                            }
+                                                            ?>
+                                                            <span class="badge bg-danger ms-2 cursor-pointer" 
+                                                                  title="<?php echo htmlspecialchars($tooltip); ?>" 
+                                                                  onclick="viewFlagReasons(<?php echo $user['UserID']; ?>, '<?php echo htmlspecialchars($user['User_Name'], ENT_QUOTES); ?>')" 
+                                                                  style="cursor: pointer;">
                                                                 <i class="fas fa-flag"></i> <?php echo $user['flag_count']; ?> Flag<?php echo $user['flag_count'] > 1 ? 's' : ''; ?>
                                                             </span>
                                                         <?php endif; ?>
@@ -706,6 +742,12 @@ function getRoleName($role_id) {
                                                         <div class="me-3">Products: <span class="fw-bold"><?php echo $user['total_products'] ?? 0; ?></span></div>
                                                         <div class="me-3">Flags: <span class="fw-bold <?php echo ($user['flag_count'] ?? 0) > 0 ? 'text-danger' : ''; ?>"><?php echo $user['flag_count'] ?? 0; ?></span></div>
                                                     </div>
+                                                    <?php if(($user['flag_count'] ?? 0) > 0 && $user['recent_flag_reason']): ?>
+                                                    <div class="small text-danger mt-1">
+                                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                                        <strong>Recent flag:</strong> <?php echo htmlspecialchars(substr($user['recent_flag_reason'], 0, 80) . (strlen($user['recent_flag_reason']) > 80 ? '...' : '')); ?>
+                                                    </div>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -867,9 +909,145 @@ function getRoleName($role_id) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function bulkSuspendUsers() {
-            if(confirm('Suspend all selected users?')) {
-                document.getElementById('bulkSuspendForm').submit();
+            const checkboxes = document.querySelectorAll('.bulk-user-checkbox:checked');
+            if (checkboxes.length === 0) {
+                Swal.fire({
+                    title: 'No Users Selected',
+                    text: 'Please select at least one user to suspend.',
+                    icon: 'warning',
+                    confirmButtonText: 'OK'
+                });
+                return;
             }
+
+            Swal.fire({
+                title: 'Bulk Suspend Users',
+                text: `Are you sure you want to suspend ${checkboxes.length} selected user(s)? This will cancel their pending bookings and deactivate their products.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, suspend users',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('bulkSuspendForm').submit();
+                }
+            });
+        }
+
+        function confirmSuspend(userId, userName) {
+            Swal.fire({
+                title: 'Suspend User',
+                text: `Are you sure you want to suspend ${userName}? This will cancel their pending bookings and deactivate their products.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, suspend user',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Submit the form
+                    document.getElementById('suspendForm_' + userId).submit();
+                }
+            });
+        }
+
+        function confirmDelete(userId, userName) {
+            Swal.fire({
+                title: 'Delete User',
+                text: `Are you sure you want to permanently delete ${userName}? This action cannot be undone!`,
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, delete user',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Submit the form
+                    document.getElementById('deleteForm_' + userId).submit();
+                }
+            });
+        }
+
+        function viewFlagReasons(userId, userName) {
+            // Show loading state
+            Swal.fire({
+                title: `Flag Reports for ${userName}`,
+                html: '<div class="text-center"><div class="spinner-border" role="status"></div><p class="mt-2">Loading flag reports...</p></div>',
+                showConfirmButton: false,
+                allowOutsideClick: false
+            });
+
+            // Fetch flag details
+            fetch('get_flag_details.php?user_id=' + userId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let flagsHtml = '';
+                        if (data.flags.length === 0) {
+                            flagsHtml = '<p class="text-muted">No flag reports found.</p>';
+                        } else {
+                            flagsHtml = '<div class="flag-reports">';
+                            data.flags.forEach((flag, index) => {
+                                flagsHtml += `
+                                    <div class="flag-report mb-3 p-3" style="border: 1px solid #dee2e6; border-radius: 0.375rem; background-color: #f8f9fa;">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <span class="badge bg-${flag.FlagType === 'owner' ? 'warning' : 'info'}">${flag.FlagType.toUpperCase()}</span>
+                                            <small class="text-muted">Flag #${flag.FlagID}</small>
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Reason:</strong> ${flag.Reason}
+                                        </div>
+                                        ${flag.Description ? `<div class="mb-2"><strong>Description:</strong> ${flag.Description}</div>` : ''}
+                                        <div class="text-muted small">
+                                            <strong>Reported by:</strong> ${flag.Reporter_Name || 'Anonymous'}
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            flagsHtml += '</div>';
+                        }
+
+                        // Show flags with action buttons
+                        Swal.fire({
+                            title: `Flag Reports for ${userName}`,
+                            html: flagsHtml,
+                            width: '600px',
+                            showCancelButton: true,
+                            showConfirmButton: true,
+                            confirmButtonText: '<i class="fas fa-user-slash"></i> Suspend User',
+                            confirmButtonColor: '#dc3545',
+                            cancelButtonText: 'Close',
+                            cancelButtonColor: '#6c757d',
+                            reverseButtons: true
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                // Call suspend function
+                                confirmSuspend(userId, userName);
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'Failed to load flag reports: ' + (data.message || 'Unknown error'),
+                            icon: 'error'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to load flag reports. Please try again.',
+                        icon: 'error'
+                    });
+                });
         }
     </script>
 </body>

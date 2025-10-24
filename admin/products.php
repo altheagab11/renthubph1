@@ -196,7 +196,8 @@ if ($products_table_exists) {
                 (SELECT COUNT(*) FROM bookings WHERE ProductID = p.ProductID AND Book_Status = 'Active') as active_bookings,
                 (SELECT SUM(Book_TotalAmount) FROM bookings WHERE ProductID = p.ProductID AND Book_Status IN ('Active', 'Completed')) as total_revenue,
                 (SELECT PI_ImagePath FROM product_images WHERE ProductID = p.ProductID AND PI_IsMain = 1 LIMIT 1) as Main_Image,
-                (SELECT COUNT(*) FROM flag_reports WHERE ProductID = p.ProductID AND FlagType = 'product') as flag_count
+                (SELECT COUNT(*) FROM flag_reports WHERE ProductID = p.ProductID AND FlagType = 'product') as flag_count,
+                (SELECT Reason FROM flag_reports WHERE ProductID = p.ProductID AND FlagType = 'product' ORDER BY FlagID DESC LIMIT 1) as recent_flag_reason
             FROM products p 
             LEFT JOIN user_accounts u ON p.OwnerID = u.UserID";
         
@@ -345,6 +346,7 @@ function formatCurrency($amount) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product Management - RentHub PH Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         /* Fix dropdown menu being cut off */
         .dropdown-menu {
@@ -927,7 +929,17 @@ function formatCurrency($amount) {
                                                     </span>
                                                     <?php endif; ?>
                                                     <?php if($product['flag_count'] > 0): ?>
-                                                    <span class="badge bg-danger me-2" title="This product has been flagged <?php echo $product['flag_count']; ?> time(s)">
+                                                    <?php 
+                                                    $tooltip = "Click to view all flag details\n";
+                                                    $tooltip .= "Total flags: " . $product['flag_count'];
+                                                    if ($product['recent_flag_reason']) {
+                                                        $tooltip .= "\nRecent reason: " . substr($product['recent_flag_reason'], 0, 50) . (strlen($product['recent_flag_reason']) > 50 ? '...' : '');
+                                                    }
+                                                    ?>
+                                                    <span class="badge bg-danger me-2 cursor-pointer" 
+                                                          title="<?php echo htmlspecialchars($tooltip); ?>" 
+                                                          onclick="viewProductFlagReasons(<?php echo $product['ProductID']; ?>, '<?php echo htmlspecialchars($product['Prod_Name'], ENT_QUOTES); ?>')" 
+                                                          style="cursor: pointer;">
                                                         <i class="fas fa-flag"></i> <?php echo $product['flag_count']; ?> Flag<?php echo $product['flag_count'] > 1 ? 's' : ''; ?>
                                                     </span>
                                                     <?php endif; ?>
@@ -939,6 +951,13 @@ function formatCurrency($amount) {
                                                         htmlspecialchars(substr($product['Prod_Description'], 0, 100)) . '...' : 
                                                         htmlspecialchars($product['Prod_Description']); ?>
                                                 </p>
+                                                
+                                                <?php if(($product['flag_count'] ?? 0) > 0 && $product['recent_flag_reason']): ?>
+                                                <div class="small text-danger mb-2">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                                    <strong>Recent flag:</strong> <?php echo htmlspecialchars(substr($product['recent_flag_reason'], 0, 60) . (strlen($product['recent_flag_reason']) > 60 ? '...' : '')); ?>
+                                                </div>
+                                                <?php endif; ?>
                                                 
                                                 <div class="d-flex align-items-center">
                                                     <div class="owner-avatar">
@@ -1275,6 +1294,104 @@ function formatCurrency($amount) {
                     }, index * 100);
                 });
             });
+
+            function viewProductFlagReasons(productId, productName) {
+                // Show loading state
+                Swal.fire({
+                    title: `Flag Reports for "${productName}"`,
+                    html: '<div class="text-center"><div class="spinner-border" role="status"></div><p class="mt-2">Loading flag reports...</p></div>',
+                    showConfirmButton: false,
+                    allowOutsideClick: false
+                });
+
+                // Fetch flag details
+                fetch('get_product_flag_details.php?product_id=' + productId)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            let flagsHtml = '';
+                            if (data.flags.length === 0) {
+                                flagsHtml = '<p class="text-muted">No flag reports found.</p>';
+                            } else {
+                                flagsHtml = '<div class="flag-reports">';
+                                data.flags.forEach((flag, index) => {
+                                    flagsHtml += `
+                                        <div class="flag-report mb-3 p-3" style="border: 1px solid #dee2e6; border-radius: 0.375rem; background-color: #f8f9fa;">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <span class="badge bg-info">PRODUCT</span>
+                                                <small class="text-muted">Flag #${flag.FlagID}</small>
+                                            </div>
+                                            <div class="mb-2">
+                                                <strong>Reason:</strong> ${flag.Reason}
+                                            </div>
+                                            ${flag.Description ? `<div class="mb-2"><strong>Description:</strong> ${flag.Description}</div>` : ''}
+                                            <div class="text-muted small">
+                                                <strong>Reported by:</strong> ${flag.Reporter_Name || 'Anonymous'}
+                                            </div>
+                                        </div>
+                                    `;
+                                });
+                                flagsHtml += '</div>';
+                            }
+
+                            // Show flags with action buttons
+                            Swal.fire({
+                                title: `Flag Reports for "${productName}"`,
+                                html: flagsHtml,
+                                width: '600px',
+                                showCancelButton: true,
+                                showConfirmButton: true,
+                                confirmButtonText: '<i class="fas fa-ban"></i> Suspend Product',
+                                confirmButtonColor: '#dc3545',
+                                cancelButtonText: 'Close',
+                                cancelButtonColor: '#6c757d',
+                                reverseButtons: true
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    // Confirm suspend action
+                                    Swal.fire({
+                                        title: 'Suspend Product',
+                                        text: `Are you sure you want to suspend "${productName}"?`,
+                                        icon: 'warning',
+                                        showCancelButton: true,
+                                        confirmButtonColor: '#dc3545',
+                                        cancelButtonColor: '#6c757d',
+                                        confirmButtonText: 'Yes, suspend product',
+                                        cancelButtonText: 'Cancel',
+                                        reverseButtons: true
+                                    }).then((suspendResult) => {
+                                        if (suspendResult.isConfirmed) {
+                                            // Create and submit form to suspend product
+                                            const form = document.createElement('form');
+                                            form.method = 'POST';
+                                            form.innerHTML = `
+                                                <input type="hidden" name="product_id" value="${productId}">
+                                                <input type="hidden" name="new_status" value="Suspended">
+                                                <input type="hidden" name="update_product_status" value="1">
+                                            `;
+                                            document.body.appendChild(form);
+                                            form.submit();
+                                        }
+                                    });
+                                }
+                            });
+                        } else {
+                            Swal.fire({
+                                title: 'Error',
+                                text: 'Failed to load flag reports: ' + (data.message || 'Unknown error'),
+                                icon: 'error'
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'Failed to load flag reports. Please try again.',
+                            icon: 'error'
+                        });
+                    });
+            }
 
             // Initialize tooltips if any
             document.addEventListener('DOMContentLoaded', function() {
