@@ -598,14 +598,9 @@ $stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
                                                 <strong class="text-primary">#<?php echo $refund['RefundID']; ?></strong>
                                             </td>
                                             <td>
-                                                <div class="d-flex align-items-center">
-                                                    <div class="avatar-circle bg-primary text-white me-3">
-                                                        <?php echo strtoupper(substr($refund['Renter_Name'], 0, 1)); ?>
-                                                    </div>
-                                                    <div>
-                                                        <strong><?php echo htmlspecialchars($refund['Renter_Name']); ?></strong><br>
-                                                        <small class="text-muted"><?php echo htmlspecialchars($refund['Renter_Email']); ?></small>
-                                                    </div>
+                                                <div>
+                                                    <strong><?php echo htmlspecialchars($refund['Renter_Name']); ?></strong><br>
+                                                    <small class="text-muted"><?php echo htmlspecialchars($refund['Renter_Email']); ?></small>
                                                 </div>
                                             </td>
                                             <td>
