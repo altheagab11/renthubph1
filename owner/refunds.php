@@ -20,6 +20,11 @@ if ($_POST) {
         $transaction_id = $_POST['transaction_id'] ?? '';
         $notes = $_POST['notes'] ?? '';
         
+        // Validate required fields
+        if (empty($transaction_id)) {
+            throw new Exception("Transaction ID is required to process refund.");
+        }
+        
         try {
             $conn->beginTransaction();
             
@@ -572,8 +577,8 @@ $notif_count = $notif_count_stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label">Transaction ID (Optional)</label>
-                            <input type="text" name="transaction_id" class="form-control" placeholder="Enter transaction reference number">
+                            <label class="form-label">Transaction ID <span class="text-danger">*</span></label>
+                            <input type="text" name="transaction_id" class="form-control" placeholder="Enter transaction reference number" required>
                         </div>
                         
                         <div class="mb-3">

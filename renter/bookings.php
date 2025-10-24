@@ -636,6 +636,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
             top: 15px;
             right: 15px;
             z-index: 2;
+            max-width: 150px;
         }
         
         .status-badge {
@@ -649,6 +650,7 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
         .status-badge.pending { background: #ffc107; color: #000; }
         .status-badge.confirmed { background: #17a2b8; }
         .status-badge.active { background: #28a745; }
+        .status-badge.under-review { background: #17a2b8; }
         .status-badge.completed { background: #6c757d; }
         .status-badge.cancelled { background: #dc3545; }
         
@@ -1076,14 +1078,6 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                 <?php foreach($bookings as $booking): ?>
                 <?php $booking_notes = formatBookingNotes($booking['Book_Notes']); ?>
                 <div class="booking-card card" data-payment-method="<?php echo htmlspecialchars($booking_notes['payment_method']); ?>">
-                    <div class="booking-status">
-                        <?php if($booking['Book_Status'] !== 'Completed' && $booking['Book_Status'] !== 'Cancelled' && $booking['PaymentID']): ?>
-                        <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> ms-2">
-                            Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
-                        </span>
-                        <?php endif; ?>
-                    </div>
-                    
                     <div class="card-body p-4">
                         <div class="row">
                             <div class="col-md-3">
@@ -1152,15 +1146,27 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                             <div class="col-md-3">
                                 <div class="d-flex align-items-center justify-content-between mb-2" style="gap: 0.5rem;">
                                     <h4 class="text-primary mb-0">₱<?php echo number_format($booking['Book_TotalAmount'], 2); ?></h4>
-                                    <?php if($booking['Book_Status'] == 'Pending'): ?>
-                                        <span class="badge status-badge px-3 py-2 fs-6 bg-warning text-dark" style="border-radius: 1rem;">Pending</span>
-                                    <?php elseif($booking['Book_Status'] == 'Confirmed'): ?>
-                                        <span class="badge status-badge px-3 py-2 fs-6 bg-success" style="border-radius: 1rem;">Confirmed</span>
-                                    <?php elseif($booking['Book_Status'] == 'Cancelled'): ?>
-                                        <span class="badge status-badge px-3 py-2 fs-6 bg-danger" style="border-radius: 1rem;">Cancelled</span>
-                                    <?php elseif($booking['Book_Status'] == 'Completed'): ?>
-                                        <span class="badge status-badge px-3 py-2 fs-6 bg-secondary" style="border-radius: 1rem;">Completed</span>
-                                    <?php endif; ?>
+                                    <div class="d-flex flex-column align-items-end" style="gap: 0.5rem;">
+                                        <?php if($booking['Book_Status'] == 'Pending'): ?>
+                                            <span class="badge status-badge px-3 py-2 fs-6 bg-warning text-dark" style="border-radius: 1rem;">Pending</span>
+                                        <?php elseif($booking['Book_Status'] == 'Confirmed'): ?>
+                                            <span class="badge status-badge px-3 py-2 fs-6 bg-success" style="border-radius: 1rem;">Confirmed</span>
+                                        <?php elseif($booking['Book_Status'] == 'Active'): ?>
+                                            <span class="badge status-badge px-3 py-2 fs-6 bg-primary" style="border-radius: 1rem;">Active</span>
+                                        <?php elseif($booking['Book_Status'] == 'Under Review'): ?>
+                                            <span class="badge status-badge px-3 py-2 fs-6 bg-info" style="border-radius: 1rem;">Under Review</span>
+                                        <?php elseif($booking['Book_Status'] == 'Cancelled'): ?>
+                                            <span class="badge status-badge px-3 py-2 fs-6 bg-danger" style="border-radius: 1rem;">Cancelled</span>
+                                        <?php elseif($booking['Book_Status'] == 'Completed'): ?>
+                                            <span class="badge status-badge px-3 py-2 fs-6 bg-secondary" style="border-radius: 1rem;">Completed</span>
+                                        <?php endif; ?>
+                                        
+                                        <?php if($booking['Book_Status'] !== 'Completed' && $booking['Book_Status'] !== 'Cancelled' && $booking['PaymentID']): ?>
+                                        <span class="badge payment-status <?php echo strtolower($booking['Pay_Status']); ?> px-2 py-1" style="border-radius: 0.75rem; font-size: 0.7rem;">
+                                            Payment: <?php echo htmlspecialchars($booking['Pay_Status']); ?>
+                                        </span>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <?php
                                 $start_date = new DateTime($booking['Book_StartDate']);
@@ -1232,6 +1238,15 @@ $stats['completed_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                     <?php if($booking['Book_Status'] == 'Cancelled'): ?>
                                         <div class="text-muted small">
                                             <i class="fas fa-times-circle me-1"></i>Booking has been cancelled
+                                        </div>
+                                    <?php endif; ?>
+                                    
+                                    <?php if($booking['Book_Status'] == 'Under Review'): ?>
+                                        <div class="text-info small">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Rental under admin review
+                                        </div>
+                                        <div class="alert alert-info mt-2 mb-2" style="font-size: 0.85rem;">
+                                            <strong>Notice:</strong> This rental is under administrative review due to owner account suspension. Our support team will contact you within 24 hours to resolve this matter.
                                         </div>
                                     <?php endif; ?>
                                     

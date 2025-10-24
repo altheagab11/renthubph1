@@ -19,7 +19,7 @@ if (isset($_SESSION['user_id'])) {
         if ($stmt->rowCount() > 0) {
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($row['User_Status'] !== 'Active') {
-                // User has been deactivated, destroy session and redirect
+                // User has been deactivated or suspended, destroy session and redirect
                 session_destroy();
                 
                 // Determine the correct path to login.php based on current location
@@ -30,7 +30,12 @@ if (isset($_SESSION['user_id'])) {
                 $levelsUp = count($pathParts) - 1;
                 $relativePath = str_repeat('../', $levelsUp);
                 
-                header("Location: {$relativePath}login.php?deactivated=1");
+                // Redirect based on user status
+                if ($row['User_Status'] === 'Suspended') {
+                    header("Location: {$relativePath}login.php?suspended=1");
+                } else {
+                    header("Location: {$relativePath}login.php?deactivated=1");
+                }
                 exit();
             }
         } else {

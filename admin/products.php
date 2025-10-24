@@ -44,53 +44,125 @@ if ($_POST) {
                     }
                 }
             } else {
-                $query = "UPDATE products SET Prod_Status = ?, Prod_UpdatedAt = NOW() WHERE ProductID = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $new_status);
-                $stmt->bindParam(2, $product_id);
-                
-                if ($stmt->execute()) {
-                    $message = "Product status updated successfully!";
-                    $message_type = "success";
+                // Check if trying to deactivate product with active bookings
+                if ($new_status === 'Inactive') {
+                    $active_bookings_query = "SELECT COUNT(*) as count FROM bookings WHERE ProductID = ? AND Book_Status IN ('Active', 'Confirmed')";
+                    $active_stmt = $conn->prepare($active_bookings_query);
+                    $active_stmt->execute([$product_id]);
+                    $active_result = $active_stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($active_result['count'] > 0) {
+                        $message = "Cannot deactivate product. It has " . $active_result['count'] . " active or confirmed booking(s). Please wait for bookings to complete or cancel them first.";
+                        $message_type = "warning";
+                    } else {
+                        // Safe to deactivate - no active bookings
+                        $query = "UPDATE products SET Prod_Status = ?, Prod_UpdatedAt = NOW() WHERE ProductID = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(1, $new_status);
+                        $stmt->bindParam(2, $product_id);
+                        
+                        if ($stmt->execute()) {
+                            $message = "Product deactivated successfully!";
+                            $message_type = "success";
+                        } else {
+                            $message = "Failed to deactivate product.";
+                            $message_type = "danger";
+                        }
+                    }
                 } else {
-                    $message = "Failed to update product status.";
+                    // For other status changes (like Suspension), proceed with existing logic
+                    // Start transaction for product suspension
+                    $conn->beginTransaction();
+                    
+                    try {
+                        // Update product status
+                        $query = "UPDATE products SET Prod_Status = ?, Prod_UpdatedAt = NOW() WHERE ProductID = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bindParam(1, $new_status);
+                        $stmt->bindParam(2, $product_id);
+                        $stmt->execute();
+                    
+                    // If suspending product, handle bookings and refunds
+                    if ($new_status === 'Suspended') {
+                        // Get all active bookings for this product
+                        $bookings_query = "SELECT b.BookingID, b.RenterID, b.Book_Status, b.Book_TotalAmount,
+                                          p.Prod_Name, r.User_Name as Renter_Name, r.User_Email as Renter_Email,
+                                          pay.PaymentID, pay.Pay_Status, pay.Pay_Amount
+                                          FROM bookings b
+                                          JOIN products p ON b.ProductID = p.ProductID
+                                          JOIN user_accounts r ON b.RenterID = r.UserID
+                                          LEFT JOIN payments pay ON b.BookingID = pay.BookingID
+                                          WHERE b.ProductID = ? AND b.Book_Status IN ('Pending', 'Confirmed', 'Active')";
+                        $bookings_stmt = $conn->prepare($bookings_query);
+                        $bookings_stmt->execute([$product_id]);
+                        $affected_bookings = $bookings_stmt->fetchAll(PDO::FETCH_ASSOC);
+                        
+                        $cancelled_count = 0;
+                        $refund_count = 0;
+                        
+                        foreach ($affected_bookings as $booking) {
+                            // Cancel the booking
+                            $cancel_query = "UPDATE bookings SET Book_Status = 'Cancelled', 
+                                           Book_CancelReason = 'Product suspended by administrator', 
+                                           Book_UpdatedAt = NOW() 
+                                           WHERE BookingID = ?";
+                            $cancel_stmt = $conn->prepare($cancel_query);
+                            $cancel_stmt->execute([$booking['BookingID']]);
+                            $cancelled_count++;
+                            
+                            // Create refund if payment was completed
+                            if ($booking['PaymentID'] && $booking['Pay_Status'] == 'Completed') {
+                                $refund_amount = $booking['Pay_Amount'];
+                                $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
+                                               VALUES (?, ?, 'Pending', 'Product suspended - owner to process refund', NOW())";
+                                $refund_stmt = $conn->prepare($refund_query);
+                                $refund_stmt->execute([$booking['BookingID'], $refund_amount]);
+                                $refund_count++;
+                                
+                                // Notify renter about cancellation and refund
+                                $notification_msg = "Your booking for '{$booking['Prod_Name']}' has been cancelled due to product suspension. A refund of ₱" . number_format($refund_amount, 2) . " will be processed by the owner.";
+                            } else {
+                                // Notify renter about cancellation (no payment)
+                                $notification_msg = "Your booking for '{$booking['Prod_Name']}' has been cancelled due to product suspension.";
+                            }
+                            
+                            // Insert notification for renter
+                            $notif_query = "INSERT INTO notifications (UserID, Not_Title, Not_Message, Not_Type, Not_CreatedAt) 
+                                          VALUES (?, ?, ?, 'booking', NOW())";
+                            $notif_stmt = $conn->prepare($notif_query);
+                            $notif_stmt->execute([
+                                $booking['RenterID'], 
+                                'Booking Cancelled - Product Suspended',
+                                $notification_msg
+                            ]);
+                        }
+                        
+                        $conn->commit();
+                        
+                        $message = "Product suspended successfully!";
+                        if ($cancelled_count > 0) {
+                            $message .= " {$cancelled_count} booking(s) cancelled.";
+                            if ($refund_count > 0) {
+                                $message .= " {$refund_count} refund(s) created for owner to process.";
+                            }
+                        }
+                        $message_type = "success";
+                        
+                    } else {
+                        $conn->commit();
+                        $message = "Product status updated successfully!";
+                        $message_type = "success";
+                    }
+                    
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $message = "Error updating product status: " . $e->getMessage();
                     $message_type = "danger";
+                }
                 }
             }
         } catch (PDOException $e) {
             $message = "Error updating product status: " . $e->getMessage();
-            $message_type = "danger";
-        }
-    }
-    
-    if (isset($_POST['delete_product'])) {
-        $product_id = $_POST['product_id'];
-        
-        try {
-            $query = "SELECT COUNT(*) as count FROM bookings WHERE ProductID = ? AND Book_Status IN ('Active', 'Pending')";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $product_id);
-            $stmt->execute();
-            $booking_result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($booking_result['count'] > 0) {
-                $message = "Cannot delete product. It has " . $booking_result['count'] . " active booking(s).";
-                $message_type = "warning";
-            } else {
-                $query = "UPDATE products SET Prod_Status = 'Deleted', Prod_UpdatedAt = NOW() WHERE ProductID = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(1, $product_id);
-                
-                if ($stmt->execute()) {
-                    $message = "Product deleted successfully!";
-                    $message_type = "success";
-                } else {
-                    $message = "Failed to delete product.";
-                    $message_type = "danger";
-                }
-            }
-        } catch (PDOException $e) {
-            $message = "Error deleting product: " . $e->getMessage();
             $message_type = "danger";
         }
     }
@@ -515,26 +587,32 @@ function formatCurrency($amount) {
         .product-stats {
             background: #f8f9fa;
             border-radius: 8px;
-            padding: 0.75rem;
-            margin-top: 1rem;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
         }
         
         .product-stat-item {
             text-align: center;
-            padding: 0.25rem;
+            padding: 0.2rem 0.1rem;
         }
         
         .product-stat-value {
-            font-size: 1.25rem;
+            font-size: 1rem;
             font-weight: 600;
             color: #007bff;
+            line-height: 1.2;
+            margin-bottom: 0.1rem;
         }
         
         .product-stat-label {
-            font-size: 0.75rem;
+            font-size: 0.6rem;
             color: #6c757d;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.2px;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .btn-action {
@@ -984,22 +1062,24 @@ function formatCurrency($amount) {
                                             
                                             <div class="col-md-3">
                                                 <div class="product-stats">
-                                                    <div class="row">
-                                                        <div class="col-3 product-stat-item">
-                                                            <div class="product-stat-value"><?php echo number_format($product['total_bookings'] ?? 0); ?></div>
-                                                            <div class="product-stat-label">Bookings</div>
+                                                    <div class="row g-1">
+                                                        <div class="col-4">
+                                                            <div class="product-stat-item">
+                                                                <div class="product-stat-value"><?php echo number_format($product['total_bookings'] ?? 0); ?></div>
+                                                                <div class="product-stat-label">BOOKINGS</div>
+                                                            </div>
                                                         </div>
-                                                        <div class="col-3 product-stat-item">
-                                                            <div class="product-stat-value"><?php echo number_format($product['active_bookings'] ?? 0); ?></div>
-                                                            <div class="product-stat-label">Active</div>
+                                                        <div class="col-4">
+                                                            <div class="product-stat-item">
+                                                                <div class="product-stat-value"><?php echo number_format($product['active_bookings'] ?? 0); ?></div>
+                                                                <div class="product-stat-label">ACTIVE</div>
+                                                            </div>
                                                         </div>
-                                                        <div class="col-3 product-stat-item">
-                                                            <div class="product-stat-value"><?php echo number_format($product['flag_count'] ?? 0); ?></div>
-                                                            <div class="product-stat-label">Flags</div>
-                                                        </div>
-                                                        <div class="col-3 product-stat-item">
-                                                            <div class="product-stat-value">₱<?php echo number_format($product['total_revenue'] ?? 0, 0); ?></div>
-                                                            <div class="product-stat-label">Revenue</div>
+                                                        <div class="col-4">
+                                                            <div class="product-stat-item">
+                                                                <div class="product-stat-value">₱<?php echo number_format($product['total_revenue'] ?? 0, 0); ?></div>
+                                                                <div class="product-stat-label">REVENUE</div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1024,13 +1104,9 @@ function formatCurrency($amount) {
                                                         <form method="POST" style="display:inline;">
                                                             <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
                                                             <input type="hidden" name="new_status" value="Suspended">
-                                                            <button type="submit" name="update_product_status" class="btn btn-outline-warning btn-sm" title="Suspend (Permanent)" onclick="return confirm('Are you sure you want to suspend this product? This action cannot be undone and the product can never be activated again.')"><i class="fas fa-exclamation-triangle"></i></button>
+                                                            <button type="button" name="update_product_status" class="btn btn-outline-warning btn-sm" title="Suspend (Permanent)" onclick="confirmSuspendProduct(<?php echo $product['ProductID']; ?>, '<?php echo htmlspecialchars($product['Prod_Name'], ENT_QUOTES); ?>')"><i class="fas fa-exclamation-triangle"></i></button>
                                                         </form>
                                                         <?php endif; ?>
-                                                        <form method="POST" style="display:inline;">
-                                                            <input type="hidden" name="product_id" value="<?php echo $product['ProductID']; ?>">
-                                                            <button type="submit" name="delete_product" class="btn btn-outline-danger btn-sm" title="Delete Product" onclick="return confirm('Are you sure you want to delete this product? This action cannot be undone.')"><i class="fas fa-trash"></i></button>
-                                                        </form>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1400,6 +1476,39 @@ function formatCurrency($amount) {
                     return new bootstrap.Tooltip(tooltipTriggerEl);
                 });
             });
+
+            // Function to confirm product suspension with SweetAlert
+            function confirmSuspendProduct(productId, productName) {
+                Swal.fire({
+                    title: 'Suspend Product',
+                    html: `Are you sure you want to suspend "<strong>${productName}</strong>"?<br><br>
+                           <div class="alert alert-warning mt-3 mb-0">
+                               <i class="fas fa-exclamation-triangle me-2"></i>
+                               <strong>Warning:</strong> This action cannot be undone and the product can never be activated again.
+                           </div>`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#dc3545',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-ban me-1"></i>Yes, suspend product',
+                    cancelButtonText: '<i class="fas fa-times me-1"></i>Cancel',
+                    reverseButtons: true,
+                    focusCancel: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Create and submit form to suspend product
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.innerHTML = `
+                            <input type="hidden" name="product_id" value="${productId}">
+                            <input type="hidden" name="new_status" value="Suspended">
+                            <input type="hidden" name="update_product_status" value="1">
+                        `;
+                        document.body.appendChild(form);
+                        form.submit();
+                    }
+                });
+            }
         </script>
     </body>
 </html>

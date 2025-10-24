@@ -50,9 +50,10 @@ if ($_POST) {
                 
                 // If user is owner (role 2 or 3), handle their products and bookings
                 if ($user_info && in_array($user_info['User_Role'], [2, 3])) {
-                    // 1. Deactivate all their products
-                    $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = 'Inactive' WHERE OwnerID = ?");
-                    $prod_stmt->execute([$user_id]);
+                    // 1. Suspend/Deactivate all their products based on user status
+                    $product_status = $new_status === 'Suspended' ? 'Suspended' : 'Inactive';
+                    $prod_stmt = $conn->prepare("UPDATE products SET Prod_Status = ? WHERE OwnerID = ?");
+                    $prod_stmt->execute([$product_status, $user_id]);
                     
                     // 2. Get all pending bookings for this owner
                     $pending_bookings_query = "SELECT b.BookingID, b.RenterID, b.Book_TotalAmount, b.Book_SecurityDeposit, 
@@ -86,13 +87,19 @@ if ($_POST) {
                             if ($booking['PaymentID'] && $booking['Pay_Status'] == 'Completed') {
                                 // Create refund record
                                 $refund_amount = $booking['Pay_Amount'];
+                                // For suspended accounts, mark refund as approved automatically
+                                $refund_status = $new_status === 'Suspended' ? 'Approved' : 'Pending';
                                 $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
-                                               VALUES (?, ?, 'Pending', ?, NOW())";
-                                $refund_reason = $new_status === 'Suspended' ? 'Owner account suspended' : 'Owner account deactivated';
+                                               VALUES (?, ?, ?, ?, NOW())";
+                                $refund_reason = $new_status === 'Suspended' ? 'Owner account suspended - auto-approved by admin' : 'Owner account deactivated';
                                 $refund_stmt = $conn->prepare($refund_query);
-                                $refund_stmt->execute([$booking['BookingID'], $refund_amount, $refund_reason]);
+                                $refund_stmt->execute([$booking['BookingID'], $refund_amount, $refund_status, $refund_reason]);
                                 
-                                $notification_msg .= "A refund of ₱" . number_format($refund_amount, 2) . " will be processed within 3-5 business days.";
+                                if ($new_status === 'Suspended') {
+                                    $notification_msg .= "A refund of ₱" . number_format($refund_amount, 2) . " has been automatically approved and will be processed within 3-5 business days.";
+                                } else {
+                                    $notification_msg .= "A refund of ₱" . number_format($refund_amount, 2) . " will be processed within 3-5 business days.";
+                                }
                             } else {
                                 $notification_msg .= "No payment was processed for this booking.";
                             }
@@ -110,22 +117,142 @@ if ($_POST) {
                         }
                     }
                     
-                    // 5. Get confirmed/active bookings that need attention
-                    $active_bookings_query = "SELECT COUNT(*) as count FROM bookings 
-                                            WHERE OwnerID = ? AND Book_Status IN ('Confirmed', 'Active')";
+                    // 5. Handle active/ongoing bookings more comprehensively
+                    $active_bookings_query = "SELECT b.BookingID, b.RenterID, b.Book_TotalAmount, b.Book_SecurityDeposit, 
+                                             b.Book_StartDate, b.Book_EndDate, b.Book_Status,
+                                             p.Prod_Name, r.User_Name as Renter_Name, r.User_Email as Renter_Email,
+                                             pay.PaymentID, pay.Pay_Status, pay.Pay_Amount
+                                             FROM bookings b
+                                             JOIN products p ON b.ProductID = p.ProductID
+                                             JOIN user_accounts r ON b.RenterID = r.UserID
+                                             LEFT JOIN payments pay ON b.BookingID = pay.BookingID
+                                             WHERE b.OwnerID = ? AND b.Book_Status IN ('Confirmed', 'Active')";
                     $active_stmt = $conn->prepare($active_bookings_query);
                     $active_stmt->execute([$user_id]);
-                    $active_count = $active_stmt->fetch(PDO::FETCH_ASSOC)['count'];
+                    $active_bookings = $active_stmt->fetchAll(PDO::FETCH_ASSOC);
+                    
+                    $confirmed_count = 0;
+                    $ongoing_count = 0;
+                    
+                    foreach ($active_bookings as $booking) {
+                        if ($booking['Book_Status'] == 'Confirmed') {
+                            // Confirmed but not yet started - can be cancelled with refund
+                            $confirmed_count++;
+                            
+                            // Cancel the booking
+                            $cancel_confirmed = $conn->prepare("UPDATE bookings SET Book_Status = 'Cancelled', 
+                                                               Book_CancelReason = ?, 
+                                                               Book_UpdatedAt = NOW() 
+                                                               WHERE BookingID = ?");
+                            $cancel_reason = $new_status === 'Suspended' ? 'Owner account suspended by administrator' : 'Owner account deactivated by administrator';
+                            $cancel_confirmed->execute([$cancel_reason, $booking['BookingID']]);
+                            
+                            // Create refund for confirmed bookings if paid
+                            if ($booking['PaymentID'] && $booking['Pay_Status'] == 'Completed') {
+                                $refund_amount = $booking['Pay_Amount'];
+                                // For suspended accounts, mark refund as approved automatically
+                                $refund_status = $new_status === 'Suspended' ? 'Approved' : 'Pending';
+                                $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
+                                               VALUES (?, ?, ?, ?, NOW())";
+                                $refund_reason = $new_status === 'Suspended' ? 'Owner account suspended - confirmed booking cancelled - auto-approved' : 'Owner account deactivated - confirmed booking cancelled';
+                                $refund_stmt = $conn->prepare($refund_query);
+                                $refund_stmt->execute([$booking['BookingID'], $refund_amount, $refund_status, $refund_reason]);
+                                
+                                if ($new_status === 'Suspended') {
+                                    $notification_msg = "Your confirmed booking for '{$booking['Prod_Name']}' has been cancelled due to owner account {$action_text}. A full refund of ₱" . number_format($refund_amount, 2) . " has been automatically approved and will be processed within 3-5 business days.";
+                                } else {
+                                    $notification_msg = "Your confirmed booking for '{$booking['Prod_Name']}' has been cancelled due to owner account {$action_text}. A full refund of ₱" . number_format($refund_amount, 2) . " will be processed within 3-5 business days.";
+                                }
+                            } else {
+                                $notification_msg = "Your confirmed booking for '{$booking['Prod_Name']}' has been cancelled due to owner account {$action_text}.";
+                            }
+                            
+                            // Send notification to renter
+                            $notif_query = "INSERT INTO notifications (UserID, Not_Title, Not_Message, Not_Type, Not_CreatedAt) 
+                                          VALUES (?, ?, ?, 'booking', NOW())";
+                            $notif_title = $new_status === 'Suspended' ? 'Confirmed Booking Cancelled - Owner Suspended' : 'Confirmed Booking Cancelled - Owner Deactivated';
+                            $notif_stmt = $conn->prepare($notif_query);
+                            $notif_stmt->execute([
+                                $booking['RenterID'], 
+                                $notif_title,
+                                $notification_msg
+                            ]);
+                            
+                        } else if ($booking['Book_Status'] == 'Active') {
+                            // Ongoing rental - needs special handling
+                            $ongoing_count++;
+                            
+                            // Check if rental period has already started
+                            $start_date = new DateTime($booking['Book_StartDate']);
+                            $end_date = new DateTime($booking['Book_EndDate']);
+                            $current_date = new DateTime();
+                            
+                            if ($current_date >= $start_date && $current_date <= $end_date) {
+                                // Rental is currently ongoing - mark for admin review
+                                $update_active = $conn->prepare("UPDATE bookings SET Book_Status = 'Under Review', 
+                                                                Book_CancelReason = ?, 
+                                                                Book_UpdatedAt = NOW() 
+                                                                WHERE BookingID = ?");
+                                $review_reason = $new_status === 'Suspended' ? 'Owner suspended during active rental - requires admin review' : 'Owner deactivated during active rental - requires admin review';
+                                $update_active->execute([$review_reason, $booking['BookingID']]);
+                                
+                                // For suspended accounts, also create refund for active rentals (admin can decide later)
+                                if ($new_status === 'Suspended' && $booking['PaymentID'] && $booking['Pay_Status'] == 'Completed') {
+                                    $refund_amount = $booking['Pay_Amount'];
+                                    $refund_query = "INSERT INTO refunds (BookingID, Refund_Amount, Refund_Status, Refund_Reason, Refund_CreatedAt) 
+                                                   VALUES (?, ?, 'Pending', ?, NOW())";
+                                    $refund_reason = 'Owner suspended during active rental - admin review required';
+                                    $refund_stmt = $conn->prepare($refund_query);
+                                    $refund_stmt->execute([$booking['BookingID'], $refund_amount, $refund_reason]);
+                                }
+                                
+                                // Create admin notification for ongoing rental
+                                $admin_notif = "URGENT: Active rental (Booking #{$booking['BookingID']}) for '{$booking['Prod_Name']}' requires immediate attention. Owner was {$action_text} during ongoing rental period. Renter: {$booking['Renter_Name']} ({$booking['Renter_Email']}). Rental period: " . date('M j, Y', strtotime($booking['Book_StartDate'])) . " to " . date('M j, Y', strtotime($booking['Book_EndDate'])) . ".";
+                                
+                                $admin_notif_query = "INSERT INTO notifications (UserID, Not_Title, Not_Message, Not_Type, Not_CreatedAt) 
+                                                    VALUES (1, ?, ?, 'urgent', NOW())";
+                                $admin_stmt = $conn->prepare($admin_notif_query);
+                                $admin_stmt->execute([
+                                    "Urgent: Active Rental Requires Review",
+                                    $admin_notif
+                                ]);
+                                
+                                // Notify renter about the situation
+                                $renter_msg = "We regret to inform you that the owner of your current rental '{$booking['Prod_Name']}' has been {$action_text}. Your rental is under administrative review. Our support team will contact you within 24 hours to resolve this matter. Your rental rights are protected.";
+                                
+                                $renter_notif_query = "INSERT INTO notifications (UserID, Not_Title, Not_Message, Not_Type, Not_CreatedAt) 
+                                                     VALUES (?, ?, ?, 'urgent', NOW())";
+                                $renter_stmt = $conn->prepare($renter_notif_query);
+                                $renter_stmt->execute([
+                                    $booking['RenterID'],
+                                    "Rental Under Review - Action Required",
+                                    $renter_msg
+                                ]);
+                            }
+                        }
+                    }
                     
                     $cancelled_count = count($pending_bookings);
                     $action_text = $new_status === 'Suspended' ? 'suspended' : 'deactivated';
+                    $product_status_text = $new_status === 'Suspended' ? 'suspended' : 'deactivated';
                     $message = "User {$action_text} successfully! ";
-                    $message .= "Products deactivated. ";
+                    $message .= "Products {$product_status_text}. ";
                     if ($cancelled_count > 0) {
-                        $message .= "{$cancelled_count} pending booking(s) cancelled with renter notifications sent. ";
+                        if ($new_status === 'Suspended') {
+                            $message .= "{$cancelled_count} pending booking(s) cancelled with auto-approved refunds. ";
+                        } else {
+                            $message .= "{$cancelled_count} pending booking(s) cancelled with refunds pending. ";
+                        }
                     }
-                    if ($active_count > 0) {
-                        $message .= "{$active_count} active booking(s) require manual review.";
+                    if ($confirmed_count > 0) {
+                        if ($new_status === 'Suspended') {
+                            $message .= "{$confirmed_count} confirmed booking(s) cancelled with auto-approved full refunds. ";
+                        } else {
+                            $message .= "{$confirmed_count} confirmed booking(s) cancelled with full refunds pending. ";
+                        }
+                    }
+                    if ($ongoing_count > 0) {
+                        $message .= "{$ongoing_count} active rental(s) marked for admin review and renter notification sent.";
                     }
                 } else {
                     $action_text = $new_status === 'Suspended' ? 'suspended' : 'deactivated';

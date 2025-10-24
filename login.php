@@ -4,9 +4,12 @@ require_once 'includes/auth.php';
 $auth = new Auth();
 $error = '';
 
-// Check if user was redirected due to deactivation
+// Check if user was redirected due to deactivation or suspension
 if(isset($_GET['deactivated']) && $_GET['deactivated'] == '1') {
     $error = "Your account has been deactivated. Please contact the administrator for assistance.";
+}
+if(isset($_GET['suspended']) && $_GET['suspended'] == '1') {
+    $error = "Your account has been suspended due to policy violations. Please contact the administrator for assistance.";
 }
 
 if($_POST) {
@@ -29,6 +32,8 @@ if($_POST) {
         exit();
     } else if($login_result === 'deactivated') {
         $error = "Your account has been deactivated. Please contact the administrator for assistance.";
+    } else if($login_result === 'suspended') {
+        $error = "Your account has been suspended due to policy violations. Please contact the administrator for assistance.";
     } else {
         $error = "Invalid email or password.";
     }
