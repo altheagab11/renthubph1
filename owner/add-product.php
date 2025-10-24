@@ -695,6 +695,11 @@ try {
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="refunds.php">
+                        <i class="fas fa-undo me-2"></i> Refunds
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="messages.php">
                         <i class="fas fa-comments me-2"></i> Messages
                     </a>

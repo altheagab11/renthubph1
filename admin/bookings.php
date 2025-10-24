@@ -209,7 +209,7 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover align-middle">
                             <thead class="table-light">
-                                <tr class="<?php echo isset($_SESSION['flagged_bookings'][$booking['BookingID']]) ? 'table-warning' : ''; ?>">
+                                <tr>
                                     <th>Booking ID</th>
                                     <th>Product</th>
                                     <th>Renter</th>
@@ -238,12 +238,6 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detailsModal<?php echo $booking['BookingID']; ?>">
                                             <i class="fas fa-eye"></i> View
                                         </button>
-                                        <form method="post" style="display:inline">
-                                            <input type="hidden" name="flag_booking_id" value="<?php echo $booking['BookingID']; ?>">
-                                            <button type="submit" class="btn btn-sm <?php echo isset($_SESSION['flagged_bookings'][$booking['BookingID']]) ? 'btn-warning' : 'btn-outline-warning'; ?> ms-1" title="Flag as suspicious">
-                                                <i class="fas fa-flag"></i> <?php echo isset($_SESSION['flagged_bookings'][$booking['BookingID']]) ? 'Unflag' : 'Flag'; ?>
-                                            </button>
-                                        </form>
                                     </td>
                                 </tr>
                                                                     <!-- Booking Details Modal -->
@@ -289,11 +283,6 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                                                         </div>
                                                                                         <div class="col-md-6">
                                                                                             <strong>Payment Status:</strong> <?php echo isset($booking['Book_PaymentStatus']) ? htmlspecialchars($booking['Book_PaymentStatus']) : 'N/A'; ?>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <div class="row mb-2">
-                                                                                        <div class="col-md-12">
-                                                                                            <strong>Flagged as suspicious:</strong> <?php echo isset($_SESSION['flagged_bookings'][$booking['BookingID']]) ? '<span class=\"text-danger\">Yes</span>' : 'No'; ?>
                                                                                         </div>
                                                                                     </div>
                                                                                     <!-- Status history and payment info can be added here if available -->
